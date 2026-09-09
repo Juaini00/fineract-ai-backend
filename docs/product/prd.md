@@ -12,6 +12,8 @@ The rewrite addresses fragmented runtimes and decisions made before relevant dat
 
 ## 2. Scope
 
+This package defines the full agreed application scope through production release and maintenance readiness, not an MVP-only design. Large Fineract datasets are a baseline workload. Implementation milestones may be incremental; they do not remove required release behavior or postpone its architecture. Explicitly deferred product scope, such as global memory, remains separate from unfinished required design.
+
 In scope:
 
 - Read and analyze approved Fineract data from a read-only source/replica.
@@ -31,6 +33,8 @@ Out of scope:
 Read-only applies to Fineract access. The application database necessarily supports writes for sessions, jobs, results, events and audit, and controlled application migrations.
 
 ## 3. User outcomes and success criteria
+
+The [data scope decisions dated 2026-09-09](2026-09-09-dataset-scope-decisions.md) record the accepted domain baseline and subsequent requirements: reproducible period-close reports distinct from corrected historical positions, historical office attribution, per-currency totals and approved-rate consolidation, client-level charge mapping, standing instructions, teller/cashier operations, recorded provisioning results, group/center activities, Fineract user-action history, deployment-specific custom datatables and data-completeness analysis. These are product requirements subject to verified source evidence and approved execution contracts; the formal dataset inventory remains unfinished. Snapshot/storage, exchange-rate source, historical authorization and per-resource semantics are not finalized by scope acceptance.
 
 1. A complete-parameter simple request runs through the same Engine with minimal planning overhead.
 2. Independent data steps run concurrently within shared budgets; dependent steps wait for all required inputs.
@@ -78,6 +82,22 @@ Before every LLM call, budget all instructions, schemas, conversation, bindings 
 Physical dataset storage, consistency/snapshot policy, expiry, numeric budgets and retention remain technical design decisions. Pagination must preserve result identity and authorization.
 
 ## 7. Clarification and suggestions
+
+### Explicit query and presentation intent
+
+Administrators may request supported output formats, selected fields and their order, typed filters, sorting, grouping, measures and limits. Preserve these as explicit request requirements through planning, SQL execution, composition and rendering; do not silently replace them with model preferences or conversation defaults.
+
+Resolve requested names to approved contract field IDs. Validate visibility, allowed operators, types, relationships and authorization before execution. Authorization constrains all requests. Unsupported or forbidden requirements must be disclosed without leaking restricted schema; do not silently omit a field/filter and claim the full request was satisfied. Ambiguity uses the clarification contract. The precedence for structured inputs conflicting with natural language still requires a detailed interaction decision.
+
+Separate source-row filtering, aggregate-result filtering, field projection and presentation. Filters over the requested population must execute in approved source SQL or an equivalent complete, authorized deterministic stage, never merely on the visible page. Filtering on an unselected field may be valid when the contract permits it. User-requested output order and supported format are retained; technical fields used for joins/order need not be exposed in the response.
+
+The detailed analytical/API/response contracts must specify boolean filter groups, date boundaries and business timezone, currency/decimal/null semantics, sorting/ties, server pagination, chart compatibility and how unmet requirements are represented. These are release design requirements, not finalized schemas in this paragraph.
+
+### Multi-resource loan activity
+
+Loan activity is a representative full-release design scenario requiring an explicit inventory of approved event/resource types, fields, relationships and accounting/time semantics. Do not equate a loan record or one transaction table with all loan activity. Retrieve only the resources/fields needed for the request, while providing complete coverage of its defined scope through bounded processing and stable pagination. A timeline needs a normalized event contract, source references, deterministic ordering and completeness per source; the exact inventory and schema remain required design work.
+
+Resource exhaustion may produce an explicit limitation, but this fallback is not acceptance evidence that normal target-scale Fineract workloads are supported. Release acceptance must establish realistic data sizes, selectivity, concurrency and successful large-result cases, including multi-resource loan activity and explicit field/filter/format requests.
 
 [clarifications.md](../contracts/clarifications.md) owns typed fields, conditional forms, resolver-dependent stages, suggestions and validation. Supported semantic types are single choice, multiple choice, text, number, date, date range and boolean. Radio/select/checkbox presentation does not change server semantics.
 

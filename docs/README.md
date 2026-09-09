@@ -2,7 +2,13 @@
 
 Status: design in progress. Application implementation has not been authorized until the design package is complete and reviewed.
 
+Lihat [checklist kelengkapan dokumentasi](checklist.md) untuk status sudah tercatat, parsial, belum tersedia dan deferred per 2026-09-09. Checklist melacak kelengkapan; dokumen pemilik tetap menjadi sumber kontrak.
+
+Titik lanjut diskusi dataset: [keputusan cakupan data, 9 September 2026](product/2026-09-09-dataset-scope-decisions.md). Baseline domain dan keputusan tambahan sudah dicatat; daftar dataset formal, mapping deployment dan kontrak teknis belum final.
+
 ## Project boundary
+
+The design package targets a complete production release and its maintenance lifecycle, not an MVP-only architecture. The checklist's twelve areas are release responsibilities, not optional post-release enhancements. Large Fineract datasets, multi-resource analysis, explicit user filters/field selection/output formats, recovery, audit and operational capacity are required design inputs. Implementation can be phased, but required release behavior cannot be deferred merely to simplify an early milestone. Global memory remains explicitly deferred by the prior product agreement unless that scope is revised.
 
 - Target repository: https://github.com/Juaini00/fineract-ai-backend
 - Existing dashboard: https://github.com/Juaini00/fineract-ai-reports-UI
@@ -36,6 +42,7 @@ Recorded on 2026-09-08: [Engine lifecycle](architecture/engine.md), [clarificati
 | Planned document | Owns |
 | --- | --- |
 | `product/prd.md` | Product scope, supported analysis, user journeys, success criteria |
+| `product/2026-09-09-dataset-scope-decisions.md` | Agreed domain scope, historical/currency requirements, additional resources, evidence limits and discussion handoff |
 | `architecture/overview.md` | Component boundaries and the single execution flow |
 | `architecture/engine.md` | State machines, scheduling, clarification, re-plan, cancellation and recovery |
 | `architecture/tech-stack.md` | Selected libraries, versions, responsibilities, limitations and rationale |

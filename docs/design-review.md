@@ -4,6 +4,8 @@ Status: initial gap review, 2026-09-08. No application implementation, final dat
 
 ## Recorded decisions update — 2026-09-08
 
+Update 2026-09-09: [data scope decisions](product/2026-09-09-dataset-scope-decisions.md) now preserve the accepted domain baseline and eleven decisions from the dataset discussion. Their document-local IDs are separate from the historical ambiguity IDs below. Historical close-report reproducibility, historical office attribution, currency consolidation and additional business resources are agreed requirements. Formal dataset inventory, deployment verification and technical contracts remain open. The current discussion resumes with remaining dataset gaps; the technical review sequence below remains a package-completion dependency list.
+
 The [consolidated PRD](product/prd.md) and [tech stack](architecture/tech-stack.md) are now recorded for the new repository. The original PRD coverage/ambiguity tables below remain historical baseline findings; the consolidated documents supersede the old maximum-one-clarification, mandatory Respond-node, global no-writes and in-place rewrite wording. Unresolved security, schema, capacity and operational decisions remain explicit.
 
 The coverage table below describes the original PRD baseline. Subsequent accepted interaction decisions are now recorded in [Engine](architecture/engine.md), [clarifications](contracts/clarifications.md), [API](contracts/api.md), and [SSE](contracts/sse.md).
