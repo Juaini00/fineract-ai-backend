@@ -54,7 +54,7 @@ Draft FD/RD/share adalah referensi cakupan, bukan aset YAML siap eksekusi. Klaim
 
 ## 3. Keputusan tambahan dari lanjutan diskusi
 
-ID D01–D11 pada dokumen ini bersifat lokal untuk keputusan dataset; berbeda dari ID ambiguitas PRD lama pada design-review.md. Rujukan lintas dokumen harus menyertakan tautan ke dokumen ini.
+ID D01–D15 pada dokumen ini bersifat lokal untuk keputusan dataset; berbeda dari ID ambiguitas PRD lama pada design-review.md. Rujukan lintas dokumen harus menyertakan tautan ke dokumen ini.
 
 ### D01 — Posisi historis dan laporan penutupan
 
@@ -148,6 +148,46 @@ Data kosong tidak disamakan dengan nol atau menghilangkan record diam-diam. Atur
 
 Terbuka: definisi per-field tentang kosong, tidak berlaku dan referensi tidak valid; denominator/coverage, grain hitungan client versus account, serta otorisasi rincian. Kelengkapan field bisnis berbeda dari kelengkapan eksekusi analisis dan batas preview.
 
+### D12 — Accounting/GL: traceability, bukan laporan keuangan penuh
+
+Disepakati: traceability journal per transaksi/account dan saldo/mutasi satu GL account bernama. Masuk: baris debit/kredit yang dihasilkan sebuah transaksi/entity (`acc_gl_journal_entry`: account_id, office_id, currency_code, transaction_id, entry_date, type_enum debit/kredit, amount) dan saldo/mutasi per `acc_gl_account` (gl_code, classification_enum, hierarchy) per office/periode.
+
+Contoh: "Tunjukkan jurnal debit/kredit dari pembayaran pinjaman ini." atau "Saldo GL akun kas Cabang A per 31 Agustus."
+
+Batas: bukan mesin laporan keuangan — tanpa trial balance seluruh akun, neraca, atau laba-rugi sebagai produk laporan (saldo satu akun bernama boleh; rekap seluruh ledger tidak). Jarvis tidak menghitung akuntansi sendiri (tanpa klasifikasi net income, tanpa opening/closing turunan); hanya membaca nilai tercatat dan agregasi SQL deterministik. Wajib menghormati reversal (`reversed`/`reversal_id`) dan memberi label manual versus sistem; tanpa hitung ganda. Office scope via `acc_gl_journal_entry.office_id` (GL account org-wide).
+
+Terbuka: verifikasi kolom efektif (reversal/manual/entity/running-balance dari changeset lanjutan), interaksi closure (`acc_gl_closure`) dan koreksi D01, currency/konsolidasi D03, keandalan running balance Fineract.
+
+### D13 — Existing Fineract reports: di luar eksekusi
+
+Disepakati: Jarvis tetap murni analisa sendiri; TIDAK menyurfacing atau menjalankan `stretchy_report` (SQL/Pentaho buatan admin). Alasan: report bawaan membypass safety layer (office-scope, PII gate, SELECT-only single-statement, read-only, function allowlist) dan melanggar invarian "no arbitrary SQL / no unapproved surface"; juga tanpa jaminan grounding/completeness/provenance.
+
+Contoh: "Jalankan report X Fineract." → tidak didukung; gunakan capability/analytical-contract.
+
+Batas/opsional: boleh menyebut keberadaan report bawaan (read-only atas metadata) tanpa mengeksekusi — keputusan terpisah bila diminta. Jika sebuah report bernilai, di-port menjadi analytical-contract tervalidasi, bukan dijalankan mentah.
+
+### D14 — Scheduler/batch job runs: terbatas plus sinyal freshness
+
+Disepakati: riwayat eksekusi batch masuk sebagai surface operasional terbatas dan sinyal data-completeness. Masuk: definisi job (`job`: name, cron_expression) dan riwayat run (`job_run_history`: start_time, end_time, status, trigger_type). Nilai: bila COB/interest-posting/provisioning belum jalan, analisa terkait ditandai belum lengkap (nyambung D01/D07/D11).
+
+Contoh: "Apakah interest posting Agustus sudah jalan?" atau "Job mana yang gagal semalam?"
+
+Batas: bukan monitoring real-time; tidak men-trigger atau menjalankan ulang job (write terlarang); `error_message`/`error_log` disanitasi (tanpa stack/internal).
+
+### D15 — Penutupan gap-review: celah sisa dari audit sistematis
+
+Audit sistematis (220 tabel `createTable` + grouping `m_permission`) menutup tinjauan celah. Domain berat (loan origination→servicing→reschedule→collateral, savings, FD/RD, share, client/group/center, organisation, products, charges/tax, transfers/standing-instructions, teller, provisioning, GL-scoped, audit, datatables, scheduler) memetakan ke baseline atau D01–D14. Disposisi celah sisa yang disepakati:
+
+- Surveys/PPI poverty scoring (`m_surveys`, `m_survey_responses`, `m_survey_scorecards`, `ppi_scores`, `ppi_likelihoods`): MASUK sebagai dataset/kontrak tersendiri, kondisional pemakaian deployment (pola D10).
+- Credit bureau: hasil laporan (`m_creditreport` per client/loan) MASUK; config integrasi (`m_creditbureau*`) di luar.
+- Loan capitalized-income/buy-down-fee balances (`m_loan_capitalized_income_balance`, `m_loan_buy_down_fee_balance`): masuk baseline Loan sebagai sub-area balance, butuh detail kontrak, bukan scope baru.
+- `m_family_members`: selektif/tidak-default (pola documents/notes).
+- `m_office_transaction` (kas antar-office): di bawah D06/accounting, ditandai eksplisit.
+
+Dikecualikan (dikonfirmasi, non-analitik): documents/images, notes, campaign SMS/email, notifications, XBRL/MIX regulatory export, `m_adhoc`, webhooks/templates, external services/business events, interop, self-service/pockets/device registration, entity-to-entity mapping, auth/roles/2FA/OAuth, field-config/cache, stretchy reports (D13), laporan keuangan penuh (bagian D12 yang dikecualikan), post-dated checks.
+
+Terbuka: verifikasi pemakaian/skema tiap domain baru pada deployment aktual; kontrak field/measure/relasi belum disusun. Persetujuan disposisi bukan finalisasi kontrak.
+
 ## 4. Referensi dan tingkat bukti
 
 Referensi berikut berada di checkout lokal lain; bukan dependency runtime atau bukti deployment terkini:
@@ -162,7 +202,7 @@ Checkout ai_report: /Users/tabrezakhlaque/project/personal/rust/projects/ai_repo
 
 ## 5. Titik lanjut dan pekerjaan yang belum selesai
 
-Diskusi dihentikan sementara setelah D11 untuk menyimpan keputusan. Jangan menganggap daftar dataset sudah final atau mengulang persetujuan D01–D11.
+Tinjauan celah fungsional (gap-review) DITUTUP pada D15 setelah audit sistematis atas seluruh permukaan Fineract. Jangan menganggap daftar dataset sudah final atau mengulang persetujuan D01–D15. Langkah berikutnya adalah menyusun inventaris formal; penutupan gap-review bukan finalisasi kontrak atau bukti ketersediaan data deployment.
 
 1. Lanjutkan tinjauan celah kebutuhan yang belum terwakili. Periksa bukti repository dahulu; tanyakan hanya keputusan bisnis yang belum terselesaikan.
 2. Susun inventaris formal setelah tinjauan: kebutuhan → resource/sumber → grain → field/measure → relasi → scope → waktu/currency → evidence → acceptance.

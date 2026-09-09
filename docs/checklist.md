@@ -2,7 +2,7 @@
 
 Tanggal pemeriksaan: 2026-09-09. Basis: delapan dokumen yang ada di checkout repository baru sebelum checklist ini ditambahkan.
 
-Pembaruan diskusi 2026-09-09: [keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) menyimpan baseline handoff dan D01–D11. Checklist di bawah membedakan keputusan tercatat dari kontrak dan bukti deployment yang belum selesai.
+Pembaruan diskusi 2026-09-09: [keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) menyimpan baseline handoff dan D01–D15; tinjauan celah fungsional (gap-review) ditutup pada D15 via audit sistematis. Checklist di bawah membedakan keputusan tercatat dari kontrak dan bukti deployment yang belum selesai.
 
 **Status keseluruhan: belum siap implementasi.** Arah produk dan kontrak interaksi sudah tercatat; desain database, audit operasional, schema lengkap dan parameter runtime masih perlu diselesaikan.
 
@@ -55,8 +55,9 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - [ ] Diagram komponen, input/output dan pemilik setiap tahap.
 - [ ] Daftar pertanyaan/operasi analisis wajib untuk rilis awal dan batasnya.
 - [ ] Inventaris cakupan full release per domain/resource, termasuk arti lengkap aktivitas loan.
-- [x] Baseline domain, resource penghubung dan tambahan cakupan D01–D11 tercatat dalam dokumen keputusan.
-- [ ] Tinjauan celah domain selesai dan inventaris dataset formal direview; persetujuan konsep bukan finalisasi dataset.
+- [x] Baseline domain, resource penghubung dan tambahan cakupan D01–D15 tercatat dalam dokumen keputusan.
+- [x] Tinjauan celah domain (gap-review) selesai pada D15 via audit sistematis seluruh permukaan Fineract.
+- [ ] Inventaris dataset formal disusun dan direview; persetujuan konsep bukan finalisasi dataset.
 - [ ] Target latency, throughput, kualitas jawaban dan ukuran data yang terukur.
 
 ## 2. Tech stack dan LLM
@@ -125,6 +126,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - [x] Kebutuhan laporan penutupan yang dapat ditampilkan kembali, atribusi office historis dan konsolidasi currency disepakati (D01–D03).
 - [x] Mapping client charges, standing instructions, teller/kasir, provisioning aktual, kegiatan group/center dan audit tindakan Fineract tercatat (D04–D09).
 - [x] Inventarisasi custom datatables per deployment dan analisis kelengkapan data disepakati (D10–D11).
+- [x] Accounting/GL scoped (traceability, bukan laporan keuangan penuh), existing reports di luar eksekusi, scheduler job runs, dan disposisi celah audit sistematis (Surveys/PPI, credit-bureau results, dll.) disepakati (D12–D15).
 - [ ] Verifikasi sumber/relasi/measure resource tambahan; bukti demo atau inventaris lama bukan verifikasi tenant aktual.
 - [ ] Kontrak posisi historis versus laporan penutupan: cutoff, penerbitan/revisi, reproduksi, office history dan retention.
 - [ ] Sumber/jenis/tanggal kurs, konversi, pembulatan dan perilaku kurs tidak tersedia.
@@ -206,7 +208,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 
 ## Urutan penyelesaian berikutnya
 
-Titik lanjut diskusi saat ini: selesaikan tinjauan celah kebutuhan dataset dari dokumen keputusan, kemudian susun inventaris formal. Jangan mengulang persetujuan yang sudah tercatat. Urutan di bawah adalah dependensi penyelesaian paket teknis, bukan instruksi meninggalkan diskusi dataset atau mulai implementasi.
+Gap-review dataset selesai (D01–D15). Titik lanjut: susun inventaris dataset formal dari dokumen keputusan. Jangan mengulang persetujuan yang sudah tercatat. Urutan di bawah adalah dependensi penyelesaian paket teknis, bukan instruksi meninggalkan diskusi dataset atau mulai implementasi.
 
 1. Database + transaksi + audit persistence + worker recovery, sebagai satu pembahasan terhubung.
 2. Security/identity agar ownership database dan endpoint tidak dibangun atas asumsi.
