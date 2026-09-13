@@ -8,4 +8,5 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+# Lihat crates/app/Cargo.toml: nama `core` pada extern prelude menutupi std `core`.
+foundation = { path = "../core", package = "core" }
