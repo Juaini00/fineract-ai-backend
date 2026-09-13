@@ -27,12 +27,24 @@ Kalau hanya sempat membaca satu, baca **§1 Invarian** dan **§2 Matriks koneksi
 ```bash
 cp .env.example .env          # lalu isi LLM_API_KEY dan EMBEDDING_API_KEY
 docker compose up -d          # Redis + PostgreSQL (pgvector)
-cargo check
+cargo check --workspace
+
+# Pasang schema
+sqlx migrate run --database-url "$APP_DATABASE_URL"
+
+# Buktikan schema berperilaku benar, bukan sekadar terpasang
+psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
 ```
 
-Sudah punya PostgreSQL sendiri? Jalankan `docker compose up -d redis` saja, lalu sesuaikan `APP_DATABASE_URL` dan `FINERACT_DATABASE_URL`.
+Sudah punya PostgreSQL sendiri? Jalankan `docker compose up -d redis` saja, lalu sesuaikan `APP_DATABASE_URL` dan `FINERACT_DATABASE_URL`. Ekstensi `vector` diperlukan.
 
 `.env` **tidak pernah** di-commit. Hanya `.env.example` yang masuk repo.
+
+### `tests/schema_smoke.sql`
+
+Menguji **perilaku**, bukan sekadar DDL berhasil di-parse. Ia gagal keras bila salah satu ini rusak: satu job nonterminal per session, `Completed` tanpa `outcome`, teks bebas menjadi binding identitas, dua form terbuka, memori tanpa response durable (K4), dua ActiveScope aktif, audit yang bisa di-UPDATE atau tidak bisa dipurge, **penghapusan session yang gagal karena referential action yang salah**, seed PII fail-closed, dan koreksi kurs yang menimpa alih-alih menambah baris.
+
+Jalankan setiap kali migrasi berubah.
 
 ## Struktur
 

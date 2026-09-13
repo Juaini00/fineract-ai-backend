@@ -89,7 +89,7 @@ Ini **bukan** daftar yang boleh dilupakan — ia persis kelas masalah yang membu
 
 ## 3. Inventaris tabel
 
-21 tabel dalam enam kelompok.
+23 tabel dalam enam kelompok.
 
 ```
 AUTH & CONFIG            CHAT                     JOB
