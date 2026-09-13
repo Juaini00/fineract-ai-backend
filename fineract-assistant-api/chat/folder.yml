@@ -1,0 +1,8 @@
+info:
+  name: chat
+  seq: 3
+  description: |
+    Session percakapan dan penerimaan job (T1).
+
+    Setiap run membuat session baru, sehingga constraint "satu job nonterminal
+    per session" (#13) tidak membuat run kedua gagal karena sisa run pertama.

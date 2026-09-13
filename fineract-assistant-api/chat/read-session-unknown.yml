@@ -1,0 +1,20 @@
+info:
+  name: read session - id tidak dikenal
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions/00000000-0000-0000-0000-000000000000"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("404, bukan 403: keberadaan id tidak diungkap", function () {
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().error.code).to.equal("NOT_FOUND");
+        });

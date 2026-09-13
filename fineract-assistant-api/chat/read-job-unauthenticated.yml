@@ -1,0 +1,16 @@
+info:
+  name: read job - tanpa auth
+  type: http
+  seq: 11
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401", function () {
+          expect(res.getStatus()).to.equal(401);
+        });

@@ -1,0 +1,21 @@
+info:
+  name: me
+  type: http
+  seq: 2
+
+http:
+  method: get
+  url: "{{baseUrl}}/auth/me"
+  headers:
+    - name: authorization
+      value: "Bearer {{accessToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan identitas berasal dari token", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.username).to.equal(bru.getEnvVar("username"));
+          expect(res.getBody().data.role).to.equal("admin");
+        });

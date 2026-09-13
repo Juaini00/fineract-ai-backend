@@ -1,0 +1,30 @@
+info:
+  name: create job - saat job sebelumnya masih Cancelling
+  type: http
+  seq: 15
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}-setelah-cancel"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "pertanyaan setelah cancel"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: Cancelling masih nonterminal", function () {
+          expect(res.getStatus()).to.equal(409);
+        });

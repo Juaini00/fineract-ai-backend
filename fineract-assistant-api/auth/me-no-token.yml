@@ -1,0 +1,17 @@
+info:
+  name: me - tanpa token
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/auth/me"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401 saat header Authorization tidak ada", function () {
+          expect(res.getStatus()).to.equal(401);
+          expect(res.getBody().data).to.equal(null);
+        });

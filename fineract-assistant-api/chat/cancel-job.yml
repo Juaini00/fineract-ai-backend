@@ -1,0 +1,26 @@
+info:
+  name: cancel job
+  type: http
+  seq: 13
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}/cancel"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan job masuk Cancelling", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.lifecycle).to.equal("Cancelling");
+        });
+
+        test("event kedua tercatat: cursor maju dari 1 ke 2", function () {
+          // Cancel menandai; worker yang menuntaskan. Belum terminal di sini.
+          expect(res.getBody().data.last_event_sequence).to.equal(2);
+          expect(res.getBody().data.terminal_at).to.equal(null);
+        });

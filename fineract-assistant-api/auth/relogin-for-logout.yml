@@ -1,0 +1,34 @@
+info:
+  name: login ulang (session baru untuk uji logout)
+  type: http
+  seq: 11
+  description: |
+    Session sebelumnya sudah dicabut oleh deteksi reuse, jadi logout perlu
+    session yang masih hidup.
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "{{username}}",
+        "password": "{{password}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+        const header = res.getHeader("set-cookie");
+        const list = Array.isArray(header) ? header : [header];
+        const raw = list.find((c) => c && c.indexOf("refresh_token=") === 0);
+        bru.setVar("logoutRefreshToken", raw.split(";")[0].split("=")[1]);

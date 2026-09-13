@@ -1,0 +1,31 @@
+info:
+  name: create job - kunci sama, payload berbeda
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "pertanyaan yang berbeda"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: fingerprint payload berbeda terdeteksi", function () {
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.code).to.equal("CONFLICT");
+        });

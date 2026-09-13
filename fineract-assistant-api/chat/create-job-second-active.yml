@@ -1,0 +1,31 @@
+info:
+  name: create job - job kedua pada session yang sama
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}-kedua"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "pertanyaan kedua"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: satu job nonterminal per session (#13)", function () {
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.message).to.include("Another job");
+        });

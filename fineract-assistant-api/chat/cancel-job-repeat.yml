@@ -1,0 +1,21 @@
+info:
+  name: cancel job - diulang
+  type: http
+  seq: 14
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}/cancel"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("cancel berulang adalah no-op, bukan transisi kedua", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.lifecycle).to.equal("Cancelling");
+          expect(res.getBody().data.last_event_sequence).to.equal(2);
+        });

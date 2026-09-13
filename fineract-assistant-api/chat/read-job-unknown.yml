@@ -1,0 +1,19 @@
+info:
+  name: read job - id tidak dikenal
+  type: http
+  seq: 12
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/00000000-0000-0000-0000-000000000000"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("404", function () {
+          expect(res.getStatus()).to.equal(404);
+        });

@@ -1,0 +1,30 @@
+info:
+  name: login - user tidak dikenal
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "user-yang-tidak-ada",
+        "password": "password-apa-saja"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401", function () {
+          expect(res.getStatus()).to.equal(401);
+        });
+
+        test("tidak dapat dibedakan dari password salah (anti enumerasi akun)", function () {
+          expect(JSON.stringify(res.getBody())).to.equal(bru.getVar("wrongPasswordBody"));
+        });

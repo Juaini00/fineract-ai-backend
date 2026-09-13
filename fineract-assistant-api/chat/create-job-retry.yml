@@ -1,0 +1,31 @@
+info:
+  name: create job - retry kunci dan payload sama
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "berapa total portfolio aktif bulan ini?"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("acknowledgement tersimpan dikembalikan: job_id sama, tanpa job kedua", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("jobId"));
+        });

@@ -1,0 +1,29 @@
+info:
+  name: create job - tanpa Idempotency-Key
+  type: http
+  seq: 9
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "tanpa kunci idempotency"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422: kunci wajib, dan batasnya sama dengan CHECK tabelnya", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().error.code).to.equal("INVALID");
+        });

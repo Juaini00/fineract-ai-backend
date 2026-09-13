@@ -1,0 +1,27 @@
+info:
+  name: login - body tidak valid
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "",
+        "password": ""
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422 dari validasi field, bukan 401", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().error.code).to.equal("INVALID");
+        });

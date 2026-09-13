@@ -46,6 +46,30 @@ Menguji **perilaku**, bukan sekadar DDL berhasil di-parse. Ia gagal keras bila s
 
 Jalankan setiap kali migrasi berubah.
 
+## Integration test
+
+Tanpa test integrasi di dalam Rust: permukaan HTTP diuji sebagai HTTP, lewat
+[Bruno CLI](https://docs.usebruno.com) terhadap aplikasi yang benar-benar
+berjalan dan PostgreSQL yang benar-benar dimigrasi.
+
+```bash
+npm install -g @usebruno/cli     # sekali saja
+./scripts/integration-test.sh    # build, nyalakan, tunggu /health, bru run, matikan
+./scripts/integration-test.sh auth          # satu folder saja
+PORT=3210 ./scripts/integration-test.sh     # port lain bila 3107 dipakai
+KEEP_RUNNING=1 ./scripts/integration-test.sh  # biarkan app hidup untuk debug
+```
+
+Koleksi ada di `fineract-assistant-api/` (format OpenCollection 1.0):
+`health/`, `auth/`, `chat/`. Request di dalam satu folder **berurutan dan saling
+bergantung** — rotasi refresh token hanya dapat diuji setelah login, dan deteksi
+pemakaian ulang hanya setelah rotasi.
+
+Runner menunggu `/health` benar-benar `200`, bukan sekadar port terbuka: port
+yang sudah menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan
+kegagalan test yang menyesatkan. Ia juga mematikan app dengan SIGTERM, sehingga
+jalur graceful shutdown ikut terlatih setiap run.
+
 ## Struktur
 
 ```

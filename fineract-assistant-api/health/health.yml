@@ -1,0 +1,32 @@
+info:
+  name: health
+  type: http
+  seq: 1
+
+http:
+  method: get
+  url: "{{baseUrl}}/health"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan envelope lengkap", function () {
+          expect(res.getStatus()).to.equal(200);
+          const body = res.getBody();
+          expect(body.success).to.equal(true);
+          expect(body.error).to.equal(null);
+        });
+
+        test("PostgreSQL aplikasi dan Fineract terjangkau", function () {
+          const data = res.getBody().data;
+          expect(data.status).to.equal("ok");
+          expect(data.app_database).to.equal("ok");
+          expect(data.fineract_database).to.equal("ok");
+        });
+
+        test("status Redis dilaporkan apa adanya, bukan dibulatkan", function () {
+          // Redis hanya koordinasi live: 'disabled'/'unavailable' sah dan tidak
+          // membuat sistem tidak sehat (overview §5).
+          expect(["live", "unavailable", "disabled"]).to.include(res.getBody().data.redis);
+        });

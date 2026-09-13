@@ -1,0 +1,36 @@
+info:
+  name: read job
+  type: http
+  seq: 10
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dengan snapshot state yang konsisten", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.id).to.equal(bru.getVar("jobId"));
+          expect(data.lifecycle).to.equal("Queued");
+        });
+
+        test("tiga dimensi status terpisah: belum terminal berarti belum ada outcome", function () {
+          const data = res.getBody().data;
+          expect(data.outcome).to.equal(null);
+          expect(data.completeness).to.equal(null);
+          expect(data.terminal_at).to.equal(null);
+        });
+
+        test("scope PII di-snapshot saat accept, bukan dibaca ulang nanti", function () {
+          const scope = res.getBody().data.scope_json;
+          expect(scope.pii).to.have.property("enabled");
+          expect(scope.pii).to.have.property("setting_version");
+          expect(scope).to.have.property("fineract_tenant");
+        });

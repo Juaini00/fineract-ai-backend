@@ -1,0 +1,21 @@
+info:
+  name: me - token dirusak
+  type: http
+  seq: 3
+
+http:
+  method: get
+  url: "{{baseUrl}}/auth/me"
+  headers:
+    - name: authorization
+      value: "Bearer {{accessToken}}tampered"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401 tanpa membocorkan sebabnya", function () {
+          expect(res.getStatus()).to.equal(401);
+          expect(res.getBody().error.code).to.equal("UNAUTHORIZED");
+          expect(res.getBody().error.message).to.equal("Unauthorized");
+        });

@@ -1,0 +1,31 @@
+info:
+  name: refresh - rotasi
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/refresh"
+  headers:
+    - name: cookie
+      value: "refresh_token={{refreshToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan access token baru", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.access_token).to.be.a("string");
+        });
+
+        const header = res.getHeader("set-cookie");
+        const list = Array.isArray(header) ? header : [header];
+        const raw = list.find((c) => c && c.indexOf("refresh_token=") === 0);
+        const rotated = raw.split(";")[0].split("=")[1];
+
+        test("refresh token dirotasi, bukan dipakai ulang", function () {
+          expect(rotated).to.not.equal(bru.getVar("refreshToken"));
+        });
+
+        bru.setVar("rotatedRefreshToken", rotated);
