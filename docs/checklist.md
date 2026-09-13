@@ -32,16 +32,16 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 | [Klarifikasi](contracts/clarifications.md) | Ada, parsial | Schema, opsi resolver, limits dan expiry |
 | [SSE](contracts/sse.md) | Ada, parsial | Payload lengkap, replay limits, auth expiry dan wire errors |
 | `architecture/overview.md` | Belum ada | Diagram komponen dan ownership antarmodul |
-| `data/database-design.md` | Belum ada | ERD, constraints, indexes dan transaksi |
+| [Database design](data/database-design.md) | Ada: invarian, matriks koneksi, ERD, tabel, referential action, batas transaksi | Utang D1–D5 (§2.2) belum tertutup; terutama propagasi `completeness` yang menunggu `contracts/responses.md` |
 | `data/analytical-contracts.md` | Belum ada | Kontrak pertama dan compiler/validation specification |
 | `data/dataset-lifecycle.md` | Belum ada | Storage, snapshot, pagination dan retention |
 | `architecture/memory-context.md` | Belum ada | Memory lifecycle, compaction dan budget |
 | `contracts/responses.md` | Belum ada | Schema blok, evidence dan validation |
 | `security/access-data-policy.md` | Belum ada | Identitas dashboard, tenant, scope dan PII |
 | `operations/observability.md` | Belum ada | Audit, logs, traces, metrics dan retention |
-| `operations/runtime.md` | Belum ada | Deployment, kapasitas, timeout, backup/restore |
+| [Runtime](operations/runtime.md) | Ada: nilai awal + pemicu revisi + 17 pemeriksaan konsistensi | Nilai belum diukur; deployment/kapasitas/backup-restore belum ditulis; K1 belum ditutup |
 | `verification/acceptance.md` | Belum ada | Matriks requirement → skenario → hasil yang diharapkan |
-| `migration/carry-over.md` | Belum ada | Daftar aset, source revision dan adaptasi |
+| [Carry-over](migration/carry-over.md) | Ada: klasifikasi tabel lama + keputusan #1–#15 + K1–K5 | Inventaris aset kode/migrasi dengan source revision belum disusun |
 | `decisions/` | Belum ada | Catatan keputusan arsitektur tersendiri; keputusan kini ada di dokumen terkait |
 
 ## 1. Produk dan arsitektur
