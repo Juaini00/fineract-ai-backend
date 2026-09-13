@@ -68,6 +68,28 @@ pub struct Config {
     pub jwt_issuer: String,
     #[serde(default = "default_jwt_audience")]
     pub jwt_audience: String,
+
+    // ---- Bootstrap admin ----
+    /// Seed admin pertama saat tabel `users` masih kosong. Tidak pernah
+    /// menimpa user yang sudah ada.
+    #[serde(default)]
+    pub auth_bootstrap_admin_enabled: bool,
+    #[serde(default = "default_bootstrap_username")]
+    pub auth_bootstrap_admin_username: String,
+    #[serde(default)]
+    pub auth_bootstrap_admin_password: Option<String>,
+    #[serde(default)]
+    pub auth_bootstrap_admin_email: Option<String>,
+
+    // ---- Cookie refresh token ----
+    #[serde(default = "default_refresh_cookie_name")]
+    pub auth_refresh_cookie_name: String,
+    #[serde(default = "default_true")]
+    pub auth_refresh_cookie_secure: bool,
+    #[serde(default = "default_refresh_cookie_same_site")]
+    pub auth_refresh_cookie_same_site: String,
+    #[serde(default = "default_refresh_cookie_path")]
+    pub auth_refresh_cookie_path: String,
 }
 
 impl Config {
@@ -104,6 +126,13 @@ impl Config {
         self.app_database_migrate_on_startup && self.app_env == AppEnv::Local
     }
 
+    /// Seed admin hanya sah di `local`, dengan alasan yang sama seperti
+    /// [`Config::may_migrate_on_startup`]: kredensial seed yang tanpa sengaja
+    /// aktif di production adalah pintu masuk yang tidak pernah diminta siapa pun.
+    pub fn may_bootstrap_admin(&self) -> bool {
+        self.auth_bootstrap_admin_enabled && self.app_env == AppEnv::Local
+    }
+
     fn validate(&self) -> anyhow::Result<()> {
         // Dua pool berbeda hak akses (overview §2). URL identik berarti pool
         // "read-only" sebenarnya memegang kredensial writable.
@@ -123,6 +152,15 @@ impl Config {
                 if secret.contains("change-me") {
                     anyhow::bail!("{name} masih memakai nilai contoh di env {:?}", self.app_env);
                 }
+            }
+
+            // Cookie refresh tanpa `Secure` berarti token dikirim polos pada
+            // hop HTTP mana pun.
+            if !self.auth_refresh_cookie_secure {
+                anyhow::bail!(
+                    "AUTH_REFRESH_COOKIE_SECURE wajib true di env {:?}",
+                    self.app_env
+                );
             }
         }
 
@@ -176,6 +214,18 @@ fn default_jwt_issuer() -> String {
 }
 fn default_jwt_audience() -> String {
     "jarvis-api".to_string()
+}
+fn default_bootstrap_username() -> String {
+    "admin".to_string()
+}
+fn default_refresh_cookie_name() -> String {
+    "refresh_token".to_string()
+}
+fn default_refresh_cookie_same_site() -> String {
+    "strict".to_string()
+}
+fn default_refresh_cookie_path() -> String {
+    "/".to_string()
 }
 
 #[cfg(test)]

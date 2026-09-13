@@ -6,8 +6,9 @@
 
 mod health;
 
-use foundation::{Config, Foundation, telemetry};
+use foundation::{Config, Foundation, auth, telemetry};
 
+use std::net::SocketAddr;
 use tokio::{net::TcpListener, signal};
 use tracing::{info, warn};
 
@@ -28,12 +29,23 @@ async fn main() -> anyhow::Result<()> {
         foundation.app_db().migrate().await?;
     }
 
-    let router = health::router().with_state(foundation);
+    if foundation.config().may_bootstrap_admin() {
+        auth::service::bootstrap_admin(&foundation).await?;
+    }
+
+    let router = health::router()
+        .merge(auth::route::router())
+        .with_state(foundation);
 
     let listener = TcpListener::bind(&bind_address).await?;
     info!(%bind_address, ?app_env, "jarvis listening");
 
-    axum::serve(listener, router)
+    // `into_make_service_with_connect_info` diperlukan agar alamat klien dapat
+    // direkam pada auth_sessions.ip_address.
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

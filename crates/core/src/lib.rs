@@ -3,6 +3,7 @@
 //!
 //! Lihat docs/data/database-design.md untuk invarian yang berlaku lintas crate.
 
+pub mod auth;
 pub mod config;
 pub mod db;
 pub mod envelope;
@@ -11,6 +12,7 @@ pub mod redis;
 pub mod state;
 pub mod telemetry;
 
+pub use auth::AuthUser;
 pub use config::{AppEnv, Config};
 pub use envelope::{Envelope, ErrorBody};
 pub use error::ApiError;
