@@ -4,7 +4,7 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: desain, belum implementasi.** Paket dokumen sudah lengkap untuk lapisan data; beberapa kontrak masih ditulis. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: implementasi berjalan.** Fondasi (`core`), autentikasi, session dan penerimaan job (T1) sudah berjalan dan terverifikasi terhadap PostgreSQL nyata. Engine, klarifikasi, dataset, SSE dan response document belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
 
 ## Dokumen
 
@@ -63,8 +63,8 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 ## Yang belum ada
 
-- `migrations/` — ditulis baru dari `database-design.md` §4–§7, **tidak** disalin dari repo lama. Schema-nya berbeda fundamental.
-- Kode aplikasi — crate masih kerangka kosong.
+- Engine: worker lease/fencing (T2), plan (T3), eksekusi node (T4), klarifikasi (T5–T6), response commit (T7–T8), reaper (T11).
+- SSE `/chat/jobs/{id}/events`, dataset/handle, memori session, dan integrasi LLM/embedding.
 - `docs/security/access-data-policy.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
 
 ## Aturan yang tidak boleh dilanggar
