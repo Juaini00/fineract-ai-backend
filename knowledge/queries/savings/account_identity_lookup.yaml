@@ -18,4 +18,9 @@ output_fields:
   - { name: savings_product_name, type: string, sensitivity: public_business }
   - { name: savings_status_enum, type: bigint, sensitivity: public_business }
   - { name: currency_code, type: string, sensitivity: public_business }
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
 timeout_ms: 3000

@@ -18,5 +18,6 @@ chat = { path = "../chat" }
 anyhow.workspace = true
 axum.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true

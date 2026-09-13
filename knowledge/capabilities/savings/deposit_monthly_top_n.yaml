@@ -1,6 +1,8 @@
 id: savings_deposit_monthly_top_n
 status: approved_mvp
 domain: savings
+display_name: Savings Deposit Monthly Top N
+description: Largest savings deposits ranked within each calendar month of a date range, within the caller's authorized office scope.
 data_areas:
 - organization_foundation
 - client_foundation

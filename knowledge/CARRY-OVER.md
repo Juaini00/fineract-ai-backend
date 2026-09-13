@@ -11,9 +11,24 @@
 - **Klasifikasi sensitivitas kolom.** Sakelar PII global (#15) memutuskan *apakah* kolom berkelas `pii` dilepas; *kolom mana* yang berkelas `pii` dideklarasikan di sini. Klasifikasi ini harus diaudit ulang sebelum PII dinyalakan.
 - **Contoh (`examples`) belum dijalankan ulang** terhadap data nyata pada schema baru.
 
+## Sudah ditegakkan mekanis (sejak 2026-09-13)
+
+`cargo run -p app -- catalog` memuat seluruh katalog, menghitung `content_hash`,
+dan menjalankan check yang selama ini hanya hidup sebagai prosa di blok `checks:`
+tiap file: keberadaan `query_id`, kecocokan parameter capability dengan query,
+kelas sensitivitas yang benar-benar terdaftar, penegakan office scope sebagai
+parameter terikat **di dalam** SQL, SELECT-only/single-statement/token terlarang,
+kecocokan placeholder, serta — dengan menyiapkan tiap SQL pada schema Fineract
+sungguhan — nama dan urutan kolom hasil terhadap `output_fields`.
+
+Yang ditemukan pada pemeriksaan pertama dan sudah diperbaiki: kelas
+`masked_output` dipakai empat manifest tanpa pernah dideklarasikan, dua manifest
+savings tidak mendeklarasikan `guards` padahal SQL-nya mengikat scope, dan
+delapan capability tanpa `display_name`/`description`.
+
 ## Aturan sebelum sebuah entri dianggap sah
 
-1. Contohnya dijalankan ujung ke ujung dan angkanya diperiksa — memuat YAML dan `PREPARE` SQL **tidak membuktikan apa pun**.
+1. Contohnya dijalankan ujung ke ujung dan angkanya diperiksa — memuat YAML dan `PREPARE` SQL **tidak membuktikan apa pun**. **Ini masih belum dikerjakan**; validator sengaja menyatakan batas itu pada bagian "Cakupan pemeriksaan" di keluarannya.
 2. Prosa dan SQL-nya konsisten.
 3. Kelas sensitivitas kolom output-nya sesuai kebijakan PII yang berlaku.
 4. Semantik cutoff/as-of-nya dideklarasikan ([database-design.md](../docs/data/database-design.md) §2.2 D4 dan keputusan #14).

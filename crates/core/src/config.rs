@@ -81,6 +81,16 @@ pub struct Config {
     #[serde(default)]
     pub auth_bootstrap_admin_email: Option<String>,
 
+    // ---- Katalog pengetahuan ----
+    #[serde(default = "default_catalog_path")]
+    pub catalog_path: String,
+    #[serde(default = "default_query_path")]
+    pub query_path: String,
+    #[serde(default = "default_true")]
+    pub catalog_validate_on_startup: bool,
+    #[serde(default)]
+    pub catalog_sync_on_startup: bool,
+
     // ---- Idempotency (runtime.md §3) ----
     #[serde(default = "default_idempotency_ttl_secs")]
     pub idempotency_ttl_secs: i64,
@@ -222,6 +232,12 @@ fn default_jwt_issuer() -> String {
 }
 fn default_jwt_audience() -> String {
     "jarvis-api".to_string()
+}
+fn default_catalog_path() -> String {
+    "knowledge".to_string()
+}
+fn default_query_path() -> String {
+    "queries".to_string()
 }
 fn default_idempotency_ttl_secs() -> i64 {
     86_400

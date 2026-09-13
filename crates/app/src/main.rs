@@ -4,6 +4,7 @@
 //! `app` hanya merakit dan menjalankan proses — tidak ada orchestration domain
 //! di sini (overview §3).
 
+mod catalog_command;
 mod health;
 
 use foundation::{Config, Foundation, auth, telemetry};
@@ -22,11 +23,21 @@ async fn main() -> anyhow::Result<()> {
 
     let foundation = Foundation::connect(config).await?;
 
+    // Subcommand dijalankan tanpa membuka listener: pemeriksaan katalog adalah
+    // alat operator, bukan endpoint.
+    if let Some(command) = std::env::args().nth(1) {
+        return run_command(&foundation, &command).await;
+    }
+
     if foundation.config().may_migrate_on_startup() {
         // Hanya di local. Di lingkungan lain schema dipasang lewat
         // `sqlx migrate run` sebagai langkah deploy tersendiri (AGENTS.md).
         info!("menjalankan migrasi (local)");
         foundation.app_db().migrate().await?;
+    }
+
+    if foundation.config().catalog_validate_on_startup {
+        chat::catalog::validate_on_startup(&foundation).await?;
     }
 
     if foundation.config().may_bootstrap_admin() {
@@ -52,6 +63,30 @@ async fn main() -> anyhow::Result<()> {
 
     info!("jarvis berhenti");
     Ok(())
+}
+
+/// Jalankan subcommand CLI lalu berhenti.
+async fn run_command(foundation: &Foundation, command: &str) -> anyhow::Result<()> {
+    match command {
+        "catalog" => {
+            let arguments: Vec<String> = std::env::args().skip(2).collect();
+            let passed = catalog_command::run(
+                foundation,
+                arguments.iter().any(|argument| argument == "--sync"),
+                arguments.iter().any(|argument| argument == "--no-probe"),
+            )
+            .await?;
+
+            if !passed {
+                // Exit code non-nol supaya CI dan skrip dapat memakainya.
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        other => {
+            anyhow::bail!("subcommand tidak dikenal: {other} (tersedia: catalog [--sync] [--no-probe])")
+        }
+    }
 }
 
 /// Tunggu SIGINT atau SIGTERM. SIGTERM penting karena container dihentikan

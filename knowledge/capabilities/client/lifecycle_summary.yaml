@@ -1,6 +1,8 @@
 id: client_lifecycle_summary
 status: approved_mvp
 domain: client
+display_name: Client Lifecycle Summary
+description: Count clients per lifecycle status (pending, active, closed and the other statuses) within the caller's authorized office scope.
 data_areas:
 - client_foundation
 required_api_capability: client_lifecycle_summary

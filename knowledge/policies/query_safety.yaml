@@ -23,7 +23,10 @@ unsafe_commands:
   - ANALYZE
 checks:
   - id: all_queries_select_only
-    rule: every approved SQL file must start with SELECT.
+    rule: >-
+      every approved SQL file must be a single read-only statement starting with
+      SELECT, or with WITH followed by a SELECT. Data-modifying CTE is already
+      rejected by no_unsafe_sql_tokens.
   - id: all_queries_single_statement
     rule: every approved SQL file must contain no semicolon except an optional final semicolon.
   - id: all_queries_parameterized

@@ -42,6 +42,11 @@ fi
 echo "==> build"
 cargo build -p app --quiet
 
+# Katalog diperiksa lebih dulu: capability yang tidak lolos tidak layak
+# dieksekusi, dan menemukannya setelah 29 request HTTP hanya menunda kabar buruk.
+echo "==> memeriksa katalog"
+"$ROOT/target/debug/app" catalog
+
 echo "==> menyalakan app pada $BASE_URL (log: $LOG)"
 APP_PORT="$PORT" "$ROOT/target/debug/app" >"$LOG" 2>&1 &
 APP_PID=$!

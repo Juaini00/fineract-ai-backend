@@ -8,6 +8,7 @@
 //! muncul di modul `repository` (dan `audit`/`settings` yang juga repository).
 
 pub mod audit;
+pub mod catalog;
 pub mod job;
 pub mod session;
 pub mod settings;
