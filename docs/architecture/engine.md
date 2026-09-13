@@ -60,3 +60,17 @@ Worker lease/fencing, cancellation settlement, terminal races, clarification exp
 - Exact reuse rules and retry/re-plan budgets.
 - Atomic response/memory promotion and session concurrency constraints.
 - Node-kind/status schema and version compatibility.
+
+## Skip sebagai jalur terminal (disepakati 2026-09-12)
+
+`outcome` bertambah satu nilai: **`SkippedByUser`**.
+
+| Trigger | State/action | Durable/public effect |
+| --- | --- | --- |
+| Pengguna skip saat `WaitingForUser` | Berhenti menerima node baru, susun response | `lifecycle=Completed`, `outcome=SkippedByUser`, `completeness=Partial/Unknown`; persist response + memory promotion + terminal event secara atomik |
+
+Skip adalah **trigger action**, bukan penghentian seketika: engine tetap menghasilkan response document (menyatakan pengguna memilih tidak melanjutkan, menyertakan hasil parsial yang valid dengan gap eksplisit) dan tetap melakukan memory promotion. Setelah itu job terminal dan tidak dapat dilanjutkan. Detail interaksi dimiliki [clarifications.md](../contracts/clarifications.md).
+
+`cancel` tetap berbeda: berlaku pada job berjalan, berakhir `Cancelled`, tanpa kewajiban response document dan tanpa memory promotion.
+
+**Memory promotion tetap satu titik: response commit** (kini termasuk skip). Promosi inkremental tidak digunakan. Konsekuensi yang diterima: crash tanpa commit tidak menyimpan context ke session memory. Output node dan checkpoint tetap durable untuk **resume** — job dapat dilanjutkan worker dan, bila kemudian selesai, memory dipromosikan secara normal. Bila job tidak pernah selesai, pertanyaan terkait berikutnya dijawab sebagai retrieval baru, bukan sambungan diam-diam.

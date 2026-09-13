@@ -25,7 +25,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 | [README](README.md) | Ada: indeks dan gate | Diperbarui saat dokumen baru dibuat |
 | [Design review](design-review.md) | Ada: gap dan riwayat keputusan | Menutup gap sesuai hasil pembahasan |
 | [PRD](product/prd.md) | Ada, parsial untuk readiness | Cakupan analisis awal dan target terukur |
-| [Keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) | Ada: baseline dan D01–D11 disepakati | Inventaris formal, mapping sumber/deployment dan kontrak teknis belum final |
+| [Keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) | Ada: baseline dan D01–D15 disepakati; gap-review ditutup | Inventaris formal, mapping sumber/deployment dan kontrak teknis belum final |
 | [Tech stack](architecture/tech-stack.md) | Ada, parsial | Versi, provider/model, parser, exporter, storage |
 | [Engine](architecture/engine.md) | Ada, parsial | Matriks transisi lengkap, lease/fencing, recovery |
 | [API](contracts/api.md) | Ada, parsial | OpenAPI/schema lengkap, endpoint pendukung dan error matrix |

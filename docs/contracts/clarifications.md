@@ -80,3 +80,36 @@ Audit records form/plan revision, unresolved slot, resolver and option-set refer
 - Long option lists are paginated; all-matches never means visible-page-only.
 - Suggestions do not auto-submit and no-match can refine search.
 - Budget exhaustion and expiry terminate waiting predictably without fabricated bindings.
+
+## Manual input dan skip (disepakati 2026-09-12)
+
+Ditambahkan setelah tinjauan kelengkapan schema. Skema JSON penuh dan batas numerik tetap terbuka.
+
+### Jenis jawaban (`answer_kind`)
+
+Mengetik manual didukung. Setiap jawaban membawa jenis eksplisit:
+
+| `answer_kind` | Arti |
+| --- | --- |
+| `option_id` | Memilih opsi terbitan server. **Satu-satunya jenis yang mengikat identitas.** |
+| `typed_value` | Nilai yang diketik untuk field non-identitas (text/number/date/date_range/boolean) sesuai constraint field. |
+| `refine_search` | Teks bebas sebagai **istilah pencarian**; memicu resolver ulang dan menghasilkan opsi baru. |
+| `change_intent` | Pengguna mengubah permintaan analisisnya; ditangani melalui validasi intent/re-plan, bukan dipaksa menjadi nilai field. |
+
+**Aturan keamanan:** teks bebas pada slot identitas **tidak pernah** menjadi binding. Ia selalu diperlakukan sebagai `refine_search`. Hanya option ID terbitan server yang mengikat entitas, konsisten dengan larangan mempercayai entity ID dari klien sebagai otorisasi.
+
+Penyimpanan jawaban memisahkan `answer_kind`, teks mentah, dan binding hasil resolusi.
+
+### Aksi `skip`
+
+Pengguna dapat menghentikan percakapan saat sebuah form aktif. Skip **bukan abort**: ia adalah instruksi eksplisit yang menandai job selesai.
+
+- Valid **hanya** ketika job berada pada `WaitingForUser`.
+- Dikirim melalui `POST /chat/jobs/{job_id}/responses` dengan `action: "skip"` beserta `Idempotency-Key`; tidak ada endpoint baru.
+- Engine berhenti menerima node baru, menyusun response, lalu **commit response + memory promotion + terminal event secara atomik** — jalur commit yang sama dengan jawaban normal.
+- Hasil: `lifecycle = Completed`, `outcome = SkippedByUser`, `completeness = Partial` atau `Unknown`.
+- Response tetap dikembalikan kepada pengguna (menyatakan bahwa ia memilih tidak melanjutkan) dan **menyertakan hasil parsial yang sudah valid** dengan gap yang ditandai eksplisit; output node yang telah selesai tidak dibuang.
+- Setelah skip job bersifat terminal dan tidak dapat dilanjutkan. Pertanyaan terkait berikutnya adalah job baru yang membaca session memory.
+- Form dicatat dengan terminal state `skipped` beserta aktor dan waktu.
+
+Skip berbeda dari `cancel`: cancel berlaku pada job yang sedang berjalan, berakhir `Cancelled`, tanpa kewajiban response document dan tanpa memory promotion.
