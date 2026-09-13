@@ -315,7 +315,18 @@ dependencies = [
 name = "chat"
 version = "0.0.1"
 dependencies = [
+ "anyhow",
+ "axum",
+ "chrono",
  "core",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tracing",
+ "uuid",
+ "validator",
 ]
 
 [[package]]

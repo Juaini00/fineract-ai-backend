@@ -81,6 +81,14 @@ pub struct Config {
     #[serde(default)]
     pub auth_bootstrap_admin_email: Option<String>,
 
+    // ---- Idempotency (runtime.md §3) ----
+    #[serde(default = "default_idempotency_ttl_secs")]
+    pub idempotency_ttl_secs: i64,
+    #[serde(default = "default_idempotency_key_min_length")]
+    pub idempotency_key_min_length: usize,
+    #[serde(default = "default_idempotency_key_max_length")]
+    pub idempotency_key_max_length: usize,
+
     // ---- Cookie refresh token ----
     #[serde(default = "default_refresh_cookie_name")]
     pub auth_refresh_cookie_name: String,
@@ -214,6 +222,18 @@ fn default_jwt_issuer() -> String {
 }
 fn default_jwt_audience() -> String {
     "jarvis-api".to_string()
+}
+fn default_idempotency_ttl_secs() -> i64 {
+    86_400
+}
+/// Batas panjang kunci mengikuti CHECK pada `idempotency_keys` — keduanya
+/// wajib bergerak bersama; nilai yang lolos validasi tetapi ditolak database
+/// menjadi 500, bukan 422.
+fn default_idempotency_key_min_length() -> usize {
+    16
+}
+fn default_idempotency_key_max_length() -> usize {
+    255
 }
 fn default_bootstrap_username() -> String {
     "admin".to_string()

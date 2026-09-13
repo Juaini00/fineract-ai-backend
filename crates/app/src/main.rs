@@ -35,6 +35,7 @@ async fn main() -> anyhow::Result<()> {
 
     let router = health::router()
         .merge(auth::route::router())
+        .merge(chat::router())
         .with_state(foundation);
 
     let listener = TcpListener::bind(&bind_address).await?;
