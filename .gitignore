@@ -1,0 +1,64 @@
+# === Rahasia — JANGAN PERNAH di-commit ===
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+
+# === Build Rust ===
+/target
+**/*.rs.bk
+*.pdb
+
+# === Basis data lokal / dump ===
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+pgdata/
+
+# === Log dan artefak runtime ===
+*.log
+logs/
+tmp/
+.cache/
+
+# === Coverage dan profiling ===
+/coverage
+*.profraw
+*.profdata
+tarpaulin-report.*
+
+# === Editor / IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === macOS / Windows / Linux ===
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# === Tooling agen AI (lokal, bukan bagian kontrak repo) ===
+CLAUDE.md
+.claude/settings.local.json
+.mcp.json
+.understand-anything
+.worktrees/
+.pi
+.pi-subagents
+.lean-ctx/
+prompt.txt
+
+# === Skrip lokal sementara ===
+.ssh_script.sh
+scratch/

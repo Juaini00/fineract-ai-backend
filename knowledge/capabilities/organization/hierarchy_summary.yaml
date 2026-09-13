@@ -1,0 +1,42 @@
+id: organization_hierarchy_summary
+status: approved_mvp
+domain: organization
+display_name: Office Hierarchy Summary
+description: Return the shape of the office hierarchy within the caller's authorized scope — total, root,
+  and leaf office counts plus the maximum depth.
+data_areas:
+- organization_foundation
+required_api_capability: organization_hierarchy_summary
+query_id: organization.hierarchy_summary
+metrics:
+- organization.office_count
+output_mode: summary
+request_shape:
+  operation: summary
+  subject: organization_hierarchy
+  grouping: none
+  output: summary
+  pii: none
+examples:
+- Show office hierarchy summary.
+- How deep is our office hierarchy?
+- How many root and leaf offices are in my authorized scope?
+- "Ringkasan hierarki kantor: akar, daun, dan kedalaman."
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+checks:
+- id: query_exists
+  rule: query_id must exist in knowledge/queries.
+- id: no_pii_output
+  rule: query output fields must not expose staff or office identity.
+- id: office_scope_required
+  rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false

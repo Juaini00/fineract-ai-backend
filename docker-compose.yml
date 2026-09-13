@@ -1,0 +1,44 @@
+# Dependency lokal untuk pengembangan.
+#
+# Redis HANYA untuk koordinasi SSE live (#3) — bukan sumber kebenaran.
+# Notifikasi yang hilang selalu dapat dipulihkan dengan membaca PostgreSQL.
+#
+# Service `postgres` bersifat opsional: bila Anda sudah punya PostgreSQL lokal,
+# jalankan `docker compose up -d redis` saja.
+
+services:
+  redis:
+    image: redis:8-alpine
+    container_name: jarvis-redis
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    # pgvector diperlukan untuk knowledge_index (#7).
+    image: pgvector/pgvector:pg17
+    container_name: jarvis-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jarvis
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d jarvis"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redis-data:
+  postgres-data:

@@ -1,0 +1,24 @@
+id: group_center_foundation
+status: conditional
+source_doc: docs/reporting-data-scope.md#33-group-and-center-foundation
+detail_doc: docs/reporting-data/group-center-foundation.md
+description: Group and center context for deployments that use group-based organization.
+included_tables:
+  - m_group
+  - m_group_client
+  - m_group_level
+conditional_tables:
+  - m_group_roles
+  - m_staff_assignment_history
+excluded_tables: []
+allowed_domains:
+  - savings
+default_rules:
+  - Enable only when the local Fineract deployment uses groups or centers.
+checks:
+  - id: conditional_not_executable_by_default
+    rule: conditional group/center tables must not be used by approved_mvp queries unless explicitly enabled.
+  - id: group_office_scope_declared
+    rule: group-owned savings account paths must resolve to m_group.office_id.
+  - id: group_identifiers_excluded
+    rule: m_group.account_no and m_group.external_id must not appear in MVP output contracts.

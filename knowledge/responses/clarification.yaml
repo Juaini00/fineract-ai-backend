@@ -1,0 +1,24 @@
+id: clarification_responses
+language: en
+templates:
+  missing_date_range: "Which date range should this report use?"
+  missing_from_date: "What start date should this report use?"
+  missing_to_date: "What end date should this report use?"
+  missing_limit: "How many top records should be returned?"
+  missing_office_scope: "Which authorized office scope should this report use?"
+  ambiguous_output_mode: "Do you want a combined total, transaction list, or period breakdown?"
+  ambiguous_savings_deposit: "Do you want total deposits or the largest deposit transactions?"
+  ambiguous_activity_report: "Which report would you like? Reply with the option number, or choose Others to describe it in your own words."
+  others_prompt: "Please describe what you would like to know."
+rules:
+  - The typed clarification contract and catalog input contracts, not template prose, are authoritative for interaction kind, fields, options, defaults, and validation.
+  - Clarification must continue the same chat job.
+  - Do not create a new job for clarification answers.
+  - Ask only for parameters required by an approved capability.
+  - Others is a report/request escape, not a field fallback or help action.
+  - Keep clarification text safe, business-facing, and English-only.
+checks:
+  - id: required_parameters_have_templates
+    rule: missing required parameters for approved_mvp capabilities should map to a clarification template.
+  - id: no_new_job
+    rule: clarification answers must continue the same job via POST /chat/jobs/{job_id}/responses.

@@ -1,0 +1,24 @@
+id: organization
+status: approved_mvp
+display_name: Organization
+description: Office and branch context used for office-scoped reporting.
+data_areas:
+  - organization_foundation
+concepts:
+  - id: office
+    meaning: Organization unit used to scope reports.
+    synonyms: [office, branch, location, organization unit]
+supported_intents:
+  - office scoped reporting
+  - office summary
+  - active staff count by authorized office scope
+unsupported_intents:
+  - create office
+  - update office
+default_rules:
+  - Organization knowledge supports office-scoped reporting only; it does not grant write access.
+checks:
+  - id: data_area_exists
+    rule: data_areas must reference organization_foundation.
+  - id: no_write_intents
+    rule: supported_intents must not include create, update, delete, or administrative office changes.

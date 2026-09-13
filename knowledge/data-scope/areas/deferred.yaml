@@ -1,0 +1,16 @@
+id: deferred_areas
+status: deferred_group
+source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
+description: Group wrapper for individually-defined deferred data areas.
+members:
+  - loans
+  - accounting_gl
+  - tax
+  - custom_datatables
+  - audit_users_operations
+rule: Deferred areas must not be referenced by approved MVP capabilities or queries. Each member has its own area file with the full table list.
+checks:
+  - id: members_have_area_files
+    rule: every member must have a matching knowledge/data-scope/areas file.
+  - id: members_not_approved_mvp
+    rule: deferred members must not be referenced by approved_mvp capabilities or queries.

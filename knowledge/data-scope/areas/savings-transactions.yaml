@@ -1,0 +1,27 @@
+id: savings_transactions
+status: included_mvp_domain
+source_doc: docs/reporting-data-scope.md#35-savings-transactions
+detail_doc: docs/reporting-data/savings-transactions.md
+description: Savings transaction movement for deposits, withdrawals, interest, fees, and reversals.
+included_tables:
+  - m_savings_account_transaction
+conditional_tables:
+  - m_payment_detail
+excluded_tables:
+  - m_savings_account_transaction_tax_details
+allowed_domains:
+  - savings
+allowed_metrics:
+  - savings.deposit_amount
+  - savings.deposit_count
+  - savings.withdrawal_amount
+default_rules:
+  - Reversed transactions are excluded by default.
+  - Transaction type enum mapping must be declared before use.
+checks:
+  - id: transaction_enum_declared
+    rule: m_savings_account_transaction.transaction_type_enum must be mapped in schema enums before capability use.
+  - id: reversed_filter_declared
+    rule: approved transaction capabilities must declare is_reversed = false unless analyzing reversals.
+  - id: office_scope_declared
+    rule: approved transaction queries must constrain m_savings_account_transaction.office_id to authorized offices.
