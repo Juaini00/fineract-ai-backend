@@ -79,9 +79,9 @@ Ini **bukan** daftar yang boleh dilupakan — ia persis kelas masalah yang membu
 
 | # | Koneksi | Status | Pemilik penyelesaian |
 | --- | --- | --- | --- |
-| D1 | **`completeness` node → dataset → response** | Ketiganya punya kolom `completeness`, tetapi tidak ada yang memaksa response merupakan **agregat terburuk** dari node yang berkontribusi. Inilah celah "sukses tetapi jawabannya salah". | `contracts/responses.md` — aturan validasi response **wajib** menolak `Complete` bila ada node/dataset kontributor yang `Partial`/`Unknown` |
-| D2 | Kewajiban mengungkap auto-bind (K5) | Aturan tertulis; penegakan belum ada | `contracts/responses.md` |
-| D3 | Kelengkapan evidence lineage | Tidak ada yang memaksa setiap angka di `blocks_json` punya entri di `evidence_json` | `contracts/responses.md` |
+| D1 | **`completeness` node → dataset → response** | ✅ **DITUTUP** oleh [responses.md](../contracts/responses.md) §3: validator **menghitung ulang** completeness dari ledger; klaim composer yang **lebih baik** daripada hitungan ditolak (satu arah) | selesai |
+| D2 | Kewajiban mengungkap auto-bind (K5) | ✅ **DITUTUP** oleh responses.md §5: himpunan slot auto-bind dari `input_binding_json` dibandingkan dengan himpunan yang diungkap; tidak sama → validasi gagal | selesai |
+| D3 | Kelengkapan evidence lineage | ✅ **DITUTUP** oleh responses.md §4: numeral pada narasi wajib cocok dengan blok ber-evidence atau dengan entri `derivation`; selain itu ditolak | selesai |
 | D4 | Kesegaran katalog saat eksekusi | `catalog_version_id` direkam saat verifikasi; belum ada pemeriksaan katalog tidak berubah antara verifikasi dan eksekusi | `architecture/engine.md` |
 | D5 | Penegakan office scope di SQL | Diikat sebagai parameter di approved SQL — implementasi, bukan schema | `data/analytical-contracts.md` |
 
