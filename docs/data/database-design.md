@@ -83,7 +83,7 @@ Ini **bukan** daftar yang boleh dilupakan — ia persis kelas masalah yang membu
 | D2 | Kewajiban mengungkap auto-bind (K5) | ✅ **DITUTUP** oleh responses.md §5: himpunan slot auto-bind dari `input_binding_json` dibandingkan dengan himpunan yang diungkap; tidak sama → validasi gagal | selesai |
 | D3 | Kelengkapan evidence lineage | ✅ **DITUTUP** oleh responses.md §4: numeral pada narasi wajib cocok dengan blok ber-evidence atau dengan entri `derivation`; selain itu ditolak | selesai |
 | D4 | Kesegaran katalog saat eksekusi | `catalog_version_id` direkam saat verifikasi; belum ada pemeriksaan katalog tidak berubah antara verifikasi dan eksekusi | `architecture/engine.md` |
-| D5 | Penegakan office scope di SQL | Diikat sebagai parameter di approved SQL — implementasi, bukan schema | `data/analytical-contracts.md` |
+| D5 | Penegakan office scope di SQL | ✅ DITUTUP (design) oleh analytical-contracts.md §6 — compiler/validator tetap pekerjaan implementasi | `data/analytical-contracts.md` |
 
 ---
 
@@ -321,7 +321,7 @@ Catatan: `job_node_runs.dataset_id` dan `session_memory.(source_job_id, source_r
 
 ## 8. Terbuka
 
-- **D1–D5** (§2.2) — terutama D1, propagasi `completeness`, yang menunggu `contracts/responses.md`.
+- **D4** (§2.2) — kesegaran katalog saat eksekusi, menunggu `architecture/engine.md`. D1–D3 ditutup `contracts/responses.md`; D5 ditutup (design) `data/analytical-contracts.md`.
 - **K1** ([runtime.md](../operations/runtime.md)) — heartbeat wajib task independen, kalau tidak lease harus ≥180 s.
 - Penerbit token bila SSO dipakai (HS256 dilarang saat itu) — `security/access-data-policy.md`.
 - Retensi audit — keputusan compliance.

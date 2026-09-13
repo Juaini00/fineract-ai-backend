@@ -27,15 +27,15 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 | [PRD](product/prd.md) | Ada, parsial untuk readiness | Cakupan analisis awal dan target terukur |
 | [Keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) | Ada: baseline dan D01–D15 disepakati; gap-review ditutup | Inventaris formal, mapping sumber/deployment dan kontrak teknis belum final |
 | [Tech stack](architecture/tech-stack.md) | Ada, parsial | Versi, provider/model, parser, exporter, storage |
-| [Engine](architecture/engine.md) | Ada, parsial | Matriks transisi lengkap, lease/fencing, recovery |
+| [Engine](architecture/engine.md) | Ada: matriks transisi, node status, lease/fencing, recovery, D4 | Precedence penyelesaian node aktif reaper-vs-worker dicatat sebagai keputusan terbuka |
 | [API](contracts/api.md) | Ada, parsial | OpenAPI/schema lengkap, endpoint pendukung dan error matrix |
 | [Klarifikasi](contracts/clarifications.md) | Ada, parsial | Schema, opsi resolver, limits dan expiry |
 | [SSE](contracts/sse.md) | Ada, parsial | Payload lengkap, replay limits, auth expiry dan wire errors |
-| `architecture/overview.md` | Belum ada | Diagram komponen dan ownership antarmodul |
+| [Overview](architecture/overview.md) | Ada: batas komponen, ownership, alur eksekusi, batas transaksi | — |
 | [Database design](data/database-design.md) | Ada: invarian, matriks koneksi, ERD, tabel, referential action, batas transaksi | D1–D3 ditutup oleh `contracts/responses.md`; sisa utang D4 (kesegaran katalog saat eksekusi) dan D5 (penegakan office scope di SQL) |
-| `data/analytical-contracts.md` | Belum ada | Kontrak pertama dan compiler/validation specification |
-| `data/dataset-lifecycle.md` | Belum ada | Storage, snapshot, pagination dan retention |
-| `architecture/memory-context.md` | Belum ada | Memory lifecycle, compaction dan budget |
+| `data/analytical-contracts.md` | Ada: struktur kontrak, validasi, grain, siklus katalog, D5 | Kontrak pertama (field/measure konkret) masih menunggu verifikasi deployment |
+| `data/dataset-lifecycle.md` | Ada: handle, chunk, snapshot, pagination, completeness, expiry | Angka pasti menunggu uji kapasitas |
+| [Memory/context](architecture/memory-context.md) | Ada: lifecycle, summary, budget, otorisasi | Kuota/retention/pagination rinci masih terbuka |
 | [Responses](contracts/responses.md) | Ada: kosakata blok, aturan validasi D1–D3, fallback deterministik | Skema JSON penuh per blok menunggu OpenAPI di `api.md`; toleransi pembulatan menunggu analytical contracts |
 | `security/access-data-policy.md` | Belum ada | Identitas dashboard, tenant, scope dan PII |
 | `operations/observability.md` | Belum ada | Audit, logs, traces, metrics dan retention |
@@ -52,7 +52,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - [x] SQL/operasi deterministik menghasilkan angka; model menjelaskan bukti.
 - [x] Unsupported jika tidak ada capability/analytical contract yang disetujui.
 - [x] Tiga crate dan batas route → service → repository → database tercatat.
-- [ ] Diagram komponen, input/output dan pemilik setiap tahap.
+- [x] Diagram komponen, input/output dan pemilik setiap tahap.
 - [ ] Daftar pertanyaan/operasi analisis wajib untuk rilis awal dan batasnya.
 - [ ] Inventaris cakupan full release per domain/resource, termasuk arti lengkap aktivitas loan.
 - [x] Baseline domain, resource penghubung dan tambahan cakupan D01–D15 tercatat dalam dokumen keputusan.
@@ -77,10 +77,10 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - [x] Fan-in, bounded concurrency dan reuse output durable sudah menjadi aturan.
 - [x] Satu job nonterminal per session menjadi arah awal.
 - [x] Retry/re-plan berbagi budget; tidak menjanjikan exactly-once external execution.
-- [ ] Matriks lengkap status/outcome, node kinds/status dan transisi yang legal.
-- [ ] Worker lease, fencing, renewal dan recovery attempt yang tidak pasti.
-- [ ] Race completion/cancellation/expiry dan penyelesaian node aktif.
-- [ ] Aturan detail invalidasi output saat re-plan/scope/freshness berubah.
+- [x] Matriks lengkap status/outcome, node kinds/status dan transisi yang legal.
+- [x] Worker lease, fencing, renewal dan recovery attempt yang tidak pasti.
+- [x] Race completion/cancellation/expiry dan penyelesaian node aktif.
+- [x] Aturan detail invalidasi output saat re-plan/scope/freshness berubah.
 
 ## 4. Database dan transaksi
 
@@ -147,9 +147,9 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - [x] History, job state, structured memory dan LLM working set dipisahkan.
 - [x] Budget sebelum setiap model call, incremental summary dan provenance sebagai arah desain.
 - [x] Otorisasi tidak dipercaya dari ringkasan; global memory deferred.
-- [ ] Schema memory, promotion/invalidation, watermark dan summary versioning.
-- [ ] Algoritme pemilihan konteks, token allocation dan compaction triggers.
-- [ ] Recovery ringkasan gagal/salah dan stale facts.
+- [x] Schema memory, promotion/invalidation, watermark dan summary versioning.
+- [x] Algoritme pemilihan konteks, token allocation dan compaction triggers.
+- [x] Recovery ringkasan gagal/salah dan stale facts.
 - [ ] Kuota session/pengguna, retention, penghapusan dan pagination rinci.
 
 ## 9. Respons, temuan dan suggestion

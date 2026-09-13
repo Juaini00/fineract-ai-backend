@@ -65,7 +65,7 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 - `migrations/` — ditulis baru dari `database-design.md` §4–§7, **tidak** disalin dari repo lama. Schema-nya berbeda fundamental.
 - Kode aplikasi — crate masih kerangka kosong.
-- `docs/security/access-data-policy.md`, `docs/data/analytical-contracts.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
+- `docs/security/access-data-policy.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
 
 ## Aturan yang tidak boleh dilanggar
 
