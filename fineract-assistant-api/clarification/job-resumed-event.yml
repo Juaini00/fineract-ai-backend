@@ -1,0 +1,42 @@
+info:
+  name: job.resumed lahir saat worker melanjutkan, bukan saat jawaban diterima
+  type: http
+  seq: 11
+  description: |
+    Jawaban yang diterima hanya mengembalikan job ke antrean. Di antara itu dan
+    pengerjaan berikutnya job masih dapat menunggu, kedaluwarsa, atau
+    dibatalkan. Memancarkan `job.resumed` pada penerimaan jawaban berarti
+    memberi tahu pengguna bahwa pekerjaan dilanjutkan pada saat belum ada satu
+    pun worker yang menyentuhnya.
+
+    Urutan inilah buktinya: `clarification.accepted` -> `job.resumed` ->
+    fase -> node -> penyelesaian.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const names = (String(res.getBody()).match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+
+        test("job.resumed ada, tepat satu kali", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names.filter(function (n) { return n === "job.resumed"; })).to.have.lengthOf(1);
+        });
+
+        test("ia datang SESUDAH jawaban diterima, bukan bersamaan", function () {
+          expect(names.indexOf("job.resumed")).to.be.above(names.indexOf("clarification.accepted"));
+        });
+
+        test("dan SEBELUM pekerjaan lanjutannya terlihat", function () {
+          expect(names.indexOf("job.resumed")).to.be.below(names.indexOf("node.status_changed"));
+          expect(names.indexOf("job.resumed")).to.be.below(names.lastIndexOf("job.completed"));
+        });

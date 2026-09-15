@@ -36,10 +36,32 @@ pub fn router() -> Router<Foundation> {
 pub struct AnswerRequest {
     clarification_id: Uuid,
     revision: i32,
+    /// `answer` (default) atau `skip`. Skip memakai endpoint yang sama dan
+    /// tidak pernah menjadi endpoint baru (clarifications.md).
+    #[serde(default)]
+    action: Action,
     /// Satu nilai per field. Untuk field `single_choice` nilainya adalah
     /// `option_id` yang server terbitkan — bukan teks bebas, dan bukan nilai
     /// binding yang dikirim klien (K1).
+    #[serde(default)]
     answers: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Action {
+    #[default]
+    Answer,
+    Skip,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SkipAcknowledgement {
+    job_id: Uuid,
+    clarification_id: Uuid,
+    revision: i32,
+    lifecycle: &'static str,
+    outcome: &'static str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +129,31 @@ async fn answer(
     // kontraknya berubah kemudian.
     let _key = idempotency_key(&headers, foundation.config())?;
 
+    if request.action == Action::Skip {
+        let form = service::skip(
+            &foundation,
+            job_id,
+            user.user_id,
+            request.clarification_id,
+            request.revision,
+        )
+        .await?;
+
+        // 200, bukan 202: skip sudah terminal saat handler membalas — response
+        // document sudah durable. 202 akan menyiratkan masih ada pekerjaan.
+        return Ok((
+            StatusCode::OK,
+            Json(Envelope::ok(SkipAcknowledgement {
+                job_id,
+                clarification_id: form.clarification_id,
+                revision: form.revision,
+                lifecycle: "Completed",
+                outcome: "SkippedByUser",
+            })),
+        )
+            .into_response());
+    }
+
     let form = service::answer(
         &foundation,
         &catalog,
@@ -128,5 +175,6 @@ async fn answer(
             revision: form.revision,
             lifecycle: "Queued",
         })),
-    ))
+    )
+        .into_response())
 }

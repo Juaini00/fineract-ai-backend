@@ -9,7 +9,9 @@ Status: agreed endpoint responsibilities, recorded 2026-09-08. Full OpenAPI/JSON
 | `POST /chat/jobs` | Accept a new question in a session; return 202 after durable creation |
 | `GET /chat/jobs/{job_id}` | Read a consistent state snapshot, active clarification or final response reference, and event cursor |
 | `GET /chat/jobs/{job_id}/events` | Authorized SSE replay and live events |
-| `POST /chat/jobs/{job_id}/responses` | Accept a versioned clarification answer on the same job; return 202 after commit |
+| `GET /chat/jobs/{job_id}/clarification` | Read the open form for this job |
+| `GET /chat/jobs/{job_id}/clarification/options` | Issue one page of resolver options for a `single_choice` field; only the page actually sent is persisted |
+| `POST /chat/jobs/{job_id}/responses` | Accept a versioned clarification answer on the same job (202 after commit), or `action: "skip"` which settles the job as `SkippedByUser` and returns 200 |
 | `POST /chat/jobs/{job_id}/cancel` | Request cancellation explicitly; disconnecting is not cancellation |
 
 Clarification option search, session/message pagination, response retrieval and dataset pagination need endpoint schemas in subsequent design work. This inventory is deliberately limited to the agreed job interaction.

@@ -1,0 +1,39 @@
+info:
+  name: skip terlihat di stream sebagai penyelesaian, bukan pembatalan
+  type: http
+  seq: 18
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{skipJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const names = (body.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        const events = body.split("\n")
+          .filter(function (line) { return line.startsWith("data: "); })
+          .map(function (line) { return JSON.parse(line.slice(6)); });
+        const terminal = events[events.length - 1];
+
+        test("berakhir job.completed, bukan job.cancelled", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names[names.length - 1]).to.equal("job.completed");
+          expect(names).to.not.include("job.cancelled");
+          // Tidak pernah dilanjutkan: tidak ada worker yang mengerjakannya lagi.
+          expect(names).to.not.include("job.resumed");
+        });
+
+        test("event terminal membawa outcome dan response version", function () {
+          expect(terminal.outcome).to.equal("SkippedByUser");
+          expect(terminal.completeness).to.equal("Unknown");
+          expect(terminal.response_version).to.equal(1);
+          expect(terminal.clarification_id).to.equal(bru.getVar("skipClarificationId"));
+        });

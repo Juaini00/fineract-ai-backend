@@ -1,0 +1,36 @@
+info:
+  name: job yang di-skip tidak dapat dilanjutkan
+  type: http
+  seq: 17
+  description: |
+    clarifications.md: setelah skip, job bersifat terminal. Pertanyaan terkait
+    berikutnya adalah job BARU yang membaca session memory, bukan sambungan
+    diam-diam pada job yang sudah ditutup pengguna.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{skipJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{skipIdemKey}}-again"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{skipClarificationId}}",
+        "revision": 1,
+        "answers": { "search": "Grace Dao" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: jawaban sesudah skip tidak membuka kembali job", function () {
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.message).to.contain("Completed");
+        });

@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use foundation::{error::ApiError, state::Foundation};
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
@@ -166,6 +167,124 @@ pub async fn options(
             })
             .collect(),
     })
+}
+
+/// T8 — pengguna memilih tidak melanjutkan.
+///
+/// Skip **bukan cancel**: ia menghasilkan response document dan job berakhir
+/// `Completed` + `SkippedByUser`, sedangkan cancel berakhir `Cancelled` tanpa
+/// kewajiban dokumen. Keduanya sengaja tidak digabung — menggabungkannya akan
+/// membuat "pengguna berhenti bertanya" tidak dapat dibedakan dari "pekerjaan
+/// dibatalkan" pada laporan mana pun.
+pub async fn skip(
+    foundation: &Foundation,
+    job_id: Uuid,
+    owner_user_id: Uuid,
+    clarification_id: Uuid,
+    revision: i32,
+) -> Result<Form, ApiError> {
+    let job = job_service::owned(foundation, job_id, owner_user_id).await?;
+
+    if job.lifecycle != "WaitingForUser" {
+        return Err(ApiError::Conflict(format!(
+            "Job is {}, not waiting for an answer",
+            job.lifecycle
+        )));
+    }
+
+    let pool = foundation.app_db().pool();
+    let form = repository::open_form_of(pool, job_id)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or(ApiError::NotFound)?;
+
+    if form.clarification_id != clarification_id || form.revision != revision {
+        return Err(ApiError::Conflict(
+            "Clarification revision is stale; reload the active form".to_string(),
+        ));
+    }
+
+    // `Complete` dilarang: pengguna berhenti di tengah. Yang membedakan
+    // `Partial` dari `Unknown` adalah apakah ada output node yang benar-benar
+    // durable — bukan tebakan tentang seberapa jauh job sempat berjalan.
+    let completed_nodes = repository::completed_node_count(pool, job_id)
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    let stored = repository::skip(
+        pool,
+        &form,
+        job.session_id,
+        owner_user_id,
+        skipped_response(&form, completed_nodes),
+    )
+    .await
+    .map_err(anyhow::Error::from)?;
+
+    if !stored {
+        return Err(ApiError::Conflict(
+            "This clarification is no longer open".to_string(),
+        ));
+    }
+
+    Ok(form)
+}
+
+/// Dokumen skip: menyatakan pengguna memilih berhenti, dan menandai gap-nya
+/// eksplisit (I5 — tidak ada penghilangan senyap).
+fn skipped_response(form: &Form, completed_nodes: i64) -> repository::SkippedResponse {
+    let unanswered = unanswered_fields(&form.fields_json);
+    let partial = completed_nodes > 0;
+
+    let blocks = serde_json::json!([
+        {
+            "type": "narrative",
+            "id": "skipped",
+            "title": "Stopped at your request",
+            "body": "You chose not to provide the remaining input, so Jarvis stopped here \
+                     instead of guessing a value.",
+        },
+        {
+            "type": "limitation",
+            "id": "skipped_inputs",
+            "title": "What is missing",
+            "body": if unanswered.is_empty() {
+                "No further input was supplied before the request was stopped.".to_string()
+            } else {
+                format!(
+                    "{} input(s) were never supplied, so no figure is reported for them: {}.",
+                    unanswered.len(),
+                    unanswered.join(", ")
+                )
+            },
+            "unanswered_fields": unanswered,
+            // Hasil parsial yang sudah durable TIDAK dibuang (clarifications.md);
+            // jumlahnya dinyatakan supaya pembaca tahu ada sesuatu untuk dilihat.
+            "completed_nodes": completed_nodes,
+        }
+    ]);
+
+    repository::SkippedResponse {
+        // engine.md: `SkippedByUser` hanya sah dengan `Partial` atau `Unknown`.
+        completeness: if partial { "Partial" } else { "Unknown" },
+        completeness_reason: "skipped_by_user".to_string(),
+        response_hash: hex::encode(Sha256::digest(blocks.to_string().as_bytes())),
+        blocks,
+        unanswered_fields: unanswered,
+    }
+}
+
+fn unanswered_fields(fields_json: &Value) -> Vec<String> {
+    fields_json
+        .as_array()
+        .map(|fields| {
+            fields
+                .iter()
+                .filter_map(|field| field.get("field_id").and_then(Value::as_str))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Terima jawaban untuk form terbuka.
@@ -544,6 +663,53 @@ mod tests {
     #[test]
     fn well_typed_answers_pass_the_structural_checks() {
         assert!(structural(&[("from_date", "2026-01-01")]).is_empty());
+    }
+
+    fn form(fields: Value) -> Form {
+        Form {
+            id: Uuid::nil(),
+            job_id: Uuid::nil(),
+            clarification_id: Uuid::nil(),
+            revision: 1,
+            schema_version: 1,
+            purpose: None,
+            stage_label: None,
+            fields_json: fields,
+            state: "open".into(),
+            expires_at: None,
+            created_at: chrono::Utc::now(),
+        }
+    }
+
+    #[test]
+    fn skip_is_never_allowed_to_claim_completeness() {
+        // engine.md: `SkippedByUser` + `Complete` dilarang. Pengguna berhenti di
+        // tengah; tidak ada klaim kelengkapan yang dapat dibuat atas data sumber.
+        for nodes in [0, 1, 7] {
+            let response = skipped_response(&form(fields()), nodes);
+            assert_ne!(response.completeness, "Complete", "nodes={nodes}");
+        }
+    }
+
+    #[test]
+    fn completeness_follows_durable_output_not_optimism() {
+        // Tanpa satu pun output node durable, hasilnya TIDAK DIKETAHUI — bukan
+        // "sebagian" yang menyiratkan ada sesuatu untuk dilihat.
+        assert_eq!(skipped_response(&form(fields()), 0).completeness, "Unknown");
+        assert_eq!(skipped_response(&form(fields()), 2).completeness, "Partial");
+    }
+
+    #[test]
+    fn skipped_document_names_the_gap() {
+        let response = skipped_response(&form(fields()), 0);
+        let blocks = response.blocks.as_array().unwrap();
+
+        assert_eq!(response.completeness_reason, "skipped_by_user");
+        assert_eq!(blocks[0]["type"], "narrative");
+        // I5 — gap dinyatakan, bukan sekadar tidak ada angka.
+        assert_eq!(blocks[1]["id"], "skipped_inputs");
+        assert_eq!(blocks[1]["unanswered_fields"][0], "from_date");
+        assert_eq!(response.unanswered_fields.len(), 2);
     }
 
     #[test]

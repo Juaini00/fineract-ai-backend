@@ -78,6 +78,15 @@ pub async fn claim_next(
         return Ok(None);
     };
 
+    // `job.resumed` mendahului fase, karena ia menandai APA yang dimulai:
+    // kelanjutan, bukan pengerjaan pertama. Urutan terbalik akan membuat klien
+    // menampilkan "Understanding your request" untuk job yang sebenarnya sedang
+    // melanjutkan pekerjaan yang sudah berjalan sebelumnya.
+    let resumed = was_suspended(&mut tx, job.id).await?;
+    if resumed {
+        append_event(&mut tx, job.id, "job.resumed", None).await?;
+    }
+
     append_event(
         &mut tx,
         job.id,
@@ -98,7 +107,7 @@ pub async fn claim_next(
             stage: "accept",
             action: "job.claimed",
             result: "ok",
-            detail_json: Some(serde_json::json!({ "worker": worker })),
+            detail_json: Some(serde_json::json!({ "worker": worker, "resumed": resumed })),
             ..Default::default()
         },
     )
@@ -106,6 +115,29 @@ pub async fn claim_next(
 
     tx.commit().await?;
     Ok(Some(job))
+}
+
+/// Apakah job ini pernah benar-benar ditangguhkan menunggu manusia.
+///
+/// Dibaca dari bukti durable: ada form yang DIJAWAB manusia. Form yang tertutup
+/// karena `resolver_unique` tidak dihitung — job itu tidak pernah menunggu
+/// siapa pun, jadi tidak ada yang dilanjutkan.
+///
+/// Inilah sebabnya `job.resumed` lahir di sini dan bukan saat jawaban diterima:
+/// jawaban hanya mengembalikan job ke antrean, dan di antara itu dan pengerjaan
+/// berikutnya job masih dapat kedaluwarsa atau dibatalkan. Memancarkannya lebih
+/// awal berarti memberi tahu pengguna bahwa pekerjaan dilanjutkan pada saat
+/// belum ada satu pun worker yang menyentuhnya.
+async fn was_suspended(tx: &mut Transaction<'_, Postgres>, job_id: Uuid) -> sqlx::Result<bool> {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS (
+             SELECT 1 FROM clarification_forms
+             WHERE job_id = $1 AND state = 'answered' AND resolution_reason = 'answered'
+         )",
+    )
+    .bind(job_id)
+    .fetch_one(&mut **tx)
+    .await
 }
 
 /// Perpanjang lease. `false` berarti worker sudah dipagari (token tidak cocok,

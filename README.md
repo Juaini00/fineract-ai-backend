@@ -99,11 +99,11 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 ## Yang belum ada
 
-- Resolver opsi untuk slot identitas: `account_number` (`transient_sensitive_input`) tetap `Unsupported` karena K1 melarang teks bebas menjadi binding identitas tanpa opsi yang diterbitkan server.
-- Skip (T8) dan klarifikasi bertahap (form kedua setelah resolver).
+- Resolver untuk `account_number`: slot itu bersumber `transient_sensitive_input` dan katalog belum punya shape kandidat rekening, jadi permintaan yang memerlukannya dijawab `Unsupported` dengan alasan `identity_slot_without_resolver` — bukan ditanyakan sebagai teks bebas (K1).
+- Klarifikasi bertahap: form kedua setelah sebuah slot terjawab.
 - Plan multi-node dan fan-in: planner menghasilkan tepat satu node `CuratedQuery`.
 - Analytical contract (Mode 2), dataset berchunk/handle, memori session.
-- SSE `/chat/jobs/{id}/events`, dan integrasi LLM/embedding (narasi additive).
+- Integrasi LLM/embedding (narasi additive), dataset berchunk, dan session memory.
 - `docs/security/access-data-policy.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
 
 ## Aturan yang tidak boleh dilanggar
