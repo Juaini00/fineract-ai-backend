@@ -241,6 +241,14 @@ pub async fn completed_node_count(pool: &PgPool, job_id: Uuid) -> sqlx::Result<i
 /// Tidak ada `lease_token` di sini karena tidak ada worker yang memegang job
 /// yang menunggu manusia — lease dilepas saat T5. Yang memagari jalur ini adalah
 /// `WHERE lifecycle = 'WaitingForUser'`: skip kedua menyentuh 0 baris.
+///
+/// **Tidak ada promosi memori di sini, dan itu keputusan.** Skip berarti tidak
+/// ada response yang memakai identitas atau scope apa pun: tidak ada hasil,
+/// tidak ada scope yang menghasilkan sesuatu, dan slot yang sudah terjawab
+/// belum pernah dipakai menjawab. Fakta yang dipromosikan dari situ membuat
+/// pertanyaan berikutnya membawa konteks yang tidak pernah terbukti. Begitu
+/// klarifikasi bertahap ada — form kedua yang menjawab sesudah yang pertama —
+/// jalur ini wajib ditinjau ulang bersama `engine::memory`.
 pub async fn skip(
     pool: &PgPool,
     form: &Form,
@@ -453,6 +461,43 @@ pub async fn accepted_answers(pool: &PgPool, job_id: Uuid) -> sqlx::Result<BTree
         .into_iter()
         .filter_map(|(field, value)| value.map(|value| (field, value)))
         .collect())
+}
+
+/// Identitas terikat milik job ini, dengan provenance-nya.
+#[derive(Debug, Clone, FromRow)]
+pub struct AnsweredIdentity {
+    pub field_id: String,
+    pub value: String,
+    pub label: Option<String>,
+    /// `user_confirmed` atau `resolver_unique` (K5). Keduanya tidak pernah
+    /// diratakan menjadi satu.
+    pub provenance: String,
+    pub resolver_ref: Option<String>,
+}
+
+/// Identitas yang benar-benar terikat, untuk promosi memori pada commit.
+///
+/// Hanya jawaban ber-`binding_json.value`: teks bebas bukan identitas yang
+/// terselesaikan (C10), dan mempromosikannya sebagai identitas berarti mengarang
+/// resolusi yang tidak pernah terjadi.
+pub async fn answered_identities(
+    pool: &PgPool,
+    job_id: Uuid,
+) -> sqlx::Result<Vec<AnsweredIdentity>> {
+    sqlx::query_as::<_, AnsweredIdentity>(
+        "SELECT a.field_id,
+                a.binding_json->>'value' AS value,
+                a.binding_json->>'label' AS label,
+                a.provenance,
+                a.resolver_ref
+         FROM clarification_answers a
+         JOIN clarification_forms f ON f.id = a.form_id
+         WHERE f.job_id = $1 AND a.binding_json->>'value' IS NOT NULL
+         ORDER BY a.field_id",
+    )
+    .bind(job_id)
+    .fetch_all(pool)
+    .await
 }
 
 /// Slot yang diikat resolver tanpa bertanya (K5). Dibaca saat komposisi supaya

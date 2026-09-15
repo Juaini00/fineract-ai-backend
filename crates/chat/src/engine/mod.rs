@@ -5,6 +5,7 @@
 
 pub mod compose;
 pub mod executor;
+pub mod memory;
 pub mod planner;
 pub mod reaper;
 pub mod repository;

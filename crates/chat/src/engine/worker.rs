@@ -23,7 +23,7 @@ use crate::{
     catalog::Catalog,
     clarification::repository::{self as clarification_repository, AcceptedAnswer},
     engine::{
-        compose, executor,
+        compose, executor, memory,
         planner::{self, Plan},
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
         resolver,
@@ -212,8 +212,12 @@ async fn run_job(
                 pool,
                 job.id,
                 job.session_id,
+                job.owner_user_id,
                 job.lease_token,
                 limitation_response(&problem.reason(), &problem.explain(), &job.request_text),
+                // Pertanyaan yang tidak dijawab tidak meninggalkan fakta: tidak
+                // ada hasil, dan tidak ada scope yang menghasilkan apa pun.
+                &[],
             )
             .await
             .map_err(Into::into);
@@ -297,12 +301,20 @@ async fn run_job(
                 return Ok(false);
             }
 
+            // Identitas dibaca dari yang tersimpan, sama seperti K5 di atas:
+            // job yang dilanjutkan worker lain tetap mempromosikan identitas
+            // yang benar-benar terikat, dengan provenance aslinya.
+            let identities = clarification_repository::answered_identities(pool, job.id).await?;
+            let facts = memory::promoted(&plan, &response, &identities, result.rows.len());
+
             repository::settle_with_response(
                 pool,
                 job.id,
                 job.session_id,
+                job.owner_user_id,
                 job.lease_token,
                 response,
+                &facts,
             )
             .await
             .map_err(Into::into)
@@ -394,8 +406,10 @@ async fn open_clarification(
                 foundation.app_db().pool(),
                 job.id,
                 job.session_id,
+                job.owner_user_id,
                 job.lease_token,
                 not_found_response(&item.name, &slot.query_id, &job.request_text),
+                &[],
             )
             .await
             .map_err(Into::into);

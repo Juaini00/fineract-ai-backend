@@ -1,6 +1,6 @@
 # Status implementasi Jarvis
 
-Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `3b32bd0`.
+Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `5aefc85`.
 
 Dokumen ini menjawab satu pertanyaan: **apa yang sudah benar-benar berjalan, dan
 apa yang berikutnya.** Ia berbeda dari [checklist.md](checklist.md), yang
@@ -24,8 +24,8 @@ Jangan menghitung persentase dari jumlah baris. Bobotnya tidak sama.
 | | |
 | --- | --- |
 | Permukaan HTTP | 16 route / **17 operasi** (auth 4, session 4, job 5, klarifikasi 2, SSE 1, health 1) |
-| Unit test | 88 pass (`cargo test --workspace`) |
-| Integration test | 104 request / 156 test hijau (Bruno CLI, tiga tahap) |
+| Unit test | 93 pass (`cargo test --workspace`) |
+| Integration test | 108 request / 165 test hijau (Bruno CLI, tiga tahap) |
 | Lint | `cargo clippy --workspace -- -D warnings` bersih |
 | Schema | 6 migrasi, 23 tabel, `tests/schema_smoke.sql` lulus |
 | Katalog | 48 capability, 48 query manifest, 11 dataset, 69 file SQL — 0 error, 4 warning |
@@ -90,7 +90,8 @@ kebenaran prosa — tidak ada yang bisa.
 | Planner deterministik (T3) | 🟡 | Retrieval leksikal atas `knowledge_index`; **satu node `CuratedQuery`** per plan. Tanpa model |
 | Eksekusi capability (T4) | ✅ | SQL dari `queries/`, parameter terikat, timeout dua sisi, di luar transaksi (I1) |
 | Komposisi deterministik | 🟡 | Blok `metrics`/`table`/`narrative`/`provenance`/`limitation`. Belum ada `chart`/`findings`/`comparison`/`suggestions` |
-| Commit response (T7) | ✅ | Response + lifecycle + pesan + event + audit, satu transaksi |
+| Commit response (T7) | ✅ | Response + lifecycle + fakta memori + pesan + event + audit, satu transaksi |
+| Promosi `session_memory` (C12/K4) | 🟡 | `ActiveScope`, `PriorResult`, `ResolvedEntity` ditulis pada T7; seq lewat row lock (I3), fakta lama di-supersede, ringkasan → `stale`. **Belum ada konsumennya**: seleksi konteks menunggu integrasi LLM |
 | Re-plan / multi-node / fan-in | ⬜ | `plan_version` selalu 1 |
 
 ### Klarifikasi
@@ -137,7 +138,7 @@ Urut menurut apa yang paling menghalangi integrasi frontend penuh.
 
 | # | Bagian | Kenapa penting | Pemilik desain |
 | --- | --- | --- | --- |
-| 1 | **Session memory + promotion** | `session_memory` kosong. Pertanyaan lanjutan tidak membawa konteks apa pun | `architecture/memory-context.md` |
+| 1 | **Konsumsi session memory** | Fakta sudah dipromosikan, tetapi belum ada yang membacanya: seleksi konteks per model call (memory-context.md §5) menunggu integrasi LLM | `architecture/memory-context.md` |
 | 2 | **Integrasi LLM** | Planner dan composer deterministik. Narasi additive belum ada | `architecture/tech-stack.md` |
 | 3 | **Plan multi-node + fan-in** | Setiap pertanyaan menjadi tepat satu query. Pertanyaan komparatif tidak dapat direncanakan | `architecture/engine.md` |
 | 4 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
@@ -174,16 +175,15 @@ Bukan "belum sempat" — ini keputusan sadar yang punya alasan dan pemicu revisi
 
 Dependensi, bukan prioritas produk.
 
-1. **Session memory + promotion pada response commit.** K4 sudah ditegakkan
-   schema (FK komposit ke `job_responses`), jadi jalur tulisnya sudah aman.
-   Tanpa ini tidak ada percakapan, hanya pertanyaan berturut-turut.
-2. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
+1. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
    validator sesudahnya berarti memvalidasi permukaan yang sudah menyebar.
-3. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
+2. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
    arti `completeness`, jadi keduanya menunggu validator di atas.
-4. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
-   menghapus structured output.
-5. **Security/identity final**, sebelum deployment nyata.
+3. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
+   menghapus structured output. Ia sekaligus konsumen pertama
+   `session_memory` — fakta sudah ada, yang belum ada adalah seleksi
+   konteksnya.
+4. **Security/identity final**, sebelum deployment nyata.
 
 ---
 

@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     audit::{self, AuditEvent},
+    engine::memory::MemoryFact,
     job::repository::{EventRef, append_event, append_event_ref},
 };
 
@@ -187,17 +188,110 @@ pub struct SettledResponse {
     pub response_hash: String,
 }
 
+/// Promosikan fakta session di dalam transaksi commit (memory-context.md §3).
+///
+/// Tiga hal yang tidak boleh dipisahkan dari sini:
+///
+/// - **`session_seq` dialokasikan lewat row lock induknya** (I3):
+///   `UPDATE chat_sessions … RETURNING` adalah alokatornya. Sequence PostgreSQL
+///   meninggalkan lubang saat rollback, dan lubang membuat watermark ringkasan
+///   tidak dapat dipercaya.
+/// - **Fakta lama di-supersede, tidak dihapus.** Baris yang hilang menghapus
+///   penjelasan "kenapa jawaban berubah antar-turn". Ia juga wajib: partial
+///   unique index menolak dua `ActiveScope`/`ResolvedEntity` valid, jadi tanpa
+///   supersede seluruh commit gagal.
+/// - **Ringkasan menjadi `stale`.** Watermark tidak bergerak di sini; ringkasan
+///   dihitung di luar transaksi karena butuh LLM (I1). Membiarkan statusnya
+///   `current` berarti call berikutnya memakai ringkasan yang belum memuat
+///   fakta ini.
+async fn promote(
+    tx: &mut Transaction<'_, Postgres>,
+    session_id: Uuid,
+    owner_user_id: Uuid,
+    job_id: Uuid,
+    response_version: i32,
+    facts: &[MemoryFact],
+) -> sqlx::Result<()> {
+    for fact in facts {
+        let session_seq: i64 = sqlx::query_scalar(
+            "UPDATE chat_sessions
+             SET memory_seq_last = memory_seq_last + 1,
+                 memory_summary_status = 'stale'
+             WHERE id = $1
+             RETURNING memory_seq_last",
+        )
+        .bind(session_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        let id = Uuid::new_v4();
+
+        // `entity_key IS NOT DISTINCT FROM $3` menyatukan dua aturan keunikan
+        // dalam satu statement: `ActiveScope` (entity_key NULL, satu per
+        // session) dan `ResolvedEntity` (satu per entity_key).
+        sqlx::query(
+            "UPDATE session_memory
+             SET status = 'superseded',
+                 superseded_by_id = $4,
+                 invalidation_reason = 'superseded_by_newer',
+                 invalidated_at = now()
+             WHERE session_id = $1 AND kind = $2 AND entity_key IS NOT DISTINCT FROM $3
+               AND status = 'valid' AND kind <> 'PriorResult'",
+        )
+        .bind(session_id)
+        .bind(fact.kind)
+        .bind(fact.entity_key.as_deref())
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO session_memory
+                (id, session_id, owner_user_id, session_seq, kind, entity_key, label, fact_json,
+                 source_job_id, source_plan_version, source_response_version,
+                 provenance_json, completeness, completeness_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                     -- Plan aktif menurut C3, bukan angka yang dibawa pemanggil:
+                     -- satu sumber untuk 'plan mana yang menghasilkan fakta ini'.
+                     (SELECT plan_version FROM chat_jobs WHERE id = $9),
+                     $10, $11, $12, $13)",
+        )
+        .bind(id)
+        .bind(session_id)
+        .bind(owner_user_id)
+        .bind(session_seq)
+        .bind(fact.kind)
+        .bind(fact.entity_key.as_deref())
+        .bind(fact.label.as_deref())
+        .bind(&fact.fact_json)
+        .bind(job_id)
+        .bind(response_version)
+        .bind(&fact.provenance_json)
+        .bind(&fact.completeness)
+        .bind(&fact.completeness_reason)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
 /// T7 — commit response dan tutup job.
 ///
-/// Semua di dalam satu transaksi: response, lifecycle terminal, pesan
-/// assistant, event terminal, dan audit. `false` berarti fencing kalah dan
-/// tidak ada apa pun yang ditulis.
+/// Semua di dalam satu transaksi: response, lifecycle terminal, fakta session,
+/// pesan assistant, event terminal, dan audit. `false` berarti fencing kalah
+/// dan tidak ada apa pun yang ditulis.
+///
+/// `facts` kosong adalah keadaan sah dan sering: response `limitation` tidak
+/// mempromosikan apa pun (memory-context.md §3).
 pub async fn settle_with_response(
     pool: &PgPool,
     job_id: Uuid,
     session_id: Uuid,
+    owner_user_id: Uuid,
     lease_token: Uuid,
     response: SettledResponse,
+    facts: &[MemoryFact],
 ) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
 
@@ -253,6 +347,19 @@ pub async fn settle_with_response(
     .execute(&mut *tx)
     .await?;
 
+    // Sesudah `job_responses`, bukan sebelum: FK komposit K4 menunjuk response
+    // yang baru saja ditulis, dan urutan sebaliknya gagal di dalam statement
+    // yang sama.
+    promote(
+        &mut tx,
+        session_id,
+        owner_user_id,
+        job_id,
+        RESPONSE_VERSION,
+        facts,
+    )
+    .await?;
+
     sqlx::query(
         "INSERT INTO chat_messages (session_id, job_id, role, response_version)
          VALUES ($1, $2, 'assistant', $3)",
@@ -292,6 +399,10 @@ pub async fn settle_with_response(
                 "response_version": RESPONSE_VERSION,
                 "kind": response.kind,
                 "response_hash": response.response_hash,
+                // Fakta apa yang dipromosikan commit ini: tanpa ini, investigasi
+                // "kenapa turn berikutnya membawa konteks itu" hanya dapat
+                // menebak dari timestamp.
+                "promoted_memory": facts.iter().map(|fact| fact.kind).collect::<Vec<_>>(),
             })),
             ..Default::default()
         },

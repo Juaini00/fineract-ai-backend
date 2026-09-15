@@ -749,7 +749,9 @@ seolah sudah ada:
 - Dataset/handle berchunk dan pagination hasil besar.
 - Blok `chart`, `findings`, `comparison`, `suggestions`.
 - Narasi LLM. Seluruh teks hari ini deterministik.
-- Session memory (`session_memory` masih kosong).
+- Konteks percakapan pada jawaban. `session_memory` sudah terisi saat commit,
+  tetapi belum dibaca siapa pun: pertanyaan lanjutan masih dijawab berdiri
+  sendiri, dan tidak ada field response yang mengungkap fakta yang dipakai.
 - `refine_search` dan `change_intent` sebagai `answer_kind`.
 - Klarifikasi bertahap (form kedua sesudah slot pertama terjawab).
 - OpenAPI/JSON Schema formal.
