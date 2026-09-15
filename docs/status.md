@@ -1,6 +1,6 @@
 # Status implementasi Jarvis
 
-Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `c8a9188`.
+Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `d53168f`.
 
 Dokumen ini menjawab satu pertanyaan: **apa yang sudah benar-benar berjalan, dan
 apa yang berikutnya.** Ia berbeda dari [checklist.md](checklist.md), yang
@@ -25,7 +25,7 @@ Jangan menghitung persentase dari jumlah baris. Bobotnya tidak sama.
 | --- | --- |
 | Permukaan HTTP | 16 route / **17 operasi** (auth 4, session 4, job 5, klarifikasi 2, SSE 1, health 1) |
 | Unit test | 111 pass (`cargo test --workspace`) |
-| Integration test | 108 request / 165 test hijau pada commit `86e8aac`. **Belum dijalankan ulang** untuk 3 request validator yang ditambahkan sesudahnya — lihat catatan di bawah |
+| Integration test | 110 request / **173 test** hijau (Bruno CLI, tiga tahap) |
 | Lint | `cargo clippy --workspace -- -D warnings` bersih |
 | Schema | 6 migrasi, 23 tabel, `tests/schema_smoke.sql` lulus |
 | Katalog | 48 capability, 48 query manifest, 11 dataset, 69 file SQL — 0 error, 4 warning |
@@ -41,19 +41,24 @@ PORT=3107 ./scripts/integration-test.sh
 ./scripts/docs-check.sh            # link mati + endpoint yang tidak terdokumentasi
 ```
 
-> **Belum diverifikasi ulang pada commit ini.** Milestone validator D1–D3
-> ditulis pada sesi yang tidak dapat menyalakan aplikasi maupun menjalankan
-> `psql` (izin eksekusi sandbox), jadi `./scripts/integration-test.sh` dan
-> `tests/schema_smoke.sql` **belum dijalankan** terhadapnya. Yang sudah hijau:
-> `cargo test`, `cargo clippy -D warnings` (termasuk `--all-targets`),
-> `cargo run -p app -- catalog`, dan `./scripts/docs-check.sh`. Tidak ada
-> migrasi yang berubah, jadi `schema_smoke` tidak terpengaruh; yang menunggu
-> bukti adalah tiga request Bruno baru
-> (`engine/answered-validated`, `resolver/autobind-validated`, dan assertion
-> tambahan pada `resolver/noresolver-response`) beserta jalur tulis
-> `job_node_runs.input_binding_json`. **Jalankan
-> `PORT=3107 ./scripts/integration-test.sh` sebelum menganggap milestone ini
-> selesai.**
+Jalur tulis yang tidak punya permukaan HTTP dibuktikan dengan SQL langsung,
+bukan disimpulkan dari test yang hijau:
+
+| Yang diperiksa | Hasil |
+| --- | --- |
+| `session_memory` terisi pada T7 | 50 fakta: 20 `ActiveScope`, 20 `PriorResult`, 10 `ResolvedEntity` |
+| `session_seq` tanpa lubang (I3) | `memory_seq_last = 3` dengan seq `1,2,3` kontigu per session |
+| Urutan promosi | `ResolvedEntity(1) → ActiveScope(2) → PriorResult(3)` — seq tertinggi = hasil |
+| `memory_summary_status` (I1) | `stale` pada setiap session yang mempromosikan |
+| K4 fail-closed | 0 fakta tanpa response durable; FK menolak `source_response_version` yang tidak ada |
+| `input_binding_json` (ledger D2) | 13/13 node run run terakhir terisi + hash; 2 di antaranya `["client_id"]` |
+| Validator benar-benar berjalan | 13 response `analysis` dengan `computed = claimed = Complete`; 8 `limitation` lewat jalur `checked:false` |
+| Jalur penolakan (versi 1 `failed` + versi 2 `fallback`) | Diuji langsung terhadap schema di dalam transaksi yang di-rollback: `job_responses_version_uniq`, CHECK `validation_status`, dan `superseded_by_version` menerima; K4 menerima fakta yang menunjuk versi 2 dan menolak versi yang tidak ada |
+
+Jalur penolakan belum pernah dipicu **oleh aplikasi**, karena composer
+deterministik hari ini tidak menghasilkan dokumen yang melanggar D1–D3. Itu
+keadaan yang diharapkan, bukan bukti bahwa jalurnya bekerja — karena itu
+SQL-nya diuji terpisah, dan logikanya diuji `cargo test`.
 
 `scripts/docs-check.sh` memeriksa dua hal yang paling cepat membusuk: link
 antar-dokumen yang menunjuk file tidak ada, dan endpoint yang terdaftar di kode
