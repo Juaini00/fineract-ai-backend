@@ -4,27 +4,11 @@ Status: disepakati 2026-09-13. Menutup utang **D1–D3** pada [database-design.m
 
 > **Status implementasi (2026-09-15).** Sudah dipancarkan: `metrics`, `table`,
 > `narrative`, `provenance`, `limitation` — seluruhnya deterministik, tanpa
-> model. **D1–D3 ditegakkan runtime** di `crates/chat/src/engine/validate.rs`:
-> setiap response `analysis` dihitung ulang terhadap ledger sebelum di-commit,
-> dan yang gagal digantikan fallback deterministik (§6). **Belum**: `chart`,
-> `findings`, `comparison`, `suggestions`, narasi LLM, dan entri `derivation`
-> (validator sudah menerimanya, tetapi belum ada yang memproduksinya karena
-> `evidence_json` belum disusun). Blok yang benar-benar dikirim ada di
-> [api-reference.md §5](api-reference.md#5-job); status lengkap di
+> model. **Belum**: `chart`, `findings`, `comparison`, `suggestions`, narasi
+> LLM, dan **validator D1–D3 sebagai penegakan runtime** (aturannya tertulis di
+> sini, tetapi belum ada kode yang menolak klaim composer). Blok yang benar-benar
+> dikirim ada di [api-reference.md §5](api-reference.md#5-job); status lengkap di
 > [status.md](../status.md).
->
-> Dua hal yang dipersempit dari tulisan di bawah, dan sengaja:
->
-> - **Daftar pengecualian D3 (§4) tidak dibuat sebagai daftar.** Yang berlaku:
->   numeral prosa wajib cocok dengan angka pada blok ber-evidence (`metrics`,
->   `table`, `comparison`, `provenance`) atau dengan `result` sebuah
->   `derivation`. Karena `provenance` memuat parameter yang terikat, tahun pada
->   periode dan nilai identitas yang disalin apa adanya sudah tergrounding
->   tanpa aturan khusus — dan tidak ada daftar yang perlu dijaga tetap sinkron.
-> - **Blok `limitation` tidak diperiksa dan tidak membuktikan apa pun.** Ia
->   prosa server yang deterministik; memeriksanya tidak menangkap apa pun, dan
->   menjadikannya evidence akan mengesahkan angka narasi hanya karena kebetulan
->   muncul di kalimat limitation.
 
 ## Prinsip
 

@@ -1,6 +1,6 @@
 # Status implementasi Jarvis
 
-Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `d53168f`.
+Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `3b32bd0`.
 
 Dokumen ini menjawab satu pertanyaan: **apa yang sudah benar-benar berjalan, dan
 apa yang berikutnya.** Ia berbeda dari [checklist.md](checklist.md), yang
@@ -23,9 +23,9 @@ Jangan menghitung persentase dari jumlah baris. Bobotnya tidak sama.
 
 | | |
 | --- | --- |
-| Permukaan HTTP | 16 route / **17 operasi** (auth 4, session 4, job 5, klarifikasi 2, SSE 1, health 1) |
-| Unit test | 111 pass (`cargo test --workspace`) |
-| Integration test | 110 request / **173 test** hijau (Bruno CLI, tiga tahap) |
+| Permukaan HTTP | 15 route / **16 operasi** (auth 4, session 3, job 5, klarifikasi 2, SSE 1, health 1) |
+| Unit test | 87 pass (`cargo test --workspace`) |
+| Integration test | 104 request / 156 test hijau (Bruno CLI, tiga tahap) |
 | Lint | `cargo clippy --workspace -- -D warnings` bersih |
 | Schema | 6 migrasi, 23 tabel, `tests/schema_smoke.sql` lulus |
 | Katalog | 48 capability, 48 query manifest, 11 dataset, 69 file SQL — 0 error, 4 warning |
@@ -40,25 +40,6 @@ psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
 PORT=3107 ./scripts/integration-test.sh
 ./scripts/docs-check.sh            # link mati + endpoint yang tidak terdokumentasi
 ```
-
-Jalur tulis yang tidak punya permukaan HTTP dibuktikan dengan SQL langsung,
-bukan disimpulkan dari test yang hijau:
-
-| Yang diperiksa | Hasil |
-| --- | --- |
-| `session_memory` terisi pada T7 | 50 fakta: 20 `ActiveScope`, 20 `PriorResult`, 10 `ResolvedEntity` |
-| `session_seq` tanpa lubang (I3) | `memory_seq_last = 3` dengan seq `1,2,3` kontigu per session |
-| Urutan promosi | `ResolvedEntity(1) → ActiveScope(2) → PriorResult(3)` — seq tertinggi = hasil |
-| `memory_summary_status` (I1) | `stale` pada setiap session yang mempromosikan |
-| K4 fail-closed | 0 fakta tanpa response durable; FK menolak `source_response_version` yang tidak ada |
-| `input_binding_json` (ledger D2) | 13/13 node run run terakhir terisi + hash; 2 di antaranya `["client_id"]` |
-| Validator benar-benar berjalan | 13 response `analysis` dengan `computed = claimed = Complete`; 8 `limitation` lewat jalur `checked:false` |
-| Jalur penolakan (versi 1 `failed` + versi 2 `fallback`) | Diuji langsung terhadap schema di dalam transaksi yang di-rollback: `job_responses_version_uniq`, CHECK `validation_status`, dan `superseded_by_version` menerima; K4 menerima fakta yang menunjuk versi 2 dan menolak versi yang tidak ada |
-
-Jalur penolakan belum pernah dipicu **oleh aplikasi**, karena composer
-deterministik hari ini tidak menghasilkan dokumen yang melanggar D1–D3. Itu
-keadaan yang diharapkan, bukan bukti bahwa jalurnya bekerja — karena itu
-SQL-nya diuji terpisah, dan logikanya diuji `cargo test`.
 
 `scripts/docs-check.sh` memeriksa dua hal yang paling cepat membusuk: link
 antar-dokumen yang menunjuk file tidak ada, dan endpoint yang terdaftar di kode
@@ -98,7 +79,7 @@ kebenaran prosa — tidak ada yang bisa.
 | T1 penerimaan job | ✅ | Idempotency, snapshot scope+PII, audit, event — satu transaksi |
 | Satu job nonterminal per session | ✅ | Ditegakkan partial unique index, bukan pemeriksaan aplikasi |
 | Cancel (T9) | ✅ | Cancel berulang no-op, bukan transisi kedua |
-| Riwayat pesan | ✅ | `GET /chat/sessions/{id}/messages`, keyset terbaru-dulu. Indeks tipis: `request_text` dibaca dari `chat_jobs`, isi jawaban/form tetap di endpointnya sendiri |
+| Riwayat pesan | 🟡 | `chat_messages` terisi benar; **endpoint pembacanya belum ada** |
 
 ### Engine
 
@@ -109,9 +90,7 @@ kebenaran prosa — tidak ada yang bisa.
 | Planner deterministik (T3) | 🟡 | Retrieval leksikal atas `knowledge_index`; **satu node `CuratedQuery`** per plan. Tanpa model |
 | Eksekusi capability (T4) | ✅ | SQL dari `queries/`, parameter terikat, timeout dua sisi, di luar transaksi (I1) |
 | Komposisi deterministik | 🟡 | Blok `metrics`/`table`/`narrative`/`provenance`/`limitation`. Belum ada `chart`/`findings`/`comparison`/`suggestions` |
-| Commit response (T7) | ✅ | Response + lifecycle + fakta memori + pesan + event + audit, satu transaksi |
-| Validator response (D1–D3) | ✅ | Dihitung ulang dari `job_node_runs` sebelum commit. D1 satu arah (klaim lebih baik ditolak), D2 himpunan auto-bind vs `input_binding_json`, D3 numeral narasi vs blok ber-evidence/`derivation`. Gagal → fallback deterministik disimpan sebagai versi 2, versi yang ditolak tetap ada |
-| Promosi `session_memory` (C12/K4) | 🟡 | `ActiveScope`, `PriorResult`, `ResolvedEntity` ditulis pada T7; seq lewat row lock (I3), fakta lama di-supersede, ringkasan → `stale`. **Belum ada konsumennya**: seleksi konteks menunggu integrasi LLM |
+| Commit response (T7) | ✅ | Response + lifecycle + pesan + event + audit, satu transaksi |
 | Re-plan / multi-node / fan-in | ⬜ | `plan_version` selalu 1 |
 
 ### Klarifikasi
@@ -158,19 +137,20 @@ Urut menurut apa yang paling menghalangi integrasi frontend penuh.
 
 | # | Bagian | Kenapa penting | Pemilik desain |
 | --- | --- | --- | --- |
-| 1 | **Konsumsi session memory** | Fakta sudah dipromosikan, tetapi belum ada yang membacanya: seleksi konteks per model call (memory-context.md §5) menunggu integrasi LLM | `architecture/memory-context.md` |
-| 2 | **Integrasi LLM** | Planner dan composer deterministik. Narasi additive belum ada | `architecture/tech-stack.md` |
-| 3 | **Plan multi-node + fan-in** | Setiap pertanyaan menjadi tepat satu query. Pertanyaan komparatif tidak dapat direncanakan | `architecture/engine.md` |
-| 4 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
-| 5 | **Analytical contract (Mode 2)** | Hanya capability tetap yang dapat dijalankan | `data/analytical-contracts.md` |
-| 6 | **Blok response lanjutan** | `chart`, `findings`, `comparison`, `suggestions` belum dipancarkan | `contracts/responses.md` |
-| 7 | **`evidence_json` + `derivation`** | Validator D3 sudah menerima entri `derivation`, tetapi belum ada yang memproduksinya. Sampai ada, narasi tidak boleh memuat angka turunan sama sekali | `contracts/responses.md` §4 |
-| 8 | **Klarifikasi bertahap** | Form kedua sesudah slot pertama terjawab | `contracts/clarifications.md` |
-| 9 | **Embedding retrieval** | Retrieval masih leksikal; fail-closed ke leksikal sudah dirancang | `migration/carry-over.md` #7 |
-| 10 | **Security/identity final** | SSO, tenant model, izin PII per pengguna | `security/access-data-policy.md` (belum ada) |
-| 11 | **Observability** | Metrics, traces, alerting, exporter | `operations/observability.md` (belum ada) |
-| 12 | **Acceptance matrix** | Requirement → skenario → hasil terukur | `verification/acceptance.md` (belum ada) |
-| 13 | **OpenAPI** | Schema formal; FE masih memakai `contracts/api-reference.md` | `contracts/api.md` |
+| 1 | **Endpoint riwayat pesan** | FE tidak dapat merender ulang percakapan setelah refresh. Datanya sudah ada di `chat_messages`; hanya pembacanya yang hilang | `contracts/api.md` |
+| 2 | **Session memory + promotion** | `session_memory` kosong. Pertanyaan lanjutan tidak membawa konteks apa pun | `architecture/memory-context.md` |
+| 3 | **Integrasi LLM** | Planner dan composer deterministik. Narasi additive belum ada | `architecture/tech-stack.md` |
+| 4 | **Plan multi-node + fan-in** | Setiap pertanyaan menjadi tepat satu query. Pertanyaan komparatif tidak dapat direncanakan | `architecture/engine.md` |
+| 5 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
+| 6 | **Analytical contract (Mode 2)** | Hanya capability tetap yang dapat dijalankan | `data/analytical-contracts.md` |
+| 7 | **Blok response lanjutan** | `chart`, `findings`, `comparison`, `suggestions` belum dipancarkan | `contracts/responses.md` |
+| 8 | **Validator response (D1–D3)** | Hitung ulang completeness dan lineage evidence belum ditegakkan runtime | `contracts/responses.md` |
+| 9 | **Klarifikasi bertahap** | Form kedua sesudah slot pertama terjawab | `contracts/clarifications.md` |
+| 10 | **Embedding retrieval** | Retrieval masih leksikal; fail-closed ke leksikal sudah dirancang | `migration/carry-over.md` #7 |
+| 11 | **Security/identity final** | SSO, tenant model, izin PII per pengguna | `security/access-data-policy.md` (belum ada) |
+| 12 | **Observability** | Metrics, traces, alerting, exporter | `operations/observability.md` (belum ada) |
+| 13 | **Acceptance matrix** | Requirement → skenario → hasil terukur | `verification/acceptance.md` (belum ada) |
+| 14 | **OpenAPI** | Schema formal; FE masih memakai `contracts/api-reference.md` | `contracts/api.md` |
 
 ---
 
@@ -195,16 +175,18 @@ Bukan "belum sempat" — ini keputusan sadar yang punya alasan dan pemicu revisi
 
 Dependensi, bukan prioritas produk.
 
-1. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
-   arti `completeness`, dan keduanya kini masuk ke validator yang sudah ada:
-   kontributor baru ditambahkan ke `Ledger::contributors`, dan pembacaan
-   dataset wajib membawa `handle_state` non-optional (C13) supaya tidak ada
-   jalur baca yang dapat melewatkan status dataset.
-2. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
-   menghapus structured output. Ia sekaligus konsumen pertama
-   `session_memory` — fakta sudah ada, yang belum ada adalah seleksi
-   konteksnya.
-3. **Security/identity final**, sebelum deployment nyata.
+1. **Endpoint riwayat pesan.** Kecil, tidak bergantung apa pun, dan langsung
+   membuka refresh-safe UI untuk frontend.
+2. **Session memory + promotion pada response commit.** K4 sudah ditegakkan
+   schema (FK komposit ke `job_responses`), jadi jalur tulisnya sudah aman.
+   Tanpa ini tidak ada percakapan, hanya pertanyaan berturut-turut.
+3. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
+   validator sesudahnya berarti memvalidasi permukaan yang sudah menyebar.
+4. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
+   arti `completeness`, jadi keduanya menunggu validator di atas.
+5. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
+   menghapus structured output.
+6. **Security/identity final**, sebelum deployment nyata.
 
 ---
 
