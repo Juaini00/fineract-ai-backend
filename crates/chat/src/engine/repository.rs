@@ -4,14 +4,20 @@
 //! `AND lease_token = $token`. Update yang menyentuh 0 baris berarti worker
 //! sudah dipagari dan wajib berhenti — bukan mencoba transisi lain.
 
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
     audit::{self, AuditEvent},
-    engine::memory::MemoryFact,
+    engine::{
+        memory::MemoryFact,
+        validate::{self, Validated},
+    },
     job::repository::{EventRef, append_event, append_event_ref},
 };
 
@@ -188,6 +194,54 @@ pub struct SettledResponse {
     pub response_hash: String,
 }
 
+/// Ledger yang dipakai validator untuk **menghitung ulang** klaim composer
+/// (responses.md §3–§5).
+///
+/// Dibaca kembali dari database dengan sengaja, bukan diambil dari nilai yang
+/// baru saja dikirim proses ini: yang diperiksa adalah apakah dokumen cocok
+/// dengan apa yang **durable**, dan job yang dilanjutkan worker lain harus
+/// menghasilkan pemeriksaan yang sama persis.
+///
+/// `datasets` belum punya jalur, jadi kontributor hari ini hanya `job_node_runs`.
+/// Saat dataset berchunk ada, `completeness`-nya masuk ke daftar yang sama —
+/// dan `handle_state` wajib ikut dibaca non-optional (C13), supaya tidak ada
+/// jalur baca yang dapat melewatkan status dataset.
+pub async fn ledger(
+    pool: &PgPool,
+    job_id: Uuid,
+    plan_version: i32,
+) -> sqlx::Result<validate::Ledger> {
+    let rows = sqlx::query_as::<_, (Option<String>, Option<Value>)>(
+        "SELECT completeness, input_binding_json
+         FROM job_node_runs
+         WHERE job_id = $1 AND plan_version = $2 AND status <> 'Pending'",
+    )
+    .bind(job_id)
+    .bind(plan_version)
+    .fetch_all(pool)
+    .await?;
+
+    let mut contributors = Vec::new();
+    let mut auto_bound = BTreeSet::new();
+
+    for (completeness, binding) in rows {
+        // Node yang sudah berjalan tanpa `completeness` adalah kontributor yang
+        // tidak menyatakan apa pun — `Unknown`, bukan dilewati (I4).
+        contributors.push(completeness.unwrap_or_else(|| "Unknown".to_string()));
+
+        let slots = binding
+            .as_ref()
+            .and_then(|binding| binding.get("auto_bound_slots"))
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+
+        auto_bound.extend(slots.iter().filter_map(Value::as_str).map(str::to_string));
+    }
+
+    Ok(validate::Ledger { contributors, auto_bound, derivations: Vec::new() })
+}
+
 /// Promosikan fakta session di dalam transaksi commit (memory-context.md §3).
 ///
 /// Tiga hal yang tidak boleh dipisahkan dari sini:
@@ -290,12 +344,20 @@ pub async fn settle_with_response(
     session_id: Uuid,
     owner_user_id: Uuid,
     lease_token: Uuid,
-    response: SettledResponse,
+    validated: Validated,
     facts: &[MemoryFact],
 ) -> sqlx::Result<bool> {
     let mut tx = pool.begin().await?;
 
-    const RESPONSE_VERSION: i32 = 1;
+    let validation_status = validated.status();
+    let Validated { served: response, rejected, report } = validated;
+
+    // Dokumen yang ditolak menempati versi 1 dan versi yang disajikan menjadi 2.
+    // Versi yang gagal TIDAK dihapus (#10): ia satu-satunya bukti tentang apa
+    // yang nyaris disajikan, dan tanpa itu "kenapa jawaban ini konservatif"
+    // hanya dapat ditebak.
+    let rejected_version: i32 = 1;
+    let response_version: i32 = if rejected.is_some() { 2 } else { 1 };
 
     let updated = sqlx::query(
         "UPDATE chat_jobs
@@ -320,7 +382,7 @@ pub async fn settle_with_response(
     .bind(response.outcome)
     .bind(response.completeness)
     .bind(&response.completeness_reason)
-    .bind(RESPONSE_VERSION)
+    .bind(response_version)
     .execute(&mut *tx)
     .await?
     .rows_affected();
@@ -330,32 +392,57 @@ pub async fn settle_with_response(
         return Ok(false);
     }
 
+    if let Some(rejected) = &rejected {
+        sqlx::query(
+            "INSERT INTO job_responses
+                (job_id, response_version, kind, outcome, completeness, completeness_reason,
+                 blocks_json, validation_status, validation_report_json, superseded_by_version,
+                 response_hash, composed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', $8, $9, $10, now())",
+        )
+        .bind(job_id)
+        .bind(rejected_version)
+        .bind(rejected.kind)
+        .bind(rejected.outcome)
+        .bind(rejected.completeness)
+        .bind(&rejected.completeness_reason)
+        .bind(&rejected.blocks)
+        .bind(&report)
+        .bind(response_version)
+        .bind(&rejected.response_hash)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     sqlx::query(
         "INSERT INTO job_responses
             (job_id, response_version, kind, outcome, completeness, completeness_reason,
-             blocks_json, validation_status, response_hash, composed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'passed', $8, now())",
+             blocks_json, validation_status, validation_report_json, response_hash, composed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())",
     )
     .bind(job_id)
-    .bind(RESPONSE_VERSION)
+    .bind(response_version)
     .bind(response.kind)
     .bind(response.outcome)
     .bind(response.completeness)
     .bind(&response.completeness_reason)
     .bind(&response.blocks)
+    .bind(validation_status)
+    .bind(&report)
     .bind(&response.response_hash)
     .execute(&mut *tx)
     .await?;
 
     // Sesudah `job_responses`, bukan sebelum: FK komposit K4 menunjuk response
     // yang baru saja ditulis, dan urutan sebaliknya gagal di dalam statement
-    // yang sama.
+    // yang sama. Versi yang ditunjuk adalah versi yang DISAJIKAN — fakta memori
+    // tidak boleh bersumber pada dokumen yang ditolak.
     promote(
         &mut tx,
         session_id,
         owner_user_id,
         job_id,
-        RESPONSE_VERSION,
+        response_version,
         facts,
     )
     .await?;
@@ -366,7 +453,7 @@ pub async fn settle_with_response(
     )
     .bind(session_id)
     .bind(job_id)
-    .bind(RESPONSE_VERSION)
+    .bind(response_version)
     .execute(&mut *tx)
     .await?;
 
@@ -374,10 +461,13 @@ pub async fn settle_with_response(
         &mut tx,
         job_id,
         "job.completed",
-        EventRef { response_version: Some(RESPONSE_VERSION), ..Default::default() },
+        EventRef { response_version: Some(response_version), ..Default::default() },
         Some(serde_json::json!({
             "outcome": response.outcome,
             "completeness": response.completeness,
+            // I5 — fallback tidak pernah diam. Klien yang hanya mendengarkan
+            // SSE tetap tahu bahwa yang dikirim bukan dokumen pertama.
+            "validation_status": validation_status,
         })),
     )
     .await?;
@@ -396,9 +486,11 @@ pub async fn settle_with_response(
             job_outcome: Some(response.outcome),
             job_completeness: Some(response.completeness),
             detail_json: Some(serde_json::json!({
-                "response_version": RESPONSE_VERSION,
+                "response_version": response_version,
                 "kind": response.kind,
                 "response_hash": response.response_hash,
+                "validation_status": validation_status,
+                "validation_report": report,
                 // Fakta apa yang dipromosikan commit ini: tanpa ini, investigasi
                 // "kenapa turn berikutnya membawa konteks itu" hanya dapat
                 // menebak dari timestamp.
@@ -759,6 +851,12 @@ pub struct NodeOutcome<'a> {
     pub status: &'a str,
     pub completeness: Option<&'a str>,
     pub failure_code: Option<&'a str>,
+    /// Binding yang BENAR-BENAR dikonsumsi node — termasuk slot yang diikat
+    /// resolver tanpa bertanya (K5). Ini yang dibaca validator D2, dan itulah
+    /// sebabnya ia ditulis di sini alih-alih disimpulkan ulang dari plan:
+    /// pemeriksaan yang membaca sumber yang sama dengan yang diperiksa tidak
+    /// membuktikan apa pun.
+    pub input_binding_json: Value,
     pub output_json: Option<Value>,
     pub provenance_json: Value,
     pub rows_returned: Option<i64>,
@@ -789,6 +887,8 @@ pub async fn complete_node(
              provenance_json = $8,
              rows_returned = $9,
              duration_ms = $10,
+             input_binding_json = $11,
+             input_binding_hash = $12,
              finished_at = now()
          WHERE job_id = $1 AND plan_version = $2 AND node_id = 'main' AND attempt = 1
            AND EXISTS (
@@ -806,6 +906,13 @@ pub async fn complete_node(
     .bind(&outcome.provenance_json)
     .bind(outcome.rows_returned)
     .bind(outcome.duration_ms)
+    .bind(&outcome.input_binding_json)
+    // Hash dihitung di Rust, bukan di SQL: PostgreSQL tidak punya cast
+    // `text -> bytea`, dan jalan memutar lewat `convert_to` menaruh aturan
+    // kanonikalisasi hash di tempat yang tidak dapat diuji `cargo test`.
+    .bind(hex::encode(Sha256::digest(
+        outcome.input_binding_json.to_string().as_bytes(),
+    )))
     .execute(&mut *tx)
     .await?
     .rows_affected();

@@ -370,6 +370,30 @@ menyimpulkan hasil dari `lifecycle` saja.
 
 `kind`: `analysis`, `limitation`, atau `skipped`.
 
+#### `validation_status` dan kenapa `response_version` dapat bernilai 2
+
+Setiap response `analysis` **dihitung ulang terhadap ledger** sebelum di-commit
+(responses.md §3–§5): `completeness` dibandingkan dengan yang dihitung dari
+`job_node_runs`, himpunan slot auto-bind dibandingkan dengan binding yang
+benar-benar dikonsumsi node, dan setiap angka pada narasi wajib cocok dengan
+blok ber-evidence atau entri `derivation`.
+
+| `validation_status` | Arti bagi frontend |
+| --- | --- |
+| `passed` | Dokumen disajikan apa adanya |
+| `fallback` | Versi konservatif. Ada blok yang **dibuang**, dan `blocks_json` memuat blok `limitation` ber-`id` `validation_rejected` yang menyebutkan apa dan kenapa |
+| `failed` | **Tidak pernah dikembalikan endpoint ini.** Ia versi yang ditolak, disimpan hanya sebagai bahan investigasi |
+
+Karena itu `response_version` dapat bernilai `2`: versi 1 adalah dokumen yang
+ditolak, versi 2 adalah fallback yang disajikan. Endpoint selalu mengembalikan
+`final_response_version` — frontend tidak perlu, dan tidak boleh, menebak
+versinya sendiri.
+
+Bila seluruh blok data terbuang, hasilnya `kind: "limitation"` dengan
+`outcome: "Unsupported"` dan `completeness: "Unknown"` — bukan dokumen kosong,
+dan bukan job yang gagal diam-diam. Event `job.completed` juga membawa
+`validation_status`, jadi klien SSE mengetahuinya tanpa membaca ulang dokumen.
+
 #### Blok yang benar-benar dipancarkan hari ini
 
 Setiap blok punya `type` dan `id`. Blok yang tidak dikenal wajib diabaikan,

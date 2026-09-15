@@ -1,6 +1,6 @@
 # Status implementasi Jarvis
 
-Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `5aefc85`.
+Diperbarui: **2026-09-15**, branch `feat/core-foundation`, commit `c8a9188`.
 
 Dokumen ini menjawab satu pertanyaan: **apa yang sudah benar-benar berjalan, dan
 apa yang berikutnya.** Ia berbeda dari [checklist.md](checklist.md), yang
@@ -24,8 +24,8 @@ Jangan menghitung persentase dari jumlah baris. Bobotnya tidak sama.
 | | |
 | --- | --- |
 | Permukaan HTTP | 16 route / **17 operasi** (auth 4, session 4, job 5, klarifikasi 2, SSE 1, health 1) |
-| Unit test | 93 pass (`cargo test --workspace`) |
-| Integration test | 108 request / 165 test hijau (Bruno CLI, tiga tahap) |
+| Unit test | 111 pass (`cargo test --workspace`) |
+| Integration test | 108 request / 165 test hijau pada commit `86e8aac`. **Belum dijalankan ulang** untuk 3 request validator yang ditambahkan sesudahnya — lihat catatan di bawah |
 | Lint | `cargo clippy --workspace -- -D warnings` bersih |
 | Schema | 6 migrasi, 23 tabel, `tests/schema_smoke.sql` lulus |
 | Katalog | 48 capability, 48 query manifest, 11 dataset, 69 file SQL — 0 error, 4 warning |
@@ -40,6 +40,20 @@ psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
 PORT=3107 ./scripts/integration-test.sh
 ./scripts/docs-check.sh            # link mati + endpoint yang tidak terdokumentasi
 ```
+
+> **Belum diverifikasi ulang pada commit ini.** Milestone validator D1–D3
+> ditulis pada sesi yang tidak dapat menyalakan aplikasi maupun menjalankan
+> `psql` (izin eksekusi sandbox), jadi `./scripts/integration-test.sh` dan
+> `tests/schema_smoke.sql` **belum dijalankan** terhadapnya. Yang sudah hijau:
+> `cargo test`, `cargo clippy -D warnings` (termasuk `--all-targets`),
+> `cargo run -p app -- catalog`, dan `./scripts/docs-check.sh`. Tidak ada
+> migrasi yang berubah, jadi `schema_smoke` tidak terpengaruh; yang menunggu
+> bukti adalah tiga request Bruno baru
+> (`engine/answered-validated`, `resolver/autobind-validated`, dan assertion
+> tambahan pada `resolver/noresolver-response`) beserta jalur tulis
+> `job_node_runs.input_binding_json`. **Jalankan
+> `PORT=3107 ./scripts/integration-test.sh` sebelum menganggap milestone ini
+> selesai.**
 
 `scripts/docs-check.sh` memeriksa dua hal yang paling cepat membusuk: link
 antar-dokumen yang menunjuk file tidak ada, dan endpoint yang terdaftar di kode
@@ -91,6 +105,7 @@ kebenaran prosa — tidak ada yang bisa.
 | Eksekusi capability (T4) | ✅ | SQL dari `queries/`, parameter terikat, timeout dua sisi, di luar transaksi (I1) |
 | Komposisi deterministik | 🟡 | Blok `metrics`/`table`/`narrative`/`provenance`/`limitation`. Belum ada `chart`/`findings`/`comparison`/`suggestions` |
 | Commit response (T7) | ✅ | Response + lifecycle + fakta memori + pesan + event + audit, satu transaksi |
+| Validator response (D1–D3) | ✅ | Dihitung ulang dari `job_node_runs` sebelum commit. D1 satu arah (klaim lebih baik ditolak), D2 himpunan auto-bind vs `input_binding_json`, D3 numeral narasi vs blok ber-evidence/`derivation`. Gagal → fallback deterministik disimpan sebagai versi 2, versi yang ditolak tetap ada |
 | Promosi `session_memory` (C12/K4) | 🟡 | `ActiveScope`, `PriorResult`, `ResolvedEntity` ditulis pada T7; seq lewat row lock (I3), fakta lama di-supersede, ringkasan → `stale`. **Belum ada konsumennya**: seleksi konteks menunggu integrasi LLM |
 | Re-plan / multi-node / fan-in | ⬜ | `plan_version` selalu 1 |
 
@@ -144,7 +159,7 @@ Urut menurut apa yang paling menghalangi integrasi frontend penuh.
 | 4 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
 | 5 | **Analytical contract (Mode 2)** | Hanya capability tetap yang dapat dijalankan | `data/analytical-contracts.md` |
 | 6 | **Blok response lanjutan** | `chart`, `findings`, `comparison`, `suggestions` belum dipancarkan | `contracts/responses.md` |
-| 7 | **Validator response (D1–D3)** | Hitung ulang completeness dan lineage evidence belum ditegakkan runtime | `contracts/responses.md` |
+| 7 | **`evidence_json` + `derivation`** | Validator D3 sudah menerima entri `derivation`, tetapi belum ada yang memproduksinya. Sampai ada, narasi tidak boleh memuat angka turunan sama sekali | `contracts/responses.md` §4 |
 | 8 | **Klarifikasi bertahap** | Form kedua sesudah slot pertama terjawab | `contracts/clarifications.md` |
 | 9 | **Embedding retrieval** | Retrieval masih leksikal; fail-closed ke leksikal sudah dirancang | `migration/carry-over.md` #7 |
 | 10 | **Security/identity final** | SSO, tenant model, izin PII per pengguna | `security/access-data-policy.md` (belum ada) |
@@ -175,15 +190,16 @@ Bukan "belum sempat" — ini keputusan sadar yang punya alasan dan pemicu revisi
 
 Dependensi, bukan prioritas produk.
 
-1. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
-   validator sesudahnya berarti memvalidasi permukaan yang sudah menyebar.
-2. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
-   arti `completeness`, jadi keduanya menunggu validator di atas.
-3. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
+1. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
+   arti `completeness`, dan keduanya kini masuk ke validator yang sudah ada:
+   kontributor baru ditambahkan ke `Ledger::contributors`, dan pembacaan
+   dataset wajib membawa `handle_state` non-optional (C13) supaya tidak ada
+   jalur baca yang dapat melewatkan status dataset.
+2. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
    menghapus structured output. Ia sekaligus konsumen pertama
    `session_memory` — fakta sudah ada, yang belum ada adalah seleksi
    konteksnya.
-4. **Security/identity final**, sebelum deployment nyata.
+3. **Security/identity final**, sebelum deployment nyata.
 
 ---
 

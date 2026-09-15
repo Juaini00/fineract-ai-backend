@@ -27,6 +27,7 @@ use crate::{
         planner::{self, Plan},
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
         resolver,
+        validate::{self, Validated},
     },
 };
 
@@ -214,7 +215,11 @@ async fn run_job(
                 job.session_id,
                 job.owner_user_id,
                 job.lease_token,
-                limitation_response(&problem.reason(), &problem.explain(), &job.request_text),
+                Validated::unchecked(limitation_response(
+                    &problem.reason(),
+                    &problem.explain(),
+                    &job.request_text,
+                )),
                 // Pertanyaan yang tidak dijawab tidak meninggalkan fakta: tidak
                 // ada hasil, dan tidak ada scope yang menghasilkan apa pun.
                 &[],
@@ -290,6 +295,17 @@ async fn run_job(
                         "rows": compose::redact(&result.rows, &withheld),
                         "withheld_columns": withheld,
                     })),
+                    // Ledger D2: binding yang benar-benar dikonsumsi node,
+                    // termasuk slot yang diikat tanpa bertanya. Validator
+                    // membacanya kembali dari sini, bukan dari `auto_bound` di
+                    // atas — itu yang membuat pemeriksaannya bukan cermin.
+                    input_binding_json: serde_json::json!({
+                        "parameters": compose::bindings(&plan),
+                        "auto_bound_slots": auto_bound
+                            .iter()
+                            .map(|slot| slot.field_id.as_str())
+                            .collect::<Vec<_>>(),
+                    }),
                     provenance_json: node_provenance(&plan, result.rows.len()),
                     rows_returned: Some(result.rows.len() as i64),
                     duration_ms: Some(result.duration_ms),
@@ -301,11 +317,28 @@ async fn run_job(
                 return Ok(false);
             }
 
+            // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
+            // adalah kecocokan dokumen dengan apa yang tersimpan.
+            let ledger = repository::ledger(pool, job.id, PLAN_VERSION).await?;
+            let validated = validate::apply(response, &ledger);
+
+            if validated.status() != "passed" {
+                warn!(
+                    job_id = %job.id,
+                    report = %validated.report,
+                    "response ditolak validator; menyajikan fallback deterministik"
+                );
+            }
+
+            let response = &validated.served;
+
             // Identitas dibaca dari yang tersimpan, sama seperti K5 di atas:
             // job yang dilanjutkan worker lain tetap mempromosikan identitas
             // yang benar-benar terikat, dengan provenance aslinya.
             let identities = clarification_repository::answered_identities(pool, job.id).await?;
-            let facts = memory::promoted(&plan, &response, &identities, result.rows.len());
+            // Fakta diturunkan dari dokumen yang DISAJIKAN: memori tidak boleh
+            // membawa klaim yang baru saja ditolak ke turn berikutnya.
+            let facts = memory::promoted(&plan, response, &identities, result.rows.len());
 
             repository::settle_with_response(
                 pool,
@@ -313,7 +346,7 @@ async fn run_job(
                 job.session_id,
                 job.owner_user_id,
                 job.lease_token,
-                response,
+                validated,
                 &facts,
             )
             .await
@@ -336,6 +369,12 @@ async fn run_job(
                     // Hasilnya TIDAK DIKETAHUI, bukan nol (I4).
                     completeness: Some("Unknown"),
                     failure_code: Some(failure_code),
+                    // Binding tetap dicatat meski node gagal: "dengan parameter
+                    // apa ia gagal" adalah separuh dari investigasinya.
+                    input_binding_json: serde_json::json!({
+                        "parameters": compose::bindings(&plan),
+                        "auto_bound_slots": [],
+                    }),
                     output_json: None,
                     provenance_json: node_provenance(&plan, 0),
                     rows_returned: None,
@@ -408,7 +447,11 @@ async fn open_clarification(
                 job.session_id,
                 job.owner_user_id,
                 job.lease_token,
-                not_found_response(&item.name, &slot.query_id, &job.request_text),
+                Validated::unchecked(not_found_response(
+                    &item.name,
+                    &slot.query_id,
+                    &job.request_text,
+                )),
                 &[],
             )
             .await

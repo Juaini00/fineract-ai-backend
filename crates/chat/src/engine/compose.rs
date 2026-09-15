@@ -198,12 +198,16 @@ fn table_block(output_fields: &[String], rows: &[Map<String, Value>]) -> Value {
     })
 }
 
-/// Provenance: dari mana angka itu berasal, dengan versi katalog yang dipakai.
+/// Parameter yang benar-benar terikat, dalam satu bentuk.
 ///
-/// `office_ids` dicatat sebagai **jumlah**, bukan daftar: scope adalah
-/// metadata, dan menuliskan seluruh daftarnya pada response tidak menambah
-/// kemampuan menelusuri apa pun.
-fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
+/// Dipakai dua tempat — blok `provenance` dan `job_node_runs.input_binding_json`
+/// — dan sengaja satu fungsi: dua penyusunan yang sama-sama benar hari ini akan
+/// menyimpang, dan yang menyimpang di sini adalah "dengan parameter apa angka
+/// ini dihasilkan".
+///
+/// `office_ids` menjadi **jumlah**, bukan daftar: scope adalah metadata, dan
+/// menuliskan seluruh daftarnya tidak menambah kemampuan menelusuri apa pun.
+pub fn bindings(plan: &Plan) -> Value {
     let office_count = plan
         .parameters
         .iter()
@@ -213,8 +217,7 @@ fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
         })
         .unwrap_or(0);
 
-    let bindings: Vec<Value> = plan
-        .parameter_names
+    plan.parameter_names
         .iter()
         .zip(&plan.parameters)
         .map(|(name, value)| {
@@ -229,7 +232,16 @@ fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
                 },
             })
         })
-        .collect();
+        .collect()
+}
+
+/// Provenance: dari mana angka itu berasal, dengan versi katalog yang dipakai.
+///
+/// `office_ids` dicatat sebagai **jumlah**, bukan daftar: scope adalah
+/// metadata, dan menuliskan seluruh daftarnya pada response tidak menambah
+/// kemampuan menelusuri apa pun.
+fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
+    let bindings = bindings(plan);
 
     json!({
         "type": "provenance",

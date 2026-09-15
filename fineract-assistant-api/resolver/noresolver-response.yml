@@ -31,3 +31,11 @@ runtime:
           expect(document.blocks_json[0].body).to.contain("account_number");
           expect(document.blocks_json[0].body).to.contain("never bound from free text");
         });
+
+        test("jalur limitation melewati D1-D3 dan tetap punya status yang sah", function () {
+          // Tidak ada blok data untuk digrounding dan tidak ada kontributor
+          // ledger untuk dihitung ulang. Yang tidak boleh terjadi adalah status
+          // yang kosong atau fallback yang dipicu ketiadaan angka.
+          expect(document.validation_status).to.equal("passed");
+          expect(document.response_version).to.equal(1);
+        });

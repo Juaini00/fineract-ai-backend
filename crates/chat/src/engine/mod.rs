@@ -10,6 +10,7 @@ pub mod planner;
 pub mod reaper;
 pub mod repository;
 pub mod resolver;
+pub mod validate;
 pub mod worker;
 
 use std::{sync::Arc, time::Duration};
