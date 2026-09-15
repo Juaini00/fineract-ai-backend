@@ -1,38 +1,43 @@
-# Urutan pengerjaan dan gerbang kelulusan
+# Build order and passing gates
 
-**Status: kontrak kerja. Mengikat untuk manusia maupun agen.**
-Menggantikan `status.md`, yang dihapus 2026-09-15.
+**Status: working contract. Binding for humans and agents alike.**
+Replaces `status.md`, deleted 2026-09-15.
 
----
-
-## Kenapa `status.md` dihapus
-
-`status.md` menjawab "apa yang **berjalan**". Pertanyaan itu terlihat berguna dan
-ternyata berbahaya: satu-satunya sinyal yang tersedia untuk menjawabnya adalah
-**test hijau**, sehingga "berjalan" pelan-pelan dibaca sebagai "sesuai docs".
-
-Yang terjadi pada 2026-09-15: tiga milestone dinyatakan ✅ dengan 111 unit test
-dan 173 test integrasi hijau. Audit terhadap docs menemukan ketiganya menyimpang
-dari kontraknya sendiri ([§6](#6-penyimpangan-yang-sudah-ditemukan)). Test hijau
-membuktikan kode berjalan; ia tidak pernah membuktikan kode **benar menurut yang
-disepakati**.
-
-> **Aplikasi jalan dan aplikasi sesuai adalah dua hal berbeda.**
-> Repo ini adalah rewrite justru karena keduanya pernah tertukar.
-
-Dokumen ini menggantinya dengan pertanyaan yang benar: **lapisan mana yang sudah
-lulus gerbangnya, dan apa yang boleh dikerjakan berikutnya.**
+> Written in English on purpose. Most other documents in `docs/` are in
+> Indonesian; this one is read first by every agent, so it uses the language
+> agents handle most reliably. When you edit the Indonesian documents, keep them
+> Indonesian.
 
 ---
 
-## 1. Empat aturan yang mengikat agen
+## Why `status.md` was deleted
 
-### Aturan 1 — Definisi selesai adalah skenario acceptance, bukan test hijau
+`status.md` answered the question "what is **running**?". That question looks
+useful and turned out to be dangerous: the only signal available to answer it is
+**green tests**, so "running" slowly came to be read as "matches the docs".
 
-Docs sudah menulis definisi selesai untuk tiap lapisan. Ada **86 skenario
-acceptance** yang tersebar di delapan dokumen:
+What happened on 2026-09-15: three milestones were marked ✅ on the strength of
+111 unit tests and 173 integration tests passing. An audit against the docs found
+that all three departed from their own contracts ([§6](#6-deviations-already-found)).
+Green tests prove the code runs. They have never proved the code is **correct
+according to what was agreed**.
 
-| Dokumen | Skenario |
+> **"The app runs" and "the app conforms" are two different things.**
+> This repository is a rewrite precisely because those two were once confused.
+
+This document replaces that with the right question: **which layer has passed its
+gate, and what is allowed to be worked on next.**
+
+---
+
+## 1. Four binding rules for agents
+
+### Rule 1 — Done means acceptance scenarios, not green tests
+
+The docs already define "done" for every layer. There are **86 acceptance
+scenarios** spread across eight documents:
+
+| Document | Scenarios |
 | --- | --- |
 | [contracts/clarifications.md](contracts/clarifications.md) | 15 |
 | [contracts/responses.md](contracts/responses.md) | 14 |
@@ -43,302 +48,304 @@ acceptance** yang tersebar di delapan dokumen:
 | [architecture/overview.md](architecture/overview.md) | 7 |
 | [architecture/memory-context.md](architecture/memory-context.md) | 7 |
 
-Pada 2026-09-15, jumlah test yang merujuk salah satu dari 86 skenario itu:
-**nol**. Itu akar masalahnya — bukan docs yang kurang lengkap.
+As of 2026-09-15, the number of tests that reference any of those 86 scenarios
+is **zero**. That is the root cause — not incomplete docs.
 
-**Aturan**: setiap test menyebut ID skenario yang dibuktikannya. Sebuah baris
-status tidak boleh ✅ bila skenarionya tidak punya test.
+**The rule**: every test names the scenario ID it proves. A status row may not be
+✅ if its scenario has no test.
 
-### Aturan 2 — Lapisan tidak boleh berstatus melampaui prasyaratnya
+### Rule 2 — A layer may never be rated above its prerequisites
 
-L7 tidak dapat ✅ selama L1 masih ⬜. Ini mekanis, bukan penilaian.
+L7 cannot be ✅ while L1 is still ⬜. This is mechanical, not a judgement call.
 
-Alasannya konkret: promosi `session_memory` menulis baris dengan benar, tetapi
-fakta yang dipromosikan berasal dari jawaban yang kebenarannya belum pernah
-diperiksa (L1/L4), merujuk `dataset_id` yang belum mungkin ada (L3), dan
-`handle_state` yang belum menjadi kolom. Menyebutnya "selesai" menyembunyikan
-semua itu.
+The reason is concrete: `session_memory` promotion writes its rows correctly, but
+the facts it promotes come from answers whose correctness has never been checked
+(L1/L4), reference a `dataset_id` that cannot exist yet (L3), and a
+`handle_state` that is not yet a column. Calling that "done" hides all of it.
 
-### Aturan 3 — Dilarang mengubah docs kontrak pada commit yang sama dengan kode
+### Rule 3 — Never change a contract document in the same commit as code
 
-Kalau kode tidak dapat memenuhi docs, agen **berhenti dan bertanya**. Menyunting
-pasalnya agar cocok dengan kode adalah pembalikan arah: docs adalah riset yang
-disepakati sebelum ngoding; kode menyesuaikan docs.
+If the code cannot satisfy the docs, the agent **stops and asks**. Editing the
+clause so it matches the code reverses the direction of authority: the docs are
+research agreed before any code was written, and the code conforms to them.
 
-Perubahan kontrak adalah keputusan pemilik repo, dalam commit `docs:` tersendiri,
-dengan alasannya.
+Changing a contract is the repository owner's decision, in its own `docs:` commit,
+with the reasoning recorded.
 
-**Pengecualian** — dua dokumen ini justru **wajib** ikut di commit kode, karena
-keduanya mencatat "apa yang ada", bukan "apa yang disepakati":
+**Exception** — these two documents *must* travel with the code commit, because
+they record "what exists" rather than "what was agreed":
 
 - [contracts/api-reference.md](contracts/api-reference.md)
-- dokumen ini (§5 tabel status)
+- this document (§5 status table)
 
-### Aturan 4 — Docs diam soal mekanisme bukan izin mengarang konsep
+### Rule 4 — Silence about mechanism is not permission to invent concepts
 
-Docs sengaja tidak menjelaskan token management, pembuatan vector, dan hal
-sejenis: bagian itu sudah benar secara bawaan dan tidak perlu ditulis ulang.
+The docs deliberately say nothing about token management, vector creation, and
+similar plumbing: those parts were already correct and did not need restating.
 
-- Docs diam soal **mekanisme** → ikuti yang sudah terbukti, jangan membongkar.
-- Docs bicara soal **konsep** → mengikat, tanpa tafsir.
+- Docs silent about **mechanism** → follow what already works; do not rebuild it.
+- Docs speak about **concept** → binding, no interpretation.
 
-Kosakata blok, titik promosi memori, urutan lifecycle, arah D1 — semuanya
-konsep. Melanggarnya sambil mengira sedang memutuskan mekanisme adalah persis
-kesalahan yang menghancurkan aplikasi sebelumnya.
+Block vocabulary, the memory promotion point, lifecycle ordering, the direction
+of D1 — all of these are concepts. Breaking one while believing you are deciding
+a mechanism is exactly the failure that destroyed the previous application.
 
 ---
 
-## 2. Kosakata status
+## 2. Status vocabulary
 
-| | Arti |
+| | Meaning |
 | --- | --- |
-| ⬜ | Belum dibangun. Desainnya mungkin sudah tertulis; itu bukan hal yang sama. |
-| 🔨 | Dibangun, **belum** diuji terhadap skenario acceptance. |
-| 🧪 | Skenario acceptance lulus, tetapi **prasyaratnya belum** ✅. Batas tertinggi selama prasyarat belum selesai. |
-| ✅ | Skenario lulus **dan** seluruh prasyarat ✅. |
-| ❌ | Dibangun dan **terbukti menyimpang** dari kontraknya. Wajib diperbaiki, bukan ditambah. |
+| ⬜ | Not built. A design may exist; that is not the same thing. |
+| 🔨 | Built, but **not yet** checked against its acceptance scenarios. |
+| 🧪 | Acceptance scenarios pass, but **prerequisites are not** ✅. This is the ceiling while prerequisites are unfinished. |
+| ✅ | Scenarios pass **and** every prerequisite is ✅. |
+| ❌ | Built and **proven to deviate** from its contract. Must be fixed, not extended. |
 
-Tidak ada "sebagian". Kalau perlu kualifikasi, tulis di kolom catatan.
+There is no "partial". If a qualifier is needed, put it in the notes column.
 
 ---
 
-## 3. Tangga L0–L8
+## 3. The ladder, L0–L8
 
-Urutan ini adalah **dependensi**, bukan prioritas produk. Angkanya tidak dapat
-ditukar tanpa mengubah dokumen ini lebih dulu.
+This ordering is a **dependency chain**, not a product priority list. The numbers
+cannot be swapped without editing this document first.
 
-### L0 — Fondasi, schema, auth, transport
+### L0 — Foundation, schema, auth, transport
 
-**Tujuan**: migrasi, invarian I1–I8, envelope, auth, SSE, lease/fencing.
-**Dokumen**: [data/database-design.md](data/database-design.md) §1 §2 §5 ·
+**Goal**: migrations, invariants I1–I8, response envelope, auth, SSE, lease/fencing.
+**Owning docs**: [data/database-design.md](data/database-design.md) §1 §2 §5 ·
 [architecture/engine.md](architecture/engine.md) · [contracts/sse.md](contracts/sse.md)
-**Prasyarat**: —
-**Selesai bila**: `tests/schema_smoke.sql` lulus; skenario SSE (10) dan API (11)
-punya test ber-ID.
-**Status**: 🔨 — mekanismenya berjalan dan teruji, tetapi belum satu pun skenario
-dipetakan ke test.
+**Prerequisites**: none
+**Done when**: `tests/schema_smoke.sql` passes, and the SSE (10) and API (11)
+scenarios each have a test carrying their ID.
+**Status**: 🔨 — the mechanism runs and is tested, but not one scenario is mapped
+to a test.
 
-### L1 — Katalog yang benar
+### L1 — A catalog that is actually correct
 
-**Tujuan**: `knowledge/` + `queries/` berhenti menjadi carry-over yang belum direview.
-**Dokumen**: [knowledge/CARRY-OVER.md](../knowledge/CARRY-OVER.md) ·
+**Goal**: `knowledge/` and `queries/` stop being unreviewed carry-over.
+**Owning docs**: [knowledge/CARRY-OVER.md](../knowledge/CARRY-OVER.md) ·
 [queries/CARRY-OVER.md](../queries/CARRY-OVER.md)
-**Prasyarat**: L0
-**Selesai bila** empat aturan `CARRY-OVER.md` terpenuhi per entri:
+**Prerequisites**: L0
+**Done when** the four rules in `CARRY-OVER.md` hold for each entry:
 
-1. Contohnya dijalankan ujung ke ujung dan **angkanya dicocokkan dengan SQL
-   langsung** ke Fineract lokal (8 office, 43 klien, 15.607 transaksi).
-2. Prosa judul/deskripsi konsisten dengan SQL yang dirujuk.
-3. Kelas sensitivitas kolom output sesuai kebijakan PII.
-4. Semantik cutoff/as-of dideklarasikan.
+1. Its example runs end to end and **its numbers are matched against direct SQL**
+   on the local Fineract database (8 offices, 43 clients, 15,607 transactions).
+2. The title and description prose agree with the SQL it points to.
+3. Output column sensitivity classes match the PII policy.
+4. Cutoff / as-of semantics are declared.
 
-Ditambah yang belum diperiksa siapa pun menurut `queries/CARRY-OVER.md`: dua
-kelas timeout, grain/anti-fanout, kecocokan kolom dengan aturan validasi
-response, dan semantik mata uang.
+Plus the items `queries/CARRY-OVER.md` says nobody has checked yet: the two
+timeout classes, grain and anti-fanout, column naming against the response
+validation rules, and currency semantics.
 
-**Status**: ⬜ — 0 dari 48 capability lulus.
-**Catatan**: `CARRY-OVER.md` menyatakan sendiri bahwa entri yang belum melewati
-empat hal itu **tidak boleh dipakai menjawab pertanyaan yang dipercaya**. Semua
-jawaban hari ini berasal dari entri yang belum lulus.
+**Status**: ⬜ — 0 of 48 capabilities have passed.
+**Note**: `CARRY-OVER.md` states plainly that entries which have not cleared
+those four points **must not be used to answer questions that are trusted**.
+Every answer produced so far comes from entries that have not cleared them.
 
-### L2 — Retrieval menemukan capability yang ada
+### L2 — Retrieval finds the capability that exists
 
-**Tujuan**: pertanyaan pengguna menemukan capability yang benar-benar dimiliki.
-**Dokumen**: [architecture/tech-stack.md](architecture/tech-stack.md) ·
+**Goal**: a user's question reaches the capability the system actually has.
+**Owning docs**: [architecture/tech-stack.md](architecture/tech-stack.md) ·
 [migration/carry-over.md](migration/carry-over.md) #7
-**Prasyarat**: L1
-**Selesai bila**: pertanyaan berbahasa Indonesia yang capability-nya ada
-menemukannya; kegagalan menemukan dibedakan dari di luar cakupan (lihat §6.5).
+**Prerequisites**: L1
+**Done when**: an Indonesian-language question whose capability exists finds it,
+and "we failed to find it" is reported differently from "it is out of scope"
+(see §6.5).
 
 **Status**: ⬜
-**Catatan**: seluruh prosa katalog berbahasa Inggris sementara produknya untuk
-pengguna Indonesia. `"berapa total portfolio aktif bulan ini"` menghasilkan **0
-match leksikal** walaupun kata `portfolio` ada di 4 entri. Arm embedding belum
-ada — kolom `knowledge_index.embedding vector(1024)` terisi 0 dari 192 baris.
-Pembuatan vector sendiri tidak diatur docs karena sudah benar bawaannya
-(Aturan 4).
+**Note**: all catalog prose is in English while the product serves Indonesian
+users. `"berapa total portfolio aktif bulan ini"` produces **0 lexical matches**
+even though the word `portfolio` appears in 4 catalog entries. The embedding arm
+does not exist — `knowledge_index.embedding vector(1024)` is populated on 0 of
+192 rows. Vector creation itself is not specified in the docs because it was
+already correct (Rule 4).
 
-### L3 — Dataset handle + chunk
+### L3 — Dataset handles and chunks
 
-**Tujuan**: hasil besar punya jalur; pagination hasil; handle yang dapat
-dinyatakan kedaluwarsa.
-**Dokumen**: [data/dataset-lifecycle.md](data/dataset-lifecycle.md) (10 skenario) ·
+**Goal**: large results get a storage path, result pagination exists, and an
+expired handle can be stated as expired.
+**Owning docs**: [data/dataset-lifecycle.md](data/dataset-lifecycle.md) (10 scenarios) ·
 [migration/carry-over.md](migration/carry-over.md) #11
-**Prasyarat**: L0
-**Selesai bila**: 10 skenario §8 lulus, termasuk `truncated` ≠ `completeness` ≠
-preview, pagination stabil lewat `sort_key_json`, otorisasi dicek ulang tiap
-baca (I7), dan dataset `purged` tetap terbaca statusnya.
-**Status**: ⬜ — tabel `datasets`/`dataset_chunks` ada sejak migrasi, **0 baris
-kode menyentuhnya**. `handle_state` (C13) belum menjadi kolom. Hasil query
-ditimbun inline di `job_node_runs.output_json`.
+**Prerequisites**: L0
+**Done when**: the 10 scenarios in §8 pass, including `truncated` ≠ `completeness`
+≠ preview, stable pagination via `sort_key_json`, authorization re-checked on
+every read (I7), and a `purged` dataset still readable as such.
+**Status**: ⬜ — the `datasets` and `dataset_chunks` tables have existed since the
+migration, and **no line of code touches them**. `handle_state` (C13) is not yet a
+column. Query results are dumped inline into `job_node_runs.output_json`.
 
-### L4 — Job menjawab dengan benar
+### L4 — Jobs answer correctly
 
-**Tujuan**: angka yang keluar terbukti benar, bukan sekadar keluar.
-**Dokumen**: [architecture/engine.md](architecture/engine.md) ·
+**Goal**: the numbers coming out are proven right, not merely produced.
+**Owning docs**: [architecture/engine.md](architecture/engine.md) ·
 [architecture/overview.md](architecture/overview.md) §6
-**Prasyarat**: L1, L3
-**Selesai bila**: untuk tiap capability yang dipakai, hasil job dibandingkan
-dengan SQL langsung ke Fineract dan cocok.
-**Status**: 🔨 — mesin job (lifecycle 8 state, fencing, idempotency, reaper)
-berjalan dan teruji. **Kebenaran jawaban tidak pernah diuji siapa pun.**
+**Prerequisites**: L1, L3
+**Done when**: for every capability in use, the job's result is compared against
+direct SQL on Fineract and matches.
+**Status**: 🔨 — the job machinery (8 lifecycle states, fencing, idempotency,
+reaper) runs and is tested. **The correctness of the answers has never been
+tested by anyone.**
 
-### L5 — Response document sesuai kontrak
+### L5 — Response documents match the contract
 
-**Tujuan**: bentuk dokumen sesuai [contracts/responses.md](contracts/responses.md) §1–§2.
-**Prasyarat**: L0 (dapat dikerjakan paralel dengan L1–L4; lihat §4)
-**Selesai bila**: tiap blok membawa `block_id`, `type`, `schema_version`,
-`derived_from`; kosakata terbatas pada 9 tipe §2; lineage hidup di
-`evidence_json`, bukan sebagai blok.
-**Status**: ❌ — menyimpang, lihat §6.2.
+**Goal**: document shape conforms to [contracts/responses.md](contracts/responses.md) §1–§2.
+**Prerequisites**: L0 (can run in parallel with L1–L4; see §4)
+**Done when**: every block carries `block_id`, `type`, `schema_version` and
+`derived_from`; the vocabulary is limited to the 9 types in §2; lineage lives in
+`evidence_json` rather than in a block.
+**Status**: ❌ — deviates; see §6.2.
 
-### L6 — Validator D1–D3 penuh
+### L6 — The full D1–D3 validator
 
-**Tujuan**: penegakan runtime yang benar-benar menegakkan kontrak.
-**Dokumen**: [contracts/responses.md](contracts/responses.md) §3–§6 (14 skenario)
-**Prasyarat**: L5
-**Selesai bila**: D1 dihitung **per blok** lewat `derived_from` lalu diagregasi
-(§3 aturan 2–3); D2 memeriksa blok `note` (§5); D3 memakai daftar pengecualian
-tertutup §4; §1 dan §2 ditegakkan — tipe di luar kosakata ditolak.
-**Status**: ❌ — aproksimasi, lihat §6.3.
+**Goal**: runtime enforcement that actually enforces the contract.
+**Owning docs**: [contracts/responses.md](contracts/responses.md) §3–§6 (14 scenarios)
+**Prerequisites**: L5
+**Done when**: D1 is computed **per block** through `derived_from` and then
+aggregated (§3 rules 2–3); D2 inspects the `note` block (§5); D3 uses the closed
+exclusion list from §4; §1 and §2 are enforced, so a type outside the vocabulary
+is rejected.
+**Status**: ❌ — an approximation; see §6.3.
 
-### L7 — Klarifikasi lengkap dan memory yang berguna
+### L7 — Complete clarification and memory that is actually used
 
-**Tujuan**: percakapan, bukan pertanyaan berturut-turut.
-**Dokumen**: [contracts/clarifications.md](contracts/clarifications.md) (15 skenario) ·
-[architecture/memory-context.md](architecture/memory-context.md) (7 skenario)
-**Prasyarat**: L1, L2, L3, L4, L5, L6
-**Selesai bila**: 22 skenario lulus, termasuk promosi pada T8 skip (§7-3),
-`handle_state` non-optional (§5, C13), seleksi konteks berbudget (§5), dan
-ringkasan inkremental berwatermark (§4).
-**Status**: ❌/🔨 — jalur tulis memori benar dan terbukti, tetapi T8 skip
-menyimpang (§6.1), tidak ada pembacanya, ringkasan tidak pernah dihitung, dan
-`dataset_id` selalu NULL karena L3 belum ada.
+**Goal**: a conversation, rather than a series of unrelated questions.
+**Owning docs**: [contracts/clarifications.md](contracts/clarifications.md) (15 scenarios) ·
+[architecture/memory-context.md](architecture/memory-context.md) (7 scenarios)
+**Prerequisites**: L1, L2, L3, L4, L5, L6
+**Done when**: all 22 scenarios pass, including promotion on T8 skip (§7-3),
+non-optional `handle_state` (§5, C13), budgeted context selection (§5), and
+incremental summaries with a watermark (§4).
+**Status**: ❌ / 🔨 — the memory write path is correct and proven, but T8 skip
+deviates (§6.1), nothing reads memory back, the summary is never computed, and
+`dataset_id` is always NULL because L3 does not exist.
 
-### L8 — Lapisan di atasnya
+### L8 — Everything above
 
-LLM additive, plan multi-node + fan-in, analytical contract Mode 2, security
-final, observability, OpenAPI.
-**Prasyarat**: L7.
-**Status**: ⬜ — **jangan disentuh** sebelum L1–L7 ✅.
-
----
-
-## 4. Apa yang boleh dikerjakan paralel
-
-Beberapa agen sekaligus **boleh**, asalkan tidak melompati prasyarat.
-
-| Jalur | Isi | Bentrok dengan |
-| --- | --- | --- |
-| **A — Katalog (L1)** | 48 capability diverifikasi satu per satu | tidak ada; paling mudah diparalelkan, satu agen per domain |
-| **B — Dataset (L3)** | `datasets`/`dataset_chunks`, murni lapisan penyimpanan | tidak ada |
-| **C — Bentuk dokumen (L5+L6)** | `compose.rs`, `validate.rs`, `evidence_json` | jangan bersamaan dengan jalur lain yang menyentuh `compose.rs` |
-| **D — Pemetaan skenario** | beri ID pada 86 skenario, tulis `scripts/acceptance-check.sh` | menyentuh seluruh docs — kerjakan **sendirian**, jangan paralel |
-
-Jalur D sebaiknya **didahulukan dan diselesaikan lebih dulu**: tanpa peta
-skenario, jalur A/B/C tidak punya cara membuktikan dirinya selesai.
-
-L2 menunggu L1. L4 menunggu L1 dan L3. L7 menunggu semuanya.
+Additive LLM narration, multi-node plans with fan-in, analytical contracts
+(Mode 2), final security model, observability, OpenAPI.
+**Prerequisites**: L7.
+**Status**: ⬜ — **do not touch** until L1–L7 are ✅.
 
 ---
 
-## 5. Ringkas status
+## 4. What can be worked on in parallel
 
-| Lapisan | Status | Prasyarat lulus? |
+Several agents at once is **allowed**, as long as no one skips a prerequisite.
+
+| Lane | Work | Conflicts with |
 | --- | --- | --- |
-| L0 Fondasi | 🔨 | — |
-| L1 Katalog benar | ⬜ | L0 🔨 |
+| **A — Catalog (L1)** | verify the 48 capabilities one at a time | nothing; easiest to parallelise, one agent per domain |
+| **B — Datasets (L3)** | `datasets` / `dataset_chunks`, a pure storage layer | nothing |
+| **C — Document shape (L5+L6)** | `compose.rs`, `validate.rs`, `evidence_json` | do not run alongside any other lane that touches `compose.rs` |
+| **D — Scenario mapping** | give IDs to the 86 scenarios, write `scripts/acceptance-check.sh` | touches all of `docs/` — run it **alone** |
+
+Lane D should be **done first and finished before the others start**: without the
+scenario map, lanes A, B and C have no way to prove they are done.
+
+L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
+
+---
+
+## 5. Status at a glance
+
+| Layer | Status | Prerequisites met? |
+| --- | --- | --- |
+| L0 Foundation | 🔨 | — |
+| L1 Correct catalog | ⬜ | L0 🔨 |
 | L2 Retrieval | ⬜ | L1 ⬜ |
-| L3 Dataset | ⬜ | L0 🔨 |
-| L4 Job menjawab benar | 🔨 | L1 ⬜, L3 ⬜ |
-| L5 Bentuk response | ❌ | L0 🔨 |
+| L3 Datasets | ⬜ | L0 🔨 |
+| L4 Correct answers | 🔨 | L1 ⬜, L3 ⬜ |
+| L5 Response shape | ❌ | L0 🔨 |
 | L6 Validator | ❌ | L5 ❌ |
-| L7 Klarifikasi + memory | ❌ | enam lapisan di bawahnya belum ✅ |
-| L8 Di atasnya | ⬜ | L7 ❌ |
+| L7 Clarification + memory | ❌ | six layers below are not ✅ |
+| L8 Above | ⬜ | L7 ❌ |
 
-**Tidak ada satu pun lapisan berstatus ✅.** Itu keadaan sebenarnya pada
-2026-09-15, dan lebih berguna daripada daftar ✅ yang tidak dapat dipertanggungjawabkan.
+**Not a single layer is ✅.** That is the real state on 2026-09-15, and it is more
+useful than a list of ✅ marks nobody can stand behind.
 
 ---
 
-## 6. Penyimpangan yang sudah ditemukan
+## 6. Deviations already found
 
-Wajib diperbaiki sebelum lapisan di atasnya ditambah. Ditemukan lewat audit
-kode terhadap docs, 2026-09-15.
+These must be fixed before anything is built on top of them. Found by auditing
+the code against the docs on 2026-09-15.
 
-### 6.1 T8 skip tidak mempromosikan memori — melanggar kontrak
+### 6.1 T8 skip does not promote memory — contract violation
 
-[memory-context.md](architecture/memory-context.md) §3: *"Satu-satunya titik
-promosi adalah response commit T7, **termasuk T8 skip**"*; §7-3 mewajibkan
-"promosi memori atomik"; [migration/carry-over.md](migration/carry-over.md) K2:
-*"Context tersimpan ke memory pada commit itu"*; K3 membedakan skip (promosi)
-dari cancel (tidak).
+[memory-context.md](architecture/memory-context.md) §3: *"the only promotion point
+is the T7 response commit, **including T8 skip**"*; §7-3 requires "atomic memory
+promotion"; [migration/carry-over.md](migration/carry-over.md) K2: *"context is
+saved to memory at that commit"*; K3 distinguishes skip (promotes) from cancel
+(does not).
 
-`crates/chat/src/clarification/repository.rs` justru menulis *"Tidak ada promosi
-memori di sini, dan itu keputusan"*. Keputusan sepihak melawan kontrak.
+`crates/chat/src/clarification/repository.rs` instead states *"there is no memory
+promotion here, and that is a decision"* — a unilateral decision against the
+contract.
 
-### 6.2 Bentuk blok menyimpang dari §1 dan §2
+### 6.2 Block shape deviates from §1 and §2
 
-| Kontrak | Nyata |
+| Contract | Reality |
 | --- | --- |
-| `block_id` wajib | dipakai `id` |
-| `schema_version` per blok wajib | tidak ada |
-| `derived_from` wajib pada blok data | tidak ada |
-| Kosakata 9 tipe §2 | dipancarkan `provenance` (95 blok) dan `metrics` (65 blok); keduanya **tidak ada di kosakata**. `metric` seharusnya tunggal |
-| Auto-bind diungkap pada blok `note` (§5) | diungkap pada blok `limitation`; `note` **tidak pernah dipakai** |
-| Lineage di `evidence_json` (#10) | `evidence_json` selalu `{}`; lineage dikarang jadi blok `provenance` |
+| `block_id` required | `id` is used instead |
+| `schema_version` per block required | missing |
+| `derived_from` required on data blocks | missing |
+| Vocabulary of 9 types (§2) | emits `provenance` (95 blocks) and `metrics` (65 blocks); **neither is in the vocabulary**. `metric` should be singular |
+| Auto-bind disclosed in a `note` block (§5) | disclosed in a `limitation` block; `note` is **never used** |
+| Lineage in `evidence_json` (#10) | `evidence_json` is always `{}`; lineage was invented as a `provenance` block |
 
-### 6.3 Validator menegakkan implementasi, bukan kontrak
+### 6.3 The validator enforces the implementation, not the contract
 
-- D1 dihitung di tingkat dokumen, bukan per blok — karena `derived_from` tidak
-  ada. Aproksimasi ini tidak pernah dinyatakan.
-- D2 memindai blok mana pun yang punya `auto_bound_slots`, bukan blok `note`,
-  sehingga ia **lulus terhadap bentuk yang salah**.
-- §1 dan §2 tidak ditegakkan sama sekali.
+- D1 is computed at document level rather than per block, because `derived_from`
+  does not exist. This approximation was never declared.
+- D2 scans any block carrying `auto_bound_slots` instead of the `note` block, so
+  it **passes against the wrong shape**.
+- §1 and §2 are not enforced at all.
 
-### 6.4 `Cancelled`/`Expired` bermakna `OperationalFailure`
+### 6.4 `Cancelled` / `Expired` are recorded as `OperationalFailure`
 
-32 job terminal tercatat `outcome='OperationalFailure'` padahal dibatalkan atau
-kedaluwarsa. K3 menyatakan cancel adalah abort, bukan kegagalan operasional.
-Dashboard yang mewarnai berdasar `outcome` akan menampilkan error palsu.
+32 terminal jobs carry `outcome='OperationalFailure'` although they were
+cancelled or expired. K3 states that cancel is an abort, not an operational
+failure. A dashboard colouring by `outcome` will show 32 false errors.
 
-### 6.5 `Unsupported` mencampur empat sebab yang berbeda
+### 6.5 `Unsupported` conflates four different causes
 
-| `completeness_reason` | Jumlah | Artinya |
+| `completeness_reason` | Count | What it means |
 | --- | --- | --- |
-| `no_capability_matched` | 37 | **campur** — sebagian benar di luar cakupan, sebagian kegagalan retrieval kita |
-| `identity_slot_without_resolver` | 11 | katalog belum lengkap |
-| `planner_not_implemented` | 6 | fitur belum ada |
-| `parameter_binding_unsupported` | 2 | fitur belum ada |
+| `no_capability_matched` | 37 | **mixed** — some genuinely out of scope, some are our retrieval failing |
+| `identity_slot_without_resolver` | 11 | catalog incomplete |
+| `planner_not_implemented` | 6 | feature missing |
+| `parameter_binding_unsupported` | 2 | feature missing |
 
-"Di luar cakupan" dan "kami gagal menemukan capability yang kami punya" terlihat
-identik di data dan di UI. Keduanya wajib dipisah.
+"Out of scope" and "we failed to find a capability we actually have" look
+identical in the data and in the UI. They must be separated.
 
 ---
 
-## 7. Pemeriksaan yang wajib hijau
+## 7. Checks that must be green
 
 ```bash
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p app -- catalog
-psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql   # bila migrasi berubah
+psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql   # if migrations changed
 ./scripts/docs-check.sh
 PORT=3107 ./scripts/integration-test.sh
 ```
 
-Semuanya hijau **tidak** berarti sesuai docs. Ia hanya prasyarat minimum sebelum
-pertanyaan kesesuaian boleh diajukan.
+All of them green does **not** mean the code conforms to the docs. It is only the
+minimum bar before the conformance question may be asked at all.
 
-Catatan lingkungan: port 3007 dan Redis 6380 dipakai repo lama pada mesin
-pengembangan ini — jalankan dengan `APP_PORT=3107`. `WORKER_ENABLED` default
-`true`; instance yang tertinggal di port mana pun akan mengklaim job dari tahap
-intake dan merusak assertion "job tetap `Queued`" — hentikan dulu, bukan pindah
-port.
+Environment notes: port 3007 and Redis 6380 belong to the old repository on this
+development machine — run with `APP_PORT=3107`. `WORKER_ENABLED` defaults to
+`true`, so a leftover instance on *any* port will claim intake-stage jobs and
+break the "job stays `Queued`" assertions; stop it rather than switching ports.
 
 ---
 
-## 8. Menjalankan lokal
+## 8. Running locally
 
 ```bash
 cd fineract-ai-backend
@@ -347,6 +354,7 @@ sqlx migrate run --database-url "$APP_DATABASE_URL"
 APP_PORT=3107 cargo run -p app
 ```
 
-Frontend: mulai dari [contracts/api-reference.md](contracts/api-reference.md) —
-permukaan yang benar-benar ada, payload disalin dari aplikasi berjalan. Ingat
-bahwa "ada" tidak berarti "sesuai": lihat §6.2 sebelum mengunci bentuk render.
+Frontend: start from [contracts/api-reference.md](contracts/api-reference.md) —
+the surface that genuinely exists, with payloads copied from the running
+application. Remember that "exists" does not mean "conforms": read §6.2 before
+locking any render shape to it.
