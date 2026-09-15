@@ -8,7 +8,7 @@ Dua dokumen status yang **berbeda dan tidak boleh ditukar**:
 
 | Dokumen | Menjawab |
 | --- | --- |
-| [**status.md**](status.md) | Apa yang **sudah berjalan** di aplikasi, apa yang belum, utang yang diketahui, dan urutan berikutnya |
+| [**build-order.md**](build-order.md) | Tangga L0–L8, gerbang kelulusan tiap lapisan, dan aturan mengikat untuk agen. **Lapisan mana yang boleh dikerjakan berikutnya** |
 | [checklist.md](checklist.md) | Apakah sebuah **keputusan sudah tertulis**. `[x]` di sana berarti terdokumentasi, bukan terbangun |
 
 Frontend mulai dari [contracts/api-reference.md](contracts/api-reference.md):

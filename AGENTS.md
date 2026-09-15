@@ -10,11 +10,31 @@ Jangan pulihkan pola lama itu.
 
 ## Sebelum menulis kode
 
-0. Baca [docs/status.md](docs/status.md) — apa yang sudah berjalan, apa yang belum, dan utang yang sudah diketahui. Jangan menyimpulkan status dari `docs/checklist.md`: ia melacak kelengkapan dokumentasi, dan `[x]` di sana berarti **tertulis**, bukan **terbangun**.
+0. Baca [docs/build-order.md](docs/build-order.md) — tangga lapisan L0–L8, gerbang kelulusan, dan **empat aturan mengikat** di bawah. Ia menentukan lapisan mana yang boleh Anda sentuh. Jangan menyimpulkan status dari `docs/checklist.md`: ia melacak kelengkapan dokumentasi, dan `[x]` di sana berarti **tertulis**, bukan **terbangun**.
 1. Baca [docs/data/database-design.md](docs/data/database-design.md) **§1 Invarian** dan **§2 Matriks koneksi**.
 2. Bila perubahan Anda menyentuh salah satu hand-off di §2, periksa penegaknya masih berlaku.
 3. Bila menambah FK, periksa **§5 matriks referential action** — lihat invarian I2.
 4. Bila menambah atau mengubah endpoint, perbarui [docs/contracts/api-reference.md](docs/contracts/api-reference.md) pada commit yang sama. Dokumen itu adalah satu-satunya yang boleh dipercaya frontend, dan ia hanya berguna selama ia diturunkan dari kode.
+
+## Empat aturan kerja (dilanggar = pekerjaan dibuang)
+
+Ditetapkan 2026-09-15 setelah audit menemukan tiga milestone dinyatakan selesai
+padahal menyimpang dari kontraknya. Rinciannya di [docs/build-order.md](docs/build-order.md) §1.
+
+1. **Definisi selesai adalah skenario acceptance, bukan test hijau.** Docs memuat
+   86 skenario acceptance. Test hijau membuktikan kode berjalan; ia tidak pernah
+   membuktikan kode benar menurut yang disepakati. Sebut ID skenario yang Anda
+   buktikan.
+2. **Lapisan tidak boleh berstatus melampaui prasyaratnya.** Jangan membangun L7
+   di atas L1 yang belum lulus — bentuk yang salah akan terkunci.
+3. **Dilarang mengubah docs kontrak pada commit yang sama dengan kode.** Bila
+   kode tidak dapat memenuhi docs, **berhenti dan tanya**. Menyunting pasalnya
+   agar cocok dengan kode adalah pembalikan arah. Pengecualian:
+   `contracts/api-reference.md` dan `build-order.md` justru wajib ikut.
+4. **Docs diam soal mekanisme bukan izin mengarang konsep.** Token management,
+   pembuatan vector dan sejenisnya tidak ditulis karena sudah benar bawaannya —
+   ikuti yang terbukti. Tetapi kosakata blok, titik promosi memori, urutan
+   lifecycle, dan arah D1 adalah **konsep**: mengikat, tanpa tafsir.
 
 ## Delapan invarian
 

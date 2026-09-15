@@ -5,7 +5,7 @@ Tanggal pemeriksaan: 2026-09-09. Basis: delapan dokumen yang ada di checkout rep
 Pembaruan diskusi 2026-09-09: [keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) menyimpan baseline handoff dan D01–D15; tinjauan celah fungsional (gap-review) ditutup pada D15 via audit sistematis. Checklist di bawah membedakan keputusan tercatat dari kontrak dan bukti deployment yang belum selesai.
 
 > **Cakupan dokumen ini: kelengkapan DOKUMENTASI, bukan status build.**
-> Status implementasi ada di [status.md](status.md) dan hanya di sana. `[x]` di
+> Status implementasi ada di [build-order.md](build-order.md) dan hanya di sana. `[x]` di
 > bawah berarti keputusannya sudah tertulis — sebagian sudah dibangun, sebagian
 > belum, dan checklist ini sengaja tidak membedakannya.
 >
@@ -41,7 +41,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 | [Engine](architecture/engine.md) | Ada: matriks transisi, node status, lease/fencing, recovery, D4 | Precedence penyelesaian node aktif reaper-vs-worker dicatat sebagai keputusan terbuka |
 | [API](contracts/api.md) | Ada, parsial | OpenAPI/schema lengkap dan endpoint pendukung |
 | [Referensi API](contracts/api-reference.md) | Ada: permukaan yang benar-benar dibangun, payload nyata, error matrix, alur integrasi FE | Diturunkan dari kode; wajib diperbarui bersama endpoint baru |
-| [Status implementasi](status.md) | Ada: apa yang berjalan, apa yang belum, utang, urutan berikutnya | Diperbarui tiap milestone |
+| [Status implementasi](build-order.md) | Ada: tangga lapisan, gerbang kelulusan, penyimpangan yang ditemukan | Diperbarui tiap lapisan lulus |
 | [Klarifikasi](contracts/clarifications.md) | Ada, parsial | Schema, opsi resolver, limits dan expiry |
 | [SSE](contracts/sse.md) | Ada, parsial | Payload lengkap, replay limits, auth expiry dan wire errors |
 | [Overview](architecture/overview.md) | Ada: batas komponen, ownership, alur eksekusi, batas transaksi | — |
@@ -217,7 +217,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - Global memory: di luar rilis awal; bukan blocker selama batas ini konsisten.
 - Frontend implementation: mengikuti dashboard yang ada; kontrak BE–FE tetap wajib lengkap.
 - DataFusion/framework analitik tambahan: kandidat, bukan dependency wajib.
-- ~~Menyalin aset, migration dan menulis aplikasi: belum dimulai sesuai kesepakatan.~~ **Tidak berlaku sejak 2026-09-13**: implementasi berjalan, `knowledge/`+`queries/` sudah dibawa (belum direview), `migrations/` ditulis baru. Lihat [status.md](status.md).
+- ~~Menyalin aset, migration dan menulis aplikasi: belum dimulai sesuai kesepakatan.~~ **Tidak berlaku sejak 2026-09-13**: implementasi berjalan, `knowledge/`+`queries/` sudah dibawa (belum direview), `migrations/` ditulis baru. Lihat [build-order.md](build-order.md).
 
 ## Urutan penyelesaian berikutnya
 

@@ -8,7 +8,7 @@ recorded 2026-09-08; transition matrix, lease/fencing and recovery added later.
 > response (T7), klarifikasi (T5/T6), skip (T8), `job.resumed`. **Belum**:
 > re-plan dan `plan_version` > 1, plan multi-node dan fan-in, reuse output
 > lintas plan, dan D4 (kesegaran katalog pada batas verifikasi–eksekusi).
-> Lihat [status.md](../status.md).
+> Lihat [build-order.md](../build-order.md).
 
 ## One owner
 

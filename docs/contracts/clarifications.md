@@ -12,7 +12,7 @@ illustrative; exhaustive JSON Schema is still required. Lifecycle is owned by
 > bertahap (form kedua), conditional fields, dan suggestions. Bentuk form dan
 > opsi yang benar-benar dikirim ada di
 > [api-reference.md §6](api-reference.md#6-klarifikasi); status lengkap di
-> [status.md](../status.md).
+> [build-order.md](../build-order.md).
 
 ## Ownership and purpose
 

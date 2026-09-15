@@ -13,7 +13,7 @@
 #      kode — bukan dari ingatan.
 #
 # Yang TIDAK diperiksa skrip ini: kebenaran prosa. Tidak ada yang bisa. Status
-# implementasi di docs/status.md tetap tanggung jawab manusia yang mengubahnya.
+# implementasi di docs/build-order.md tetap tanggung jawab manusia yang mengubahnya.
 
 set -euo pipefail
 

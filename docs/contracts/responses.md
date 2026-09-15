@@ -8,7 +8,7 @@ Status: disepakati 2026-09-13. Menutup utang **D1–D3** pada [database-design.m
 > LLM, dan **validator D1–D3 sebagai penegakan runtime** (aturannya tertulis di
 > sini, tetapi belum ada kode yang menolak klaim composer). Blok yang benar-benar
 > dikirim ada di [api-reference.md §5](api-reference.md#5-job); status lengkap di
-> [status.md](../status.md).
+> [build-order.md](../build-order.md).
 
 ## Prinsip
 

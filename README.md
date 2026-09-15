@@ -12,7 +12,7 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 > terhadap data nyata. Dataset berchunk, memori session, dan integrasi LLM belum
 > ada.
 >
-> **Apa yang sudah berjalan dan apa berikutnya: [docs/status.md](docs/status.md).**
+> **Urutan pengerjaan dan gerbang kelulusan: [docs/build-order.md](docs/build-order.md).**
 > Untuk integrasi frontend: [docs/contracts/api-reference.md](docs/contracts/api-reference.md).
 > `docs/checklist.md` melacak kelengkapan *dokumentasi*, bukan status build.
 
@@ -28,7 +28,7 @@ Baca berurutan:
 | [Carry-over](docs/migration/carry-over.md) | Keputusan #1–#15 dan alasannya |
 | [Runtime](docs/operations/runtime.md) | Parameter operasional + pemicu revisi |
 | [API](docs/contracts/api.md) · [SSE](docs/contracts/sse.md) · [Klarifikasi](docs/contracts/clarifications.md) · [Responses](docs/contracts/responses.md) | Kontrak antarmuka yang disepakati |
-| [**Status implementasi**](docs/status.md) | Apa yang **berjalan**, apa yang belum, utang, urutan berikutnya |
+| [**Status implementasi**](docs/build-order.md) | Tangga lapisan + gerbang kelulusan. Urutan pengerjaan yang mengikat |
 | [**Referensi API**](docs/contracts/api-reference.md) | Permukaan HTTP yang benar-benar ada — titik mulai frontend |
 | [Checklist](docs/checklist.md) | Kelengkapan **dokumentasi**; `[x]` berarti tertulis, bukan terbangun |
 

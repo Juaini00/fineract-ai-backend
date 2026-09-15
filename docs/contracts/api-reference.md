@@ -4,7 +4,7 @@ Status: **diturunkan dari kode, bukan dari rencana.** Setiap payload di dokumen
 ini disalin dari aplikasi yang berjalan terhadap Fineract lokal (8 office,
 43 klien, 15.607 transaksi) pada commit yang sama dengan dokumen ini. Endpoint
 yang belum dibangun **tidak** dicantumkan di sini — lihat
-[status implementasi](../status.md) untuk apa yang belum ada.
+[status implementasi](../build-order.md) untuk apa yang belum ada.
 
 Bedanya dengan [api.md](api.md): `api.md` adalah kontrak yang disepakati
 (termasuk yang belum dibangun); dokumen ini adalah permukaan yang dapat
@@ -780,4 +780,4 @@ seolah sudah ada:
 - Klarifikasi bertahap (form kedua sesudah slot pertama terjawab).
 - OpenAPI/JSON Schema formal.
 
-Status lengkap: [status.md](../status.md).
+Status lengkap: [build-order.md](../build-order.md).

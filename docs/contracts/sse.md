@@ -10,7 +10,7 @@ experience surface, not the internal audit stream.
 > expiry di tengah stream, dan verifikasi melalui proxy deployment nyata.
 > Bentuk frame dan kosakata event yang benar-benar dipancarkan ada di
 > [api-reference.md §7](api-reference.md#7-sse--get-chatjobsjob_idevents);
-> status lengkap di [status.md](../status.md).
+> status lengkap di [build-order.md](../build-order.md).
 
 ## Transport and durability
 
