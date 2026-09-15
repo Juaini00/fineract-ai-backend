@@ -1,6 +1,18 @@
 # Clarification contract
 
-Status: agreed interaction design, recorded 2026-09-08. Wire examples are illustrative; exhaustive JSON Schema, payload limits and resolver API are still required before implementation. Lifecycle is owned by [Engine](../architecture/engine.md), transport by [API](api.md) and [SSE](sse.md).
+Status: agreed interaction design, recorded 2026-09-08. Wire examples are
+illustrative; exhaustive JSON Schema is still required. Lifecycle is owned by
+[Engine](../architecture/engine.md), transport by [API](api.md) and
+[SSE](sse.md).
+
+> **Status implementasi (2026-09-15).** Sudah berjalan: form bertipe dengan
+> revision dan stale-answer, `answer_kind` `typed_value` dan `option_id`,
+> endpoint opsi resolver berpaginasi, auto-bind `resolver_unique` (K5), dan
+> skip (T8). **Belum**: `refine_search` dan `change_intent`, klarifikasi
+> bertahap (form kedua), conditional fields, dan suggestions. Bentuk form dan
+> opsi yang benar-benar dikirim ada di
+> [api-reference.md §6](api-reference.md#6-klarifikasi); status lengkap di
+> [status.md](../status.md).
 
 ## Ownership and purpose
 

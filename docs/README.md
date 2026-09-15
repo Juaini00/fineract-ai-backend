@@ -1,8 +1,20 @@
 # Jarvis backend design documentation
 
-Status: design in progress. Application implementation has not been authorized until the design package is complete and reviewed.
+Status: **implementasi sudah berjalan** sejak 2026-09-13; paket desain terus
+dilengkapi bersamaan. Kalimat "implementation has not been authorized" pada
+versi awal dokumen ini sudah tidak berlaku.
 
-Lihat [checklist kelengkapan dokumentasi](checklist.md) untuk status sudah tercatat, parsial, belum tersedia dan deferred per 2026-09-09. Checklist melacak kelengkapan; dokumen pemilik tetap menjadi sumber kontrak.
+Dua dokumen status yang **berbeda dan tidak boleh ditukar**:
+
+| Dokumen | Menjawab |
+| --- | --- |
+| [**status.md**](status.md) | Apa yang **sudah berjalan** di aplikasi, apa yang belum, utang yang diketahui, dan urutan berikutnya |
+| [checklist.md](checklist.md) | Apakah sebuah **keputusan sudah tertulis**. `[x]` di sana berarti terdokumentasi, bukan terbangun |
+
+Frontend mulai dari [contracts/api-reference.md](contracts/api-reference.md):
+permukaan HTTP yang benar-benar ada, dengan payload yang disalin dari aplikasi
+berjalan. [contracts/api.md](contracts/api.md) adalah kontrak yang disepakati —
+termasuk endpoint yang belum dibangun.
 
 Titik lanjut diskusi dataset: [keputusan cakupan data, 9 September 2026](product/2026-09-09-dataset-scope-decisions.md). Baseline domain dan keputusan tambahan sudah dicatat; daftar dataset formal, mapping deployment dan kontrak teknis belum final.
 
@@ -15,7 +27,7 @@ The design package targets a complete production release and its maintenance lif
 - This is a new backend repository, not an extension of the existing ai_report application.
 - The frontend will adapt to the agreed backend contracts. Frontend implementation and library selection are outside this backend project; response and transport contracts are in scope.
 - [Jarvis PRD](product/prd.md) is the consolidated product baseline for this repository, incorporating the earlier `2026-09-08-jarvis-rewrite-prd.md` concept and subsequent agreed decisions. It is not a completed implementation specification.
-- Dataset assets and migrations will be imported and reviewed later. No source code, datasets, or migrations have been imported at this stage.
+- Dataset assets dan migrasi **sudah** diimpor: `knowledge/` dan `queries/` dibawa apa adanya dan belum direview (lihat `CARRY-OVER.md` di masing-masing folder); `migrations/` ditulis baru, bukan disalin.
 
 ## Agreed direction
 

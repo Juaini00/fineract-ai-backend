@@ -4,7 +4,18 @@ Tanggal pemeriksaan: 2026-09-09. Basis: delapan dokumen yang ada di checkout rep
 
 Pembaruan diskusi 2026-09-09: [keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) menyimpan baseline handoff dan D01–D15; tinjauan celah fungsional (gap-review) ditutup pada D15 via audit sistematis. Checklist di bawah membedakan keputusan tercatat dari kontrak dan bukti deployment yang belum selesai.
 
-**Status keseluruhan: belum siap implementasi.** Arah produk dan kontrak interaksi sudah tercatat; desain database, audit operasional, schema lengkap dan parameter runtime masih perlu diselesaikan.
+> **Cakupan dokumen ini: kelengkapan DOKUMENTASI, bukan status build.**
+> Status implementasi ada di [status.md](status.md) dan hanya di sana. `[x]` di
+> bawah berarti keputusannya sudah tertulis — sebagian sudah dibangun, sebagian
+> belum, dan checklist ini sengaja tidak membedakannya.
+>
+> Kalimat "belum siap implementasi" di bawah adalah penilaian per 2026-09-09.
+> Implementasi dimulai 2026-09-13 atas keputusan pemilik produk, bertahap dan
+> dengan paket desain yang terus dilengkapi. Baris-baris di bawah TIDAK
+> diperbarui menjadi `[x]` hanya karena kodenya ada; ia ditutup ketika
+> dokumennya lengkap.
+
+**Penilaian 2026-09-09 — belum siap implementasi.** Arah produk dan kontrak interaksi sudah tercatat; desain database, audit operasional, schema lengkap dan parameter runtime masih perlu diselesaikan.
 
 **Target checklist: aplikasi lengkap sesuai scope yang disepakati, siap production release dan maintenance; bukan desain MVP.** Dua belas area di bawah adalah kelompok tanggung jawab release. Data besar Fineract wajib didesain dan diuji sebagai beban normal. Milestone implementasi boleh bertahap, tetapi kebutuhan wajib tidak dipindahkan ke setelah release demi menyederhanakan tahap awal. Global memory tetap deferred berdasarkan kesepakatan sebelumnya.
 
@@ -28,7 +39,9 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 | [Keputusan cakupan data](product/2026-09-09-dataset-scope-decisions.md) | Ada: baseline dan D01–D15 disepakati; gap-review ditutup | Inventaris formal, mapping sumber/deployment dan kontrak teknis belum final |
 | [Tech stack](architecture/tech-stack.md) | Ada, parsial | Versi, provider/model, parser, exporter, storage |
 | [Engine](architecture/engine.md) | Ada: matriks transisi, node status, lease/fencing, recovery, D4 | Precedence penyelesaian node aktif reaper-vs-worker dicatat sebagai keputusan terbuka |
-| [API](contracts/api.md) | Ada, parsial | OpenAPI/schema lengkap, endpoint pendukung dan error matrix |
+| [API](contracts/api.md) | Ada, parsial | OpenAPI/schema lengkap dan endpoint pendukung |
+| [Referensi API](contracts/api-reference.md) | Ada: permukaan yang benar-benar dibangun, payload nyata, error matrix, alur integrasi FE | Diturunkan dari kode; wajib diperbarui bersama endpoint baru |
+| [Status implementasi](status.md) | Ada: apa yang berjalan, apa yang belum, utang, urutan berikutnya | Diperbarui tiap milestone |
 | [Klarifikasi](contracts/clarifications.md) | Ada, parsial | Schema, opsi resolver, limits dan expiry |
 | [SSE](contracts/sse.md) | Ada, parsial | Payload lengkap, replay limits, auth expiry dan wire errors |
 | [Overview](architecture/overview.md) | Ada: batas komponen, ownership, alur eksekusi, batas transaksi | — |
@@ -204,7 +217,7 @@ Jangan menghitung persentase kesiapan dari jumlah file atau checkbox: bobot kepu
 - Global memory: di luar rilis awal; bukan blocker selama batas ini konsisten.
 - Frontend implementation: mengikuti dashboard yang ada; kontrak BE–FE tetap wajib lengkap.
 - DataFusion/framework analitik tambahan: kandidat, bukan dependency wajib.
-- Menyalin aset, migration dan menulis aplikasi: belum dimulai sesuai kesepakatan.
+- ~~Menyalin aset, migration dan menulis aplikasi: belum dimulai sesuai kesepakatan.~~ **Tidak berlaku sejak 2026-09-13**: implementasi berjalan, `knowledge/`+`queries/` sudah dibawa (belum direview), `migrations/` ditulis baru. Lihat [status.md](status.md).
 
 ## Urutan penyelesaian berikutnya
 

@@ -10,9 +10,11 @@ Jangan pulihkan pola lama itu.
 
 ## Sebelum menulis kode
 
+0. Baca [docs/status.md](docs/status.md) — apa yang sudah berjalan, apa yang belum, dan utang yang sudah diketahui. Jangan menyimpulkan status dari `docs/checklist.md`: ia melacak kelengkapan dokumentasi, dan `[x]` di sana berarti **tertulis**, bukan **terbangun**.
 1. Baca [docs/data/database-design.md](docs/data/database-design.md) **§1 Invarian** dan **§2 Matriks koneksi**.
 2. Bila perubahan Anda menyentuh salah satu hand-off di §2, periksa penegaknya masih berlaku.
 3. Bila menambah FK, periksa **§5 matriks referential action** — lihat invarian I2.
+4. Bila menambah atau mengubah endpoint, perbarui [docs/contracts/api-reference.md](docs/contracts/api-reference.md) pada commit yang sama. Dokumen itu adalah satu-satunya yang boleh dipercaya frontend, dan ia hanya berguna selama ia diturunkan dari kode.
 
 ## Delapan invarian
 
@@ -41,9 +43,15 @@ cargo check --workspace
 cargo clippy --workspace -- -D warnings
 cargo test --workspace
 psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
+./scripts/docs-check.sh              # link mati + endpoint tak terdokumentasi
 cargo run -p app -- catalog          # katalog: validasi + prepare SQL ke Fineract
 ./scripts/integration-test.sh        # permukaan HTTP lewat Bruno CLI
 ```
+
+`scripts/docs-check.sh` menangkap dua pembusukan dokumen yang paling mudah
+luput: link antar-dokumen yang menunjuk file tidak ada, dan endpoint yang ada di
+kode tetapi tidak di `docs/contracts/api-reference.md`. Ia tidak memeriksa
+kebenaran prosa — itu tetap tanggung jawab yang mengubahnya.
 
 `tests/schema_smoke.sql` menguji **perilaku**, bukan sekadar DDL berhasil di-parse: ia gagal bila K4, fencing, constraint satu-job-per-session, atau rantai CASCADE rusak. Jalankan setelah setiap perubahan migrasi.
 

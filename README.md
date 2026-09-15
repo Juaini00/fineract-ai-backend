@@ -4,7 +4,17 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: menjawab pertanyaan nyata.** Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus hidup job (T2/T7/T11), planner deterministik (T3), dan eksekusi capability yang disetujui ke Fineract (T4) sudah berjalan dan terverifikasi terhadap data nyata. Pertanyaan yang tercakup capability dijawab dengan angka + provenance; yang tidak tercakup ditolak sebagai `Unsupported` dengan sebab yang dinyatakan. Klarifikasi bertipe (T5–T6) juga berjalan: input yang kurang ditanyakan pada job yang sama, bukan ditolak. Resolver opsi, dataset berchunk, memori session, SSE dan integrasi LLM belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: menjawab pertanyaan nyata, dengan progres yang dapat di-stream.**
+> Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus
+> hidup job (T2/T7/T11), planner deterministik (T3), eksekusi capability ke
+> Fineract (T4), klarifikasi bertipe (T5/T6), resolver opsi untuk slot identitas,
+> skip (T8), dan SSE dengan replay dari cursor sudah berjalan dan terverifikasi
+> terhadap data nyata. Dataset berchunk, memori session, dan integrasi LLM belum
+> ada.
+>
+> **Apa yang sudah berjalan dan apa berikutnya: [docs/status.md](docs/status.md).**
+> Untuk integrasi frontend: [docs/contracts/api-reference.md](docs/contracts/api-reference.md).
+> `docs/checklist.md` melacak kelengkapan *dokumentasi*, bukan status build.
 
 ## Dokumen
 
@@ -17,8 +27,10 @@ Baca berurutan:
 | [Database design](docs/data/database-design.md) | **Invarian, matriks koneksi, ERD, batas transaksi** |
 | [Carry-over](docs/migration/carry-over.md) | Keputusan #1–#15 dan alasannya |
 | [Runtime](docs/operations/runtime.md) | Parameter operasional + pemicu revisi |
-| [API](docs/contracts/api.md) · [SSE](docs/contracts/sse.md) · [Klarifikasi](docs/contracts/clarifications.md) · [Responses](docs/contracts/responses.md) | Kontrak antarmuka |
-| [Checklist](docs/checklist.md) | Apa yang sudah dan belum selesai |
+| [API](docs/contracts/api.md) · [SSE](docs/contracts/sse.md) · [Klarifikasi](docs/contracts/clarifications.md) · [Responses](docs/contracts/responses.md) | Kontrak antarmuka yang disepakati |
+| [**Status implementasi**](docs/status.md) | Apa yang **berjalan**, apa yang belum, utang, urutan berikutnya |
+| [**Referensi API**](docs/contracts/api-reference.md) | Permukaan HTTP yang benar-benar ada — titik mulai frontend |
+| [Checklist](docs/checklist.md) | Kelengkapan **dokumentasi**; `[x]` berarti tertulis, bukan terbangun |
 
 Kalau hanya sempat membaca satu, baca **§1 Invarian** dan **§2 Matriks koneksi** pada `database-design.md`. Keduanya adalah aturan yang membuat bagian-bagian sistem ini tetap terhubung.
 

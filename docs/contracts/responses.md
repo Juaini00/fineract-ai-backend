@@ -2,6 +2,14 @@
 
 Status: disepakati 2026-09-13. Menutup utang **D1–D3** pada [database-design.md](../data/database-design.md) §2.2. Penyimpanan dimiliki `job_responses` (#10); transport dimiliki [api.md](api.md) dan [sse.md](sse.md); lifecycle dimiliki [engine.md](../architecture/engine.md). Skema JSON penuh per blok adalah pekerjaan OpenAPI di `api.md`, bukan dokumen ini.
 
+> **Status implementasi (2026-09-15).** Sudah dipancarkan: `metrics`, `table`,
+> `narrative`, `provenance`, `limitation` — seluruhnya deterministik, tanpa
+> model. **Belum**: `chart`, `findings`, `comparison`, `suggestions`, narasi
+> LLM, dan **validator D1–D3 sebagai penegakan runtime** (aturannya tertulis di
+> sini, tetapi belum ada kode yang menolak klaim composer). Blok yang benar-benar
+> dikirim ada di [api-reference.md §5](api-reference.md#5-job); status lengkap di
+> [status.md](../status.md).
+
 ## Prinsip
 
 > **Response bukan hasil yang dipercaya, melainkan hasil yang dihitung ulang dan ditolak bila tidak cocok.**

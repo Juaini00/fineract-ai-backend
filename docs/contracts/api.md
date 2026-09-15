@@ -1,6 +1,14 @@
 # Job HTTP contract
 
-Status: agreed endpoint responsibilities, recorded 2026-09-08. Full OpenAPI/JSON Schema, exact authentication integration, pagination limits and error-code registry are pending. This document does not claim a complete API specification.
+Status: agreed endpoint responsibilities, recorded 2026-09-08. Full
+OpenAPI/JSON Schema is pending. This document does not claim a complete API
+specification.
+
+> **Untuk integrasi frontend, pakai [api-reference.md](api-reference.md), bukan
+> dokumen ini.** Dokumen ini mencatat tanggung jawab endpoint yang *disepakati*,
+> termasuk yang belum dibangun. `api-reference.md` mencatat permukaan yang
+> *benar-benar ada*, dengan payload yang disalin dari aplikasi berjalan, matriks
+> error, dan alur integrasi.
 
 ## Endpoints
 

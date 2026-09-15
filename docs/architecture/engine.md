@@ -1,6 +1,14 @@
 # Engine lifecycle
 
-Status: agreed lifecycle direction and clarification/transport integration, recorded 2026-09-08. The full transition matrix, recovery mechanics and database constraints remain design work; this is not implementation-ready.
+Status: agreed lifecycle direction and clarification/transport integration,
+recorded 2026-09-08; transition matrix, lease/fencing and recovery added later.
+
+> **Status implementasi (2026-09-15).** Sudah berjalan: klaim/lease/fencing
+> (T2), reaper (T11), plan deterministik (T3), eksekusi capability (T4), commit
+> response (T7), klarifikasi (T5/T6), skip (T8), `job.resumed`. **Belum**:
+> re-plan dan `plan_version` > 1, plan multi-node dan fan-in, reuse output
+> lintas plan, dan D4 (kesegaran katalog pada batas verifikasi–eksekusi).
+> Lihat [status.md](../status.md).
 
 ## One owner
 

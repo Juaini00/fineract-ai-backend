@@ -1,6 +1,16 @@
 # Job progress and SSE contract
 
-Status: agreed protocol behavior, recorded 2026-09-08. Exhaustive event payload schemas, replay retention, heartbeat/timeout values and deployment verification remain open. SSE is a product experience surface, not the internal audit stream.
+Status: agreed protocol behavior, recorded 2026-09-08. SSE is a product
+experience surface, not the internal audit stream.
+
+> **Status implementasi (2026-09-15).** `GET /chat/jobs/{id}/events` berjalan:
+> replay dari cursor, cursor tidak sah gagal eksplisit, duplikat aman,
+> disconnect bukan cancel, terminal menutup stream, fallback polling dibuktikan
+> dengan notifikasi dimatikan. **Belum**: retensi replay/purge riwayat, auth
+> expiry di tengah stream, dan verifikasi melalui proxy deployment nyata.
+> Bentuk frame dan kosakata event yang benar-benar dipancarkan ada di
+> [api-reference.md §7](api-reference.md#7-sse--get-chatjobsjob_idevents);
+> status lengkap di [status.md](../status.md).
 
 ## Transport and durability
 
