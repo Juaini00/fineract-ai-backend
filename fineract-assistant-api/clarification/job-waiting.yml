@@ -1,0 +1,24 @@
+info:
+  name: job ditangguhkan, bukan ditolak
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("WaitingForUser tanpa outcome", function () {
+          expect(job.lifecycle).to.equal("WaitingForUser");
+          // Lifecycle nonterminal tidak boleh membawa outcome/completeness.
+          expect(job.outcome).to.equal(null);
+          expect(job.completeness).to.equal(null);
+        });

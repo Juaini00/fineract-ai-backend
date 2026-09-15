@@ -9,6 +9,7 @@
 
 pub mod audit;
 pub mod catalog;
+pub mod clarification;
 pub mod engine;
 pub mod job;
 pub mod session;
@@ -22,4 +23,5 @@ pub fn router() -> Router<Foundation> {
     Router::new()
         .merge(session::route::router())
         .merge(job::route::router())
+        .merge(clarification::route::router())
 }

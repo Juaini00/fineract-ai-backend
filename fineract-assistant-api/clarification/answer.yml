@@ -1,0 +1,33 @@
+info:
+  name: jawaban sah
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{clarifyIdemKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{clarificationId}}",
+        "revision": 1,
+        "answers": { "search": "Grace Dao" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("202: jawaban durable, job yang sama kembali mengantre", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("clarifyJobId"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

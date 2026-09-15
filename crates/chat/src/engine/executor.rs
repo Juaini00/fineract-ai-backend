@@ -74,6 +74,7 @@ pub async fn execute(fineract: &FineractDb, plan: &Plan) -> Result<Executed, Exe
                 Bound::Date(date) => query.bind(*date),
                 Bound::OfficeIds(ids) => query.bind(ids.clone()),
                 Bound::Bigint(value) => query.bind(*value),
+                Bound::Text(value) => query.bind(value.clone()),
                 Bound::NullText => query.bind(Option::<String>::None),
                 Bound::NullBigintArray => query.bind(Option::<Vec<i64>>::None),
                 Bound::NullBigint => query.bind(Option::<i64>::None),

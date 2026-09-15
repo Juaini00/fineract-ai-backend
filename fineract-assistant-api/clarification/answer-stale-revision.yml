@@ -1,0 +1,31 @@
+info:
+  name: jawaban dengan revision basi
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{clarifyIdemKey}}-stale"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{clarificationId}}",
+        "revision": 99,
+        "answers": { "search": "Grace" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: form basi tidak dapat menyunting riwayat yang diterima", function () {
+          expect(res.getStatus()).to.equal(409);
+        });

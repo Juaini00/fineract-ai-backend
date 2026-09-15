@@ -102,6 +102,11 @@ pub struct Config {
     pub reaper_interval_secs: u64,
     #[serde(default = "default_job_ttl_running_secs")]
     pub job_ttl_running_secs: i64,
+    /// Batas tunggu jawaban klarifikasi (runtime.md §2). Dibatasi dua sisi:
+    /// terlalu pendek meng-`Expired` percakapan sah, terlalu panjang mengunci
+    /// session semalaman karena satu job nonterminal per session (#13).
+    #[serde(default = "default_clarification_wait_limit_secs")]
+    pub clarification_wait_limit_secs: i64,
     /// Jeda polling antrean. Sementara: notifikasi Redis belum dipakai, jadi
     /// worker memeriksa PostgreSQL secara berkala. Setelah notifikasi ada,
     /// polling menjadi fallback, bukan jalur utama (SSE §transport).
@@ -273,6 +278,9 @@ fn default_reaper_interval_secs() -> u64 {
 }
 fn default_job_ttl_running_secs() -> i64 {
     1_800
+}
+fn default_clarification_wait_limit_secs() -> i64 {
+    7_200
 }
 fn default_worker_poll_interval_ms() -> u64 {
     1_000

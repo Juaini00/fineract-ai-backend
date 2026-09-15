@@ -34,7 +34,7 @@ if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "engine" ]; then
+        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -42,7 +42,7 @@ if [ "$#" -gt 0 ]; then
     done
 else
     INTAKE_FOLDERS=(health auth chat)
-    ENGINE_FOLDERS=(engine)
+    ENGINE_FOLDERS=(engine clarification)
 fi
 
 command -v bru >/dev/null || {

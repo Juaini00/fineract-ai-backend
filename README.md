@@ -4,7 +4,7 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: menjawab pertanyaan nyata.** Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus hidup job (T2/T7/T11), planner deterministik (T3), dan eksekusi capability yang disetujui ke Fineract (T4) sudah berjalan dan terverifikasi terhadap data nyata. Pertanyaan yang tercakup capability dijawab dengan angka + provenance; yang tidak tercakup ditolak sebagai `Unsupported` dengan sebab yang dinyatakan. Klarifikasi, dataset berchunk, memori session, SSE dan integrasi LLM belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: menjawab pertanyaan nyata.** Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus hidup job (T2/T7/T11), planner deterministik (T3), dan eksekusi capability yang disetujui ke Fineract (T4) sudah berjalan dan terverifikasi terhadap data nyata. Pertanyaan yang tercakup capability dijawab dengan angka + provenance; yang tidak tercakup ditolak sebagai `Unsupported` dengan sebab yang dinyatakan. Klarifikasi bertipe (T5–T6) juga berjalan: input yang kurang ditanyakan pada job yang sama, bukan ditolak. Resolver opsi, dataset berchunk, memori session, SSE dan integrasi LLM belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
 
 ## Dokumen
 
@@ -62,7 +62,7 @@ KEEP_RUNNING=1 ./scripts/integration-test.sh  # biarkan app hidup untuk debug
 ```
 
 Koleksi ada di `fineract-assistant-api/` (format OpenCollection 1.0):
-`health/`, `auth/`, `chat/`, `engine/`. Request di dalam satu folder
+`health/`, `auth/`, `chat/`, `engine/`, `clarification/`. Request di dalam satu folder
 **berurutan dan saling bergantung** — rotasi refresh token hanya dapat diuji
 setelah login, dan deteksi pemakaian ulang hanya setelah rotasi.
 
@@ -70,8 +70,9 @@ Runner menjalankannya dalam **dua tahap**. `health`/`auth`/`chat` berjalan
 dengan `WORKER_ENABLED=false` karena folder `chat` menguji semantik penerimaan
 (job tetap `Queued`, satu job nonterminal per session); dengan worker menyala,
 job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
-perilaku yang diuji. `engine` berjalan dengan worker menyala untuk membuktikan
-job bergerak sampai terminal tanpa campur tangan klien.
+perilaku yang diuji. `engine` dan `clarification` berjalan dengan worker
+menyala untuk membuktikan job bergerak sampai terminal tanpa campur tangan
+klien, dan bahwa job yang ditangguhkan melanjutkan setelah dijawab.
 
 Runner menunggu `/health` benar-benar `200`, bukan sekadar port terbuka: port
 yang sudah menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan
@@ -95,7 +96,8 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 ## Yang belum ada
 
-- Klarifikasi (T5–T6) dan skip (T8): parameter wajib yang tidak dapat diturunkan saat ini menghasilkan `Unsupported`, bukan pertanyaan balik.
+- Resolver opsi untuk slot identitas: `account_number` (`transient_sensitive_input`) tetap `Unsupported` karena K1 melarang teks bebas menjadi binding identitas tanpa opsi yang diterbitkan server.
+- Skip (T8) dan klarifikasi bertahap (form kedua setelah resolver).
 - Plan multi-node dan fan-in: planner menghasilkan tepat satu node `CuratedQuery`.
 - Analytical contract (Mode 2), dataset berchunk/handle, memori session.
 - SSE `/chat/jobs/{id}/events`, dan integrasi LLM/embedding (narasi additive).

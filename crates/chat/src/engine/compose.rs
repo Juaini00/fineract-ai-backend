@@ -175,6 +175,7 @@ fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
                 "value": match value {
                     Bound::Date(date) => Value::String(date.to_string()),
                     Bound::Bigint(value) => Value::from(*value),
+                    Bound::Text(value) => Value::String(value.clone()),
                     Bound::OfficeIds(_) => Value::String(format!("{office_count} authorized offices")),
                     Bound::NullText | Bound::NullBigintArray | Bound::NullBigint => Value::Null,
                 },

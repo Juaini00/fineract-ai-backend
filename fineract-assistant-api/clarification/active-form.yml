@@ -1,0 +1,33 @@
+info:
+  name: form aktif
+  type: http
+  seq: 5
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const form = res.getBody().data;
+
+        test("form terbuka dengan field bertipe", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(form.state).to.equal("open");
+          expect(form.revision).to.equal(1);
+          expect(form.fields_json).to.have.lengthOf(1);
+          expect(form.fields_json[0].field_id).to.equal("search");
+          expect(form.fields_json[0].type).to.equal("text");
+        });
+
+        test("punya batas waktu sendiri, bukan TTL job berjalan", function () {
+          expect(form.expires_at).to.be.a("string");
+        });
+
+        bru.setVar("clarificationId", form.clarification_id);
+        bru.setVar("clarificationRevision", form.revision);

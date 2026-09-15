@@ -1,0 +1,6 @@
+info:
+  name: clarification
+  seq: 5
+  description: |
+    Siklus klarifikasi: job ditangguhkan pada job yang SAMA, dijawab, lalu
+    dilanjutkan. Dijalankan pada tahap engine (worker menyala).

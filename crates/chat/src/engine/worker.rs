@@ -21,6 +21,7 @@ use uuid::Uuid;
 
 use crate::{
     catalog::Catalog,
+    clarification::repository as clarification_repository,
     engine::{
         compose, executor,
         planner::{self, Plan},
@@ -199,17 +200,29 @@ async fn run_job(
         }
     };
 
+    // Jawaban klarifikasi yang sudah diterima dibaca lebih dulu: slot yang
+    // sudah dijawab tidak pernah ditanyakan ulang (clarifications.md).
+    let supplied = clarification_repository::accepted_answers(pool, job.id).await?;
+
     let planned = planner::plan(
         pool,
         catalog,
         catalog_version_id,
         &job.request_text,
         &authorized,
+        &supplied,
     )
     .await?;
 
     let plan = match planned {
         Ok(plan) => plan,
+        // Parameter yang kurang dan dapat dijawab pengguna → tanyakan (T5),
+        // jangan tolak. Job yang sama ditangguhkan; tidak ada job pengganti.
+        Err(planner::Unplannable::NeedsClarification { capability, missing })
+            if missing.iter().all(|item| !item.identity) =>
+        {
+            return open_clarification(foundation, job, &capability, &missing).await;
+        }
         Err(problem) => {
             return repository::settle_with_response(
                 pool,
@@ -332,6 +345,52 @@ async fn run_job(
 
             settle_operational_failure(foundation, job, failure_code).await
         }
+    }
+}
+
+/// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.
+async fn open_clarification(
+    foundation: &Foundation,
+    job: &ClaimedJob,
+    capability: &str,
+    missing: &[planner::Missing],
+) -> anyhow::Result<bool> {
+    let fields: Vec<serde_json::Value> = missing
+        .iter()
+        .map(|item| {
+            serde_json::json!({
+                "field_id": item.name,
+                "type": item.field_type(),
+                // Tipe parameter ikut dibawa supaya validasi jawaban memakai
+                // kontrak yang sama dengan pengikatan parameter — bukan dua
+                // aturan yang dapat menyimpang.
+                "parameter_kind": item.kind,
+                "label": item.name.replace('_', " "),
+                "required": true,
+            })
+        })
+        .collect();
+
+    let form = clarification_repository::open_form(
+        foundation.app_db().pool(),
+        job.id,
+        job.session_id,
+        job.lease_token,
+        None,
+        &format!("Missing input for capability '{capability}'"),
+        "Additional input needed",
+        &serde_json::Value::Array(fields),
+        foundation.config().clarification_wait_limit_secs,
+    )
+    .await?;
+
+    match form {
+        Some(form) => {
+            info!(job_id = %job.id, clarification_id = %form.clarification_id, "klarifikasi dibuka");
+            Ok(true)
+        }
+        // Fencing kalah.
+        None => Ok(false),
     }
 }
 

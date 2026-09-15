@@ -133,7 +133,7 @@ fn acknowledgement(job: &Job) -> JobAcknowledgement {
 /// Batas panjang mengikuti CHECK pada tabel `idempotency_keys`: kunci yang
 /// lolos di sini tetapi ditolak database akan muncul sebagai 500, padahal ia
 /// kesalahan klien.
-fn idempotency_key(headers: &HeaderMap, config: &foundation::Config) -> Result<String, ApiError> {
+pub fn idempotency_key(headers: &HeaderMap, config: &foundation::Config) -> Result<String, ApiError> {
     let key = headers
         .get(IDEMPOTENCY_HEADER)
         .and_then(|value| value.to_str().ok())

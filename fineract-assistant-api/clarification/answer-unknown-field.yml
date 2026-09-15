@@ -1,0 +1,34 @@
+info:
+  name: jawaban untuk field yang tidak pernah ditanyakan
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{clarifyIdemKey}}-unknown"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{clarificationId}}",
+        "revision": 1,
+        "answers": { "office_ids": "1,2,3" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422: field asing ditolak, bukan diabaikan", function () {
+          // Menerimanya berarti klien dapat menyuntikkan parameter — termasuk
+          // scope — yang tidak pernah ditanyakan.
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().error.message).to.include("Unknown field");
+        });
