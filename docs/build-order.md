@@ -254,17 +254,37 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | Layer | Status | Prerequisites met? |
 | --- | --- | --- |
 | L0 Foundation | 🔨 | — |
-| L1 Correct catalog | ⬜ | L0 🔨 |
-| L2 Retrieval | ⬜ | L1 ⬜ |
-| L3 Datasets | ⬜ | L0 🔨 |
-| L4 Correct answers | 🔨 | L1 ⬜, L3 ⬜ |
-| L5 Response shape | ❌ | L0 🔨 |
-| L6 Validator | ❌ | L5 ❌ |
+| L1 Correct catalog | 🔨 | L0 🔨 |
+| L2 Retrieval | ⬜ | L1 🔨 |
+| L3 Datasets | 🔨 | L0 🔨 |
+| L4 Correct answers | 🔨 | L1 🔨, L3 🔨 |
+| L5 Response shape | 🔨 | L0 🔨 |
+| L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
 | L8 Above | ⬜ | L7 ❌ |
 
 **Not a single layer is ✅.** That is the real state on 2026-09-15, and it is more
 useful than a list of ✅ marks nobody can stand behind.
+
+Update after commits `fd425a8` (L1) and `d3a1535` (L3, L5, L6):
+
+- **L1 ⬜ → 🔨.** All 48 capabilities were run end to end and compared against
+  direct SQL (`knowledge/VERIFICATION.md`): 39 match, 9 do not. L1 is **not ✅**:
+  its gate is the four `CARRY-OVER.md` rules, and 9 entries fail rule 1 (mixed
+  currency, silent `LIMIT` truncation, double resolver grain). They are recorded,
+  not yet fixed — fixing them changes capability contracts and waits on the owner.
+- **L5 ❌ → 🔨 and L6 ❌ → 🔨.** The §6.2 and §6.3 deviations are fixed. 8 of the
+  10 RESP scenarios carry a test; 8.7 (chart→table downgrade) and 8.9 (expired
+  dataset table) do not yet. Cannot rise above 🔨 while not every scenario passes
+  and prerequisites are unfinished.
+- **L3 ⬜ → 🔨.** `datasets`/`dataset_chunks` are now written and read; all 6 DS
+  scenarios are referenced by **unit** tests. It is **not** 🧪: DS-8.2 and DS-8.4
+  are HTTP-surface behaviours and have no Bruno test yet, and the repo's own
+  thesis is that a passing unit test is not proof of the acceptance scenario.
+
+Coverage moved from 0/59 to **14/59** (see §5.1). No layer reaches 🧪 or ✅: the
+ceiling is capped by unfinished prerequisites and by scenarios that still lack a
+test.
 
 ### 5.1 Scenario coverage
 
@@ -274,19 +294,23 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Run of 2026-09-15 — **0 of 59 scenarios have a test**:
+Latest run (after `d3a1535`) — **14 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 0 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 0 | L0 |
-| `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 0 | L3 |
+| `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 0 | L4 |
-| `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 0 | L5, L6 |
+| `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 8 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **0** | |
+| | **Total** | **59** | **14** | |
+
+The DS tests are unit-level (`crates/chat/src/engine/dataset/`), and RESP is
+missing 8.7 and 8.9. "Has a test" is a coverage figure, not a conformance one —
+`acceptance-check.sh` cannot tell whether the test actually proves its scenario.
 
 **The count is 59, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).**
 One ID was given per scenario as the document actually writes it — one bullet or
@@ -320,7 +344,11 @@ saved to memory at that commit"*; K3 distinguishes skip (promotes) from cancel
 promotion here, and that is a decision"* — a unilateral decision against the
 contract.
 
-### 6.2 Block shape deviates from §1 and §2
+### 6.2 Block shape deviates from §1 and §2 — RESOLVED in `d3a1535`
+
+Fixed: `block_id`/`schema_version`/`derived_from` present, vocabulary limited to
+the 9 types, auto-bind in a `note` block, lineage in `evidence_json`. The table
+below records what was wrong before the fix.
 
 | Contract | Reality |
 | --- | --- |
@@ -331,13 +359,17 @@ contract.
 | Auto-bind disclosed in a `note` block (§5) | disclosed in a `limitation` block; `note` is **never used** |
 | Lineage in `evidence_json` (#10) | `evidence_json` is always `{}`; lineage was invented as a `provenance` block |
 
-### 6.3 The validator enforces the implementation, not the contract
+### 6.3 The validator enforces the implementation, not the contract — RESOLVED in `d3a1535`
 
-- D1 is computed at document level rather than per block, because `derived_from`
-  does not exist. This approximation was never declared.
-- D2 scans any block carrying `auto_bound_slots` instead of the `note` block, so
-  it **passes against the wrong shape**.
-- §1 and §2 are not enforced at all.
+Fixed: D1 is now computed per block through `derived_from` and aggregated; D2
+inspects the `note` block; §1 and §2 are enforced (a type outside the vocabulary
+is rejected). The list below records what was wrong before the fix.
+
+- D1 was computed at document level rather than per block, because `derived_from`
+  did not exist. This approximation was never declared.
+- D2 scanned any block carrying `auto_bound_slots` instead of the `note` block, so
+  it **passed against the wrong shape**.
+- §1 and §2 were not enforced at all.
 
 ### 6.4 `Cancelled` / `Expired` are recorded as `OperationalFailure`
 
