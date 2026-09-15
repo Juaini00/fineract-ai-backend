@@ -171,6 +171,13 @@ pub struct Config {
     pub auth_refresh_cookie_same_site: String,
     #[serde(default = "default_refresh_cookie_path")]
     pub auth_refresh_cookie_path: String,
+
+    // ---- CORS (dashboard web) ----
+    /// Origin yang diizinkan, dipisah koma. Kosong berarti mode pengembangan:
+    /// seluruh origin loopback (`localhost`/`127.0.0.1`) diizinkan pada port
+    /// berapa pun. Production wajib mengisinya secara eksplisit.
+    #[serde(default)]
+    pub cors_allowed_origins: String,
 }
 
 impl Config {

@@ -5,6 +5,7 @@
 //! di sini (overview §3).
 
 mod catalog_command;
+mod cors;
 mod health;
 
 use foundation::{Config, Foundation, auth, telemetry};
@@ -20,6 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env()?;
     let bind_address = config.bind_address();
     let app_env = config.app_env;
+    let cors_allowed_origins = config.cors_allowed_origins.clone();
 
     let foundation = Foundation::connect(config).await?;
 
@@ -56,7 +58,8 @@ async fn main() -> anyhow::Result<()> {
     let router = health::router()
         .merge(auth::route::router())
         .merge(chat::router(catalog, hub))
-        .with_state(foundation);
+        .with_state(foundation)
+        .layer(cors::layer(&cors_allowed_origins));
 
     let listener = TcpListener::bind(&bind_address).await?;
     info!(%bind_address, ?app_env, "jarvis listening");
