@@ -19,6 +19,7 @@ examples:
   - Show account and product overdraft terms for savings account [SAVINGS_ACCOUNT_NUMBER].
 guards:
   require_office_scope: true
+  snapshot_only: true
 checks:
   - { id: no_inferred_terms, rule: Account and product terms remain separate and nulls are preserved. }
 parameters:

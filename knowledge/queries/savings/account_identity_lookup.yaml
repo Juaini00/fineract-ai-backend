@@ -10,7 +10,7 @@ parameters:
 output_fields:
   - { name: savings_account_id, type: bigint, sensitivity: public_business }
   - { name: masked_account_number, type: string, sensitivity: masked_output }
-  - { name: client_id, type: bigint, sensitivity: pii }
+  - { name: client_id, type: bigint, sensitivity: public_business }
   - { name: client_display_name, type: string, sensitivity: pii }
   - { name: office_id, type: bigint, sensitivity: public_business }
   - { name: office_name, type: string, sensitivity: public_business }

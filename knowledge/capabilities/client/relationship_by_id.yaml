@@ -19,6 +19,7 @@ examples: [Continue with the selected client.]
 continuation: true
 guards:
   require_office_scope: true
+  snapshot_only: true
   pii: { returns_pii: true, never_return: [account_no, external_id, mobile_no, email] }
 parameters:
   office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }

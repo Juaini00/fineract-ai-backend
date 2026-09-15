@@ -19,6 +19,7 @@ examples:
   - Which office and product belong to savings account [SAVINGS_ACCOUNT_NUMBER]?
 guards:
   require_office_scope: true
+  snapshot_only: true
 checks:
   - { id: exact_identifier_only, rule: Account number is transient, equality-only, and never projected raw. }
 parameters:

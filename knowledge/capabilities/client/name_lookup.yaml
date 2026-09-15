@@ -3,7 +3,8 @@ status: approved_mvp
 domain: client
 display_name: Client Name Lookup
 description: Find clients whose display name matches a supplied person name within the caller's authorized
-  office scope.
+  office scope. The result is capped at 20 rows inside the query and the cap is not a parameter, so a
+  broad search term silently returns a truncated list, not the full match set.
 data_areas:
 - client_foundation
 - organization_foundation
@@ -29,6 +30,7 @@ unsupported_intents:
 - external id lookup
 guards:
   require_office_scope: true
+  snapshot_only: true
   pii:
     returns_pii: true
     never_return:

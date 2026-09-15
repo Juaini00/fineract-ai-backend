@@ -24,6 +24,7 @@ supported_intents:
   - resolve a charge type entity by name within authorized office scope
 guards:
   require_office_scope: true
+  snapshot_only: true
 dataset_recipe:
   dataset_id: savings.charge_definitions
   shape_id: charge_type_candidates

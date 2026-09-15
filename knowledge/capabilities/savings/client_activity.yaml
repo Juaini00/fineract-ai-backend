@@ -12,7 +12,7 @@ display_name: Savings Client Activity
 # current one-probe-per-capability limit while still answering 012 scenario
 # A1 (client -> account activity) since the account id is a returned column.
 continuation: true
-description: Non-reversed savings transactions for a client resolved by name, newest first, within the caller's authorized office scope.
+description: Non-reversed savings transactions for a client resolved by name, newest first, within the caller's authorized office scope. The result is capped at 100 rows inside the query and the cap is not a parameter, so an active client returns only the 100 newest transactions, not the full history.
 data_areas:
   - organization_foundation
   - client_foundation
@@ -38,6 +38,7 @@ defaults:
   authorized_scope_only: true
 guards:
   require_office_scope: true
+  snapshot_only: true
   pii:
     returns_pii: true
     never_return:

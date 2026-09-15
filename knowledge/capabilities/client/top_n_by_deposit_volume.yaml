@@ -3,7 +3,8 @@ status: approved_mvp
 domain: client
 display_name: Top Clients by Deposit Volume
 description: Return clients with the largest total deposit amount within a date range across authorized
-  offices.
+  offices. Grain is one row per client and currency — amounts of different currencies are never
+  consolidated, so one client may appear once per currency held.
 data_areas:
 - client_foundation
 - organization_foundation

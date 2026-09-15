@@ -25,6 +25,7 @@ supported_intents:
   - resolve an office entity by name within authorized office scope
 guards:
   require_office_scope: true
+  snapshot_only: true
 dataset_recipe:
   dataset_id: organization.offices
   shape_id: office_candidates
