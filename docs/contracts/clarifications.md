@@ -84,14 +84,14 @@ Audit records form/plan revision, unresolved slot, resolver and option-set refer
 
 ## Acceptance scenarios
 
-- Radio and searchable select yield identical single-choice semantics; checkbox false is not missing.
-- Conditional required fields validate correctly; changing a parent invalidates dependent choices.
-- Two data-dependent stages continue one job and retain completed outputs.
-- Double submit/network retry is idempotent; stale revisions do not resume.
-- Foreign, expired or out-of-scope choices are rejected.
-- Long option lists are paginated; all-matches never means visible-page-only.
-- Suggestions do not auto-submit and no-match can refine search.
-- Budget exhaustion and expiry terminate waiting predictably without fabricated bindings.
+- `CLR-1` — Radio and searchable select yield identical single-choice semantics; checkbox false is not missing.
+- `CLR-2` — Conditional required fields validate correctly; changing a parent invalidates dependent choices.
+- `CLR-3` — Two data-dependent stages continue one job and retain completed outputs.
+- `CLR-4` — Double submit/network retry is idempotent; stale revisions do not resume.
+- `CLR-5` — Foreign, expired or out-of-scope choices are rejected.
+- `CLR-6` — Long option lists are paginated; all-matches never means visible-page-only.
+- `CLR-7` — Suggestions do not auto-submit and no-match can refine search.
+- `CLR-8` — Budget exhaustion and expiry terminate waiting predictably without fabricated bindings.
 
 ## Manual input dan skip (disepakati 2026-09-12)
 

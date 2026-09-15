@@ -182,16 +182,16 @@ Konflik antar-tingkat **wajib diungkap** pada blok `note`, tidak pernah diselesa
 
 ## 8. Skenario acceptance
 
-- Response `Complete` ditolak bila salah satu node kontributornya `Partial`.
-- Narasi dengan angka yang tidak ada di blok mana pun dan tanpa `derivation` ditolak.
-- Angka turunan ber-`derivation` diterima dan lineage-nya dapat ditelusuri.
-- Slot auto-bind yang tidak diungkap menyebabkan validasi gagal.
-- Versi `failed` tetap tersimpan dan dapat diinvestigasi setelah fallback disajikan.
-- Fallback tidak memanggil model.
-- Chart yang tidak kompatibel turun menjadi tabel, bukan gagal dan bukan menyesatkan.
-- PII dimatikan: kolom identitas tidak muncul dan penahanannya dinyatakan.
-- Dataset kedaluwarsa: tabel menyatakan detail tidak lagi tersedia, angka ringkas tetap terbaca dengan `as_of`.
-- Tipe blok yang tidak dikenal klien dilewati tanpa merusak render.
+- `RESP-8.1` — Response `Complete` ditolak bila salah satu node kontributornya `Partial`.
+- `RESP-8.2` — Narasi dengan angka yang tidak ada di blok mana pun dan tanpa `derivation` ditolak.
+- `RESP-8.3` — Angka turunan ber-`derivation` diterima dan lineage-nya dapat ditelusuri.
+- `RESP-8.4` — Slot auto-bind yang tidak diungkap menyebabkan validasi gagal.
+- `RESP-8.5` — Versi `failed` tetap tersimpan dan dapat diinvestigasi setelah fallback disajikan.
+- `RESP-8.6` — Fallback tidak memanggil model.
+- `RESP-8.7` — Chart yang tidak kompatibel turun menjadi tabel, bukan gagal dan bukan menyesatkan.
+- `RESP-8.8` — PII dimatikan: kolom identitas tidak muncul dan penahanannya dinyatakan.
+- `RESP-8.9` — Dataset kedaluwarsa: tabel menyatakan detail tidak lagi tersedia, angka ringkas tetap terbaca dengan `as_of`.
+- `RESP-8.10` — Tipe blok yang tidak dikenal klien dilewati tanpa merusak render.
 
 ---
 

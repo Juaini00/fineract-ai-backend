@@ -54,9 +54,9 @@ Accepted state transitions, required audit records and corresponding public even
 
 ## Acceptance scenarios
 
-- Job/answer acknowledged only after durable acceptance.
-- Retry after a lost HTTP acknowledgement does not create/resume twice.
-- Snapshot followed by subscription has no missing transition.
-- Refresh restores the same active clarification or persisted result.
-- Invalid fields and stale forms do not mutate job state.
-- Unauthorized users cannot inspect jobs, choices, cursors or stored acknowledgements.
+- `API-1` — Job/answer acknowledged only after durable acceptance.
+- `API-2` — Retry after a lost HTTP acknowledgement does not create/resume twice.
+- `API-3` — Snapshot followed by subscription has no missing transition.
+- `API-4` — Refresh restores the same active clarification or persisted result.
+- `API-5` — Invalid fields and stale forms do not mutate job state.
+- `API-6` — Unauthorized users cannot inspect jobs, choices, cursors or stored acknowledgements.

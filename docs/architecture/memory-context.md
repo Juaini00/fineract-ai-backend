@@ -80,10 +80,10 @@ Handle dataset yang expired/purged selalu eksplisit melalui C13 (`handle_state` 
 
 ## 7. Skenario acceptance
 
-1. **Response normal:** T7 commit menyimpan response dan facts dalam satu transaksi; setiap `session_memory` baru memiliki `source_response_version` yang menunjuk response tersebut.
-2. **Crash pra-commit:** worker berhenti sebelum T7 selesai; tidak ada facts baru. Jika job tidak dipulihkan sampai terminal, follow-up melakukan retrieval baru.
-3. **Skip:** T8 menghasilkan response `skipped`, gap eksplisit, terminal event, dan promosi memori atomik; cancel tidak mempromosikan memori.
-4. **Summary gagal:** facts/response hasil commit tetap ada; summary berstatus `stale`, watermark lama tetap utuh, dan call berikutnya tidak menganggap ringkasan itu current.
-5. **Follow-up overflow:** Engine mengurangi preview/context opsional atau memakai agregasi/retrieval terarah; ia tidak mengubah periode, office, atau population tanpa pengungkapan.
-6. **Entity/scope baru:** fakta valid lama ditandai superseded, bukan dihapus; constraint menolak dua `ResolvedEntity` valid untuk `entity_key` sama atau dua `ActiveScope` valid dalam satu session.
-7. **Akses ulang:** user yang bukan owner tidak dapat membaca memory/session; dataset handle dari prior result tetap gagal dipakai bila re-authorize atau `handle_state` tidak mengizinkan.
+1. `MEM-7.1` — **Response normal:** T7 commit menyimpan response dan facts dalam satu transaksi; setiap `session_memory` baru memiliki `source_response_version` yang menunjuk response tersebut.
+2. `MEM-7.2` — **Crash pra-commit:** worker berhenti sebelum T7 selesai; tidak ada facts baru. Jika job tidak dipulihkan sampai terminal, follow-up melakukan retrieval baru.
+3. `MEM-7.3` — **Skip:** T8 menghasilkan response `skipped`, gap eksplisit, terminal event, dan promosi memori atomik; cancel tidak mempromosikan memori.
+4. `MEM-7.4` — **Summary gagal:** facts/response hasil commit tetap ada; summary berstatus `stale`, watermark lama tetap utuh, dan call berikutnya tidak menganggap ringkasan itu current.
+5. `MEM-7.5` — **Follow-up overflow:** Engine mengurangi preview/context opsional atau memakai agregasi/retrieval terarah; ia tidak mengubah periode, office, atau population tanpa pengungkapan.
+6. `MEM-7.6` — **Entity/scope baru:** fakta valid lama ditandai superseded, bukan dihapus; constraint menolak dua `ResolvedEntity` valid untuk `entity_key` sama atau dua `ActiveScope` valid dalam satu session.
+7. `MEM-7.7` — **Akses ulang:** user yang bukan owner tidak dapat membaca memory/session; dataset handle dari prior result tetap gagal dipakai bila re-authorize atau `handle_state` tidak mengizinkan.

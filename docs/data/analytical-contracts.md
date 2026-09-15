@@ -154,13 +154,13 @@ Nilai budget per job (query/model/token) milik runtime.md §6 dan counter-nya ab
 
 ## 8. Skenario acceptance
 
-- Plan yang menggabungkan measure pada grain berbeda tanpa grain hasil ditolak sebelum eksekusi.
-- Field `secret_never_expose` tidak pernah muncul di prompt schema, output, log, maupun response.
-- Query tanpa `office_ids` terikat ditolak validator; filter Rust-side ditolak review.
-- `Unsupported` dikembalikan saat tidak ada capability maupun kontrak yang disetujui.
-- Katalog diubah di tengah job → plan diverifikasi ulang atau node ditolak (D4).
-- Kontrak yang prosa-nya tidak cocok dengan SQL-nya gagal verifikasi katalog.
-- Kurs konsolidasi direproduksi persis lewat `exchange_rate_id` yang direkam.
+- `AC-8.1` — Plan yang menggabungkan measure pada grain berbeda tanpa grain hasil ditolak sebelum eksekusi.
+- `AC-8.2` — Field `secret_never_expose` tidak pernah muncul di prompt schema, output, log, maupun response.
+- `AC-8.3` — Query tanpa `office_ids` terikat ditolak validator; filter Rust-side ditolak review.
+- `AC-8.4` — `Unsupported` dikembalikan saat tidak ada capability maupun kontrak yang disetujui.
+- `AC-8.5` — Katalog diubah di tengah job → plan diverifikasi ulang atau node ditolak (D4).
+- `AC-8.6` — Kontrak yang prosa-nya tidak cocok dengan SQL-nya gagal verifikasi katalog.
+- `AC-8.7` — Kurs konsolidasi direproduksi persis lewat `exchange_rate_id` yang direkam.
 
 ## 9. Terbuka
 

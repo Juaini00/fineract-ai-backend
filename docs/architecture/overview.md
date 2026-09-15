@@ -112,13 +112,13 @@ Klarifikasi tidak membentuk engine kedua: Engine dapat menangguhkan job yang sam
 
 ## 6. Acceptance scenarios
 
-1. **Simple request:** request lengkap tetap melewati satu Engine; job diakui 202 hanya setelah T1, approved source query berjalan read-only di luar transaksi, dan response tervalidasi selesai melalui T7.
-2. **Multi-node fan-in:** node independen dapat berjalan paralel dalam shared budget; node dependen baru diadmit setelah seluruh input wajib selesai. Response menyatakan partial/unknown dan gap secara eksplisit bila fail-policy mengizinkan hasil parsial.
-3. **Clarification dan reconnect:** informasi kurang menangguhkan job yang sama ke `WaitingForUser`; refresh menampilkan form durable yang sama, jawaban valid melanjutkan job, dan replay SSE tidak kehilangan transisi.
-4. **Crash setelah external call:** bila query/model call selesai tetapi T4 belum commit, recovery memperlakukan outcome sebagai uncertain/`Abandoned` dan memakai retry policy bounded; sistem tidak menjanjikan exactly-once external execution.
-5. **Redis outage atau client disconnect:** job tetap berjalan dan state/event tidak hilang; client mengambil snapshot/cursor dari PostgreSQL lalu replay. Disconnect bukan cancel.
-6. **Read-only dan authorization:** upaya memakai surface yang tidak disetujui, memperlebar office scope, atau menulis ke Fineract ditolak sebelum source execution; memory/summary tidak dapat memberikan izin.
-7. **Commit isolation:** instrumentation membuktikan tidak ada LLM, HTTP, embedding, atau query Fineract selama transaksi T1–T12 terbuka; audit/event lokal tetap atomik dengan transisi yang dilindungi.
+1. `OVR-6.1` — **Simple request:** request lengkap tetap melewati satu Engine; job diakui 202 hanya setelah T1, approved source query berjalan read-only di luar transaksi, dan response tervalidasi selesai melalui T7.
+2. `OVR-6.2` — **Multi-node fan-in:** node independen dapat berjalan paralel dalam shared budget; node dependen baru diadmit setelah seluruh input wajib selesai. Response menyatakan partial/unknown dan gap secara eksplisit bila fail-policy mengizinkan hasil parsial.
+3. `OVR-6.3` — **Clarification dan reconnect:** informasi kurang menangguhkan job yang sama ke `WaitingForUser`; refresh menampilkan form durable yang sama, jawaban valid melanjutkan job, dan replay SSE tidak kehilangan transisi.
+4. `OVR-6.4` — **Crash setelah external call:** bila query/model call selesai tetapi T4 belum commit, recovery memperlakukan outcome sebagai uncertain/`Abandoned` dan memakai retry policy bounded; sistem tidak menjanjikan exactly-once external execution.
+5. `OVR-6.5` — **Redis outage atau client disconnect:** job tetap berjalan dan state/event tidak hilang; client mengambil snapshot/cursor dari PostgreSQL lalu replay. Disconnect bukan cancel.
+6. `OVR-6.6` — **Read-only dan authorization:** upaya memakai surface yang tidak disetujui, memperlebar office scope, atau menulis ke Fineract ditolak sebelum source execution; memory/summary tidak dapat memberikan izin.
+7. `OVR-6.7` — **Commit isolation:** instrumentation membuktikan tidak ada LLM, HTTP, embedding, atau query Fineract selama transaksi T1–T12 terbuka; audit/event lokal tetap atomik dengan transisi yang dilindungi.
 
 ## 7. Peta kontrak keputusan
 

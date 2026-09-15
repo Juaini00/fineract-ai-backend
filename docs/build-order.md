@@ -266,6 +266,41 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 **Not a single layer is ✅.** That is the real state on 2026-09-15, and it is more
 useful than a list of ✅ marks nobody can stand behind.
 
+### 5.1 Scenario coverage
+
+Every acceptance scenario now carries a stable ID, added in place without
+touching a word of the scenario text. `./scripts/acceptance-check.sh` collects
+them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
+fails when a layer marked ✅ in the table above still has a scenario without a
+test.
+
+Run of 2026-09-15 — **0 of 59 scenarios have a test**:
+
+| Prefix | Document | Scenarios | With a test | Owning layer |
+| --- | --- | --- | --- | --- |
+| `API-` | [contracts/api.md](contracts/api.md) | 6 | 0 | L0 |
+| `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 0 | L0 |
+| `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 0 | L3 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 0 | L4 |
+| `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 0 | L5, L6 |
+| `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
+| `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
+| `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
+| | **Total** | **59** | **0** | |
+
+**The count is 59, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).**
+One ID was given per scenario as the document actually writes it — one bullet or
+one numbered item. The 86 in §1 appears to count the clauses inside compound
+bullets (`"Radio and searchable select yield identical single-choice semantics;
+checkbox false is not missing."` is one bullet, two claims). Splitting those into
+separate IDs would mean rewriting scenario text, which Rule 3 forbids. §1 has
+been left untouched: correcting its table is the repository owner's decision.
+The discrepancy is a difference in counting, not a missing scenario — no
+scenario present in the eight documents is unmapped.
+
+L1 and L2 own no acceptance scenario of their own: their gate is the four rules
+in `knowledge/CARRY-OVER.md` and §6.5, not a numbered list.
+
 ---
 
 ## 6. Deviations already found
@@ -332,6 +367,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p app -- catalog
 psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql   # if migrations changed
 ./scripts/docs-check.sh
+./scripts/acceptance-check.sh
 PORT=3107 ./scripts/integration-test.sh
 ```
 

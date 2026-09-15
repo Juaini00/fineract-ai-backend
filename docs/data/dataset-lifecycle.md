@@ -82,12 +82,12 @@ Bila blok `table` merujuk dataset yang `expired`/`purged`, response wajib menyat
 
 ## 8. Skenario acceptance
 
-- `truncated=true` + `completeness=Complete` sah hanya bila batasan dinyatakan dan tidak mengubah jawaban.
-- Dataset `purged` masih terbaca statusnya (handle_state non-optional) dan dinyatakan kedaluwarsa di response.
-- Pagination stabil: halaman berbeda tidak mengubah urutan; `sort_key_json` menentukan.
-- Baca ulang dataset oleh user lain/scope berbeda ditolak walau handle-nya diketahui.
-- Chunk `BYTEA` kelak ditambahkan tanpa migrasi (cukup `format`/`encoding_version` baru).
-- Eviction tidak menyentuh dataset job yang masih berjalan.
+- `DS-8.1` — `truncated=true` + `completeness=Complete` sah hanya bila batasan dinyatakan dan tidak mengubah jawaban.
+- `DS-8.2` — Dataset `purged` masih terbaca statusnya (handle_state non-optional) dan dinyatakan kedaluwarsa di response.
+- `DS-8.3` — Pagination stabil: halaman berbeda tidak mengubah urutan; `sort_key_json` menentukan.
+- `DS-8.4` — Baca ulang dataset oleh user lain/scope berbeda ditolak walau handle-nya diketahui.
+- `DS-8.5` — Chunk `BYTEA` kelak ditambahkan tanpa migrasi (cukup `format`/`encoding_version` baru).
+- `DS-8.6` — Eviction tidak menyentuh dataset job yang masih berjalan.
 
 ## 9. Terbuka
 

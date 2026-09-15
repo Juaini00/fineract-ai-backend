@@ -64,6 +64,7 @@ cargo clippy --workspace -- -D warnings
 cargo test --workspace
 psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
 ./scripts/docs-check.sh              # link mati + endpoint tak terdokumentasi
+./scripts/acceptance-check.sh        # skenario acceptance → test yang menyebut ID-nya
 cargo run -p app -- catalog          # katalog: validasi + prepare SQL ke Fineract
 ./scripts/integration-test.sh        # permukaan HTTP lewat Bruno CLI
 ```
