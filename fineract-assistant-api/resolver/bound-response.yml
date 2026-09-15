@@ -3,7 +3,7 @@ info:
   type: http
   seq: 9
   description: |
-    Bukti akhir jalur ini: parameter `client_id` pada provenance response sama
+    Bukti akhir jalur ini: parameter `client_id` pada lineage evidence_json sama
     dengan `option_id` yang server terbitkan, bertipe angka — bukan string yang
     dikirim klien. Inilah yang membedakan "pengguna memilih nasabah" dari
     "pengguna mengetik sesuatu yang kebetulan diterima".
@@ -20,17 +20,16 @@ runtime:
     - type: tests
       code: |
         const document = res.getBody().data;
-        const provenance = document.blocks_json.find(function (block) {
-          return block.type === "provenance";
-        });
-        const bound = provenance.parameters.find(function (parameter) {
+        // §6.2 / #10 — provenance pindah ke evidence_json.lineage.
+        const lineage = document.evidence_json.lineage[0];
+        const bound = lineage.parameters.find(function (parameter) {
           return parameter.name === "client_id";
         });
 
         test("job dilanjutkan sampai terminal memakai capability yang dipilih planner", function () {
           expect(res.getStatus()).to.equal(200);
-          expect(provenance.capability_id).to.equal("savings_products_by_client");
-          expect(provenance.query_id).to.equal("savings.products_by_client");
+          expect(lineage.capability_id).to.equal("savings_products_by_client");
+          expect(lineage.query_id).to.equal("savings.products_by_client");
         });
 
         test("client_id terikat ke opsi yang dipilih, bertipe angka", function () {
@@ -38,7 +37,7 @@ runtime:
         });
 
         test("scope tetap dari otorisasi, tidak diperlebar jawaban", function () {
-          const scope = provenance.parameters.find(function (parameter) {
+          const scope = lineage.parameters.find(function (parameter) {
             return parameter.name === "office_ids";
           });
           expect(scope.value).to.equal("8 authorized offices");
@@ -46,7 +45,7 @@ runtime:
 
         test("tidak ada pengungkapan auto-bind: slot ini dikonfirmasi pengguna", function () {
           const auto = document.blocks_json.find(function (block) {
-            return block.id === "slots_auto_bound";
+            return block.block_id === "slots_auto_bound";
           });
           expect(auto).to.equal(undefined);
         });

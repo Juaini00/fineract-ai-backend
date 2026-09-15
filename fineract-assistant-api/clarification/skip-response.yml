@@ -21,7 +21,7 @@ runtime:
       code: |
         const document = res.getBody().data;
         const gap = document.blocks_json.find(function (block) {
-          return block.id === "skipped_inputs";
+          return block.block_id === "skipped_inputs";
         });
 
         test("kind='skipped' dengan completeness yang sah", function () {

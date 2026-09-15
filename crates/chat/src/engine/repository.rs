@@ -4,7 +4,7 @@
 //! `AND lease_token = $token`. Update yang menyentuh 0 baris berarti worker
 //! sudah dipagari dan wajib berhenti — bukan mencoba transisi lain.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -191,6 +191,11 @@ pub struct SettledResponse {
     pub completeness: &'static str,
     pub completeness_reason: String,
     pub blocks: Value,
+    /// Lineage (#10): rantai finding → metric → operasi → dataset → sumber.
+    /// Ia kolomnya sendiri dan **bukan blok** — blok yang tidak dikenal klien
+    /// dilewati tanpa merusak render (responses.md §1), dan jejak asal angka
+    /// tidak boleh ikut hilang bersamanya.
+    pub evidence: Value,
     pub response_hash: String,
 }
 
@@ -211,8 +216,8 @@ pub async fn ledger(
     job_id: Uuid,
     plan_version: i32,
 ) -> sqlx::Result<validate::Ledger> {
-    let rows = sqlx::query_as::<_, (Option<String>, Option<Value>)>(
-        "SELECT completeness, input_binding_json
+    let rows = sqlx::query_as::<_, (Uuid, Option<String>, Option<Value>)>(
+        "SELECT id, completeness, input_binding_json
          FROM job_node_runs
          WHERE job_id = $1 AND plan_version = $2 AND status <> 'Pending'",
     )
@@ -221,13 +226,20 @@ pub async fn ledger(
     .fetch_all(pool)
     .await?;
 
-    let mut contributors = Vec::new();
+    let mut contributors = BTreeMap::new();
     let mut auto_bound = BTreeSet::new();
+    let mut parameters = Vec::new();
 
-    for (completeness, binding) in rows {
+    for (node_run_id, completeness, binding) in rows {
         // Node yang sudah berjalan tanpa `completeness` adalah kontributor yang
         // tidak menyatakan apa pun — `Unknown`, bukan dilewati (I4).
-        contributors.push(completeness.unwrap_or_else(|| "Unknown".to_string()));
+        //
+        // Berkunci `id`: D1 dihitung PER BLOK lewat `derived_from`, dan daftar
+        // tanpa identitas hanya dapat dihitung di tingkat dokumen.
+        contributors.insert(
+            node_run_id.to_string(),
+            completeness.unwrap_or_else(|| "Unknown".to_string()),
+        );
 
         let slots = binding
             .as_ref()
@@ -237,9 +249,17 @@ pub async fn ledger(
             .unwrap_or(&[]);
 
         auto_bound.extend(slots.iter().filter_map(Value::as_str).map(str::to_string));
+
+        if let Some(bound) = binding
+            .as_ref()
+            .and_then(|binding| binding.get("parameters"))
+            .and_then(Value::as_array)
+        {
+            parameters.extend(bound.iter().cloned());
+        }
     }
 
-    Ok(validate::Ledger { contributors, auto_bound, derivations: Vec::new() })
+    Ok(validate::Ledger { contributors, auto_bound, derivations: Vec::new(), parameters })
 }
 
 /// Promosikan fakta session di dalam transaksi commit (memory-context.md §3).
@@ -396,9 +416,9 @@ pub async fn settle_with_response(
         sqlx::query(
             "INSERT INTO job_responses
                 (job_id, response_version, kind, outcome, completeness, completeness_reason,
-                 blocks_json, validation_status, validation_report_json, superseded_by_version,
-                 response_hash, composed_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'failed', $8, $9, $10, now())",
+                 blocks_json, evidence_json, validation_status, validation_report_json,
+                 superseded_by_version, response_hash, composed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'failed', $9, $10, $11, now())",
         )
         .bind(job_id)
         .bind(rejected_version)
@@ -407,6 +427,7 @@ pub async fn settle_with_response(
         .bind(rejected.completeness)
         .bind(&rejected.completeness_reason)
         .bind(&rejected.blocks)
+        .bind(&rejected.evidence)
         .bind(&report)
         .bind(response_version)
         .bind(&rejected.response_hash)
@@ -417,8 +438,9 @@ pub async fn settle_with_response(
     sqlx::query(
         "INSERT INTO job_responses
             (job_id, response_version, kind, outcome, completeness, completeness_reason,
-             blocks_json, validation_status, validation_report_json, response_hash, composed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())",
+             blocks_json, evidence_json, validation_status, validation_report_json,
+             response_hash, composed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())",
     )
     .bind(job_id)
     .bind(response_version)
@@ -427,6 +449,7 @@ pub async fn settle_with_response(
     .bind(response.completeness)
     .bind(&response.completeness_reason)
     .bind(&response.blocks)
+    .bind(&response.evidence)
     .bind(validation_status)
     .bind(&report)
     .bind(&response.response_hash)
@@ -733,6 +756,10 @@ pub struct ResponseDocument {
     pub completeness: String,
     pub completeness_reason: Option<String>,
     pub blocks_json: Value,
+    /// Lineage (#10). Dikirim ke klien karena "dari mana angka ini" adalah
+    /// bagian dari jawaban, bukan metadata internal — dan sejak ia keluar dari
+    /// blok, tidak ada tempat lain untuk membacanya.
+    pub evidence_json: Value,
     pub validation_status: String,
     pub response_hash: String,
     pub created_at: DateTime<Utc>,
@@ -745,7 +772,7 @@ pub async fn find_response(
 ) -> sqlx::Result<Option<ResponseDocument>> {
     sqlx::query_as::<_, ResponseDocument>(
         "SELECT response_version, kind, outcome, completeness, completeness_reason,
-                blocks_json, validation_status, response_hash, created_at
+                blocks_json, evidence_json, validation_status, response_hash, created_at
          FROM job_responses
          WHERE job_id = $1 AND response_version = $2",
     )
@@ -863,7 +890,13 @@ pub struct NodeOutcome<'a> {
     pub duration_ms: Option<i64>,
 }
 
-/// T4 — node selesai.
+/// T4 — node selesai. Mengembalikan `job_node_runs.id`, atau `None` bila
+/// fencing kalah.
+///
+/// Identitasnya dikembalikan karena blok response merujuknya lewat
+/// `derived_from` (responses.md §1): tanpa identitas kontributor, `completeness`
+/// hanya dapat dihitung di tingkat dokumen — dan §3 aturan 2 menuntutnya per
+/// blok.
 ///
 /// Eksekusi query terjadi **di luar** transaksi ini (I1). Fencing dilakukan
 /// lewat `EXISTS` terhadap token job, karena baris node tidak menyimpan token
@@ -875,10 +908,10 @@ pub async fn complete_node(
     lease_token: Uuid,
     plan_version: i32,
     outcome: NodeOutcome<'_>,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<Option<Uuid>> {
     let mut tx = pool.begin().await?;
 
-    let updated = sqlx::query(
+    let updated = sqlx::query_as::<_, (Uuid,)>(
         "UPDATE job_node_runs
          SET status = $4,
              completeness = $5,
@@ -894,7 +927,8 @@ pub async fn complete_node(
            AND EXISTS (
                SELECT 1 FROM chat_jobs
                WHERE id = $1 AND lease_token = $3 AND lifecycle = 'Running'
-           )",
+           )
+         RETURNING id",
     )
     .bind(job_id)
     .bind(plan_version)
@@ -913,14 +947,13 @@ pub async fn complete_node(
     .bind(hex::encode(Sha256::digest(
         outcome.input_binding_json.to_string().as_bytes(),
     )))
-    .execute(&mut *tx)
-    .await?
-    .rows_affected();
+    .fetch_optional(&mut *tx)
+    .await?;
 
-    if updated == 0 {
+    let Some((node_run_id,)) = updated else {
         tx.rollback().await?;
-        return Ok(false);
-    }
+        return Ok(None);
+    };
 
     // Budget dihitung pada baris job, bukan disimpulkan dari jumlah baris
     // ledger: attempt yang Abandoned tetap memakai kuota.
@@ -965,7 +998,7 @@ pub async fn complete_node(
     .await?;
 
     tx.commit().await?;
-    Ok(true)
+    Ok(Some(node_run_id))
 }
 
 /// Selesaikan job sebagai kegagalan operasional (T7 jalur gagal).
@@ -1017,8 +1050,8 @@ pub async fn settle_failed(
     sqlx::query(
         "INSERT INTO job_responses
             (job_id, response_version, kind, outcome, completeness, completeness_reason,
-             blocks_json, validation_status, response_hash, composed_at)
-         VALUES ($1, $2, $3, 'OperationalFailure', $4, $5, $6, 'passed', $7, now())",
+             blocks_json, evidence_json, validation_status, response_hash, composed_at)
+         VALUES ($1, $2, $3, 'OperationalFailure', $4, $5, $6, $7, 'passed', $8, now())",
     )
     .bind(job_id)
     .bind(RESPONSE_VERSION)
@@ -1026,6 +1059,7 @@ pub async fn settle_failed(
     .bind(response.completeness)
     .bind(&response.completeness_reason)
     .bind(&response.blocks)
+    .bind(&response.evidence)
     .bind(&response.response_hash)
     .execute(&mut *tx)
     .await?;

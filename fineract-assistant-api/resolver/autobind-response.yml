@@ -21,7 +21,7 @@ runtime:
       code: |
         const document = res.getBody().data;
         const auto = document.blocks_json.find(function (block) {
-          return block.id === "slots_auto_bound";
+          return block.block_id === "slots_auto_bound";
         });
 
         test("job selesai tanpa pernah menanyakan apa pun", function () {
@@ -31,7 +31,8 @@ runtime:
 
         test("slot yang di-auto-bind dinyatakan dengan provenance resolver_unique", function () {
           expect(auto).to.not.equal(undefined);
-          expect(auto.type).to.equal("limitation");
+          // §6.2 — auto-bind pindah dari `limitation` ke blok `note`.
+          expect(auto.type).to.equal("note");
           expect(auto.auto_bound_slots).to.have.lengthOf(1);
           expect(auto.auto_bound_slots[0].field_id).to.equal("client_id");
           expect(auto.auto_bound_slots[0].provenance).to.equal("resolver_unique");

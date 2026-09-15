@@ -115,18 +115,17 @@ fn active_scope(plan: &Plan, response: &SettledResponse) -> MemoryFact {
 
 /// Referensi ke hasil yang baru saja di-commit.
 ///
-/// `provenance_json` diambil dari blok `provenance` response, bukan disusun
+/// `provenance_json` diambil dari `evidence_json` response, bukan disusun
 /// ulang: dua penyusunan yang sama-sama benar hari ini akan menyimpang, dan
-/// yang menyimpang di sini adalah jejak asal angka.
+/// yang menyimpang di sini adalah jejak asal angka. Ia dibaca dari evidence dan
+/// bukan dari sebuah blok karena lineage memang tidak hidup di dalam blok
+/// (#10, responses.md §4).
 fn prior_result(plan: &Plan, response: &SettledResponse, row_count: usize) -> MemoryFact {
     let provenance = response
-        .blocks
-        .as_array()
-        .and_then(|blocks| {
-            blocks
-                .iter()
-                .find(|block| block.get("type") == Some(&Value::String("provenance".into())))
-        })
+        .evidence
+        .get("lineage")
+        .and_then(Value::as_array)
+        .and_then(|lineage| lineage.first())
         .cloned()
         .unwrap_or_else(|| json!({}));
 
@@ -184,10 +183,11 @@ mod tests {
             outcome: "Answered",
             completeness: "Complete",
             completeness_reason: "curated_query:savings.balance_summary".into(),
-            blocks: json!([
-                { "type": "metrics", "metrics": [] },
-                { "type": "provenance", "query_id": "savings.balance_summary" },
-            ]),
+            blocks: json!([]),
+            evidence: json!({
+                "lineage": [{ "query_id": "savings.balance_summary" }],
+                "derivations": [],
+            }),
             response_hash: "abc".into(),
         }
     }
@@ -222,11 +222,11 @@ mod tests {
     }
 
     #[test]
-    fn prior_result_reuses_the_provenance_block_of_the_response() {
+    fn prior_result_reuses_the_lineage_of_the_response() {
         let facts = promoted(&plan(), &response(), &[], 7);
         let result = facts.last().unwrap();
 
-        assert_eq!(result.provenance_json["type"], "provenance");
+        assert_eq!(result.provenance_json["query_id"], "savings.balance_summary");
         assert_eq!(result.fact_json["row_count"], 7);
         assert_eq!(result.completeness, "Complete");
     }

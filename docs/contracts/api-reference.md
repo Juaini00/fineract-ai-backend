@@ -360,6 +360,7 @@ menyimpulkan hasil dari `lifecycle` saja.
     "completeness": "Complete",
     "completeness_reason": "curated_query:savings.balance_summary",
     "blocks_json": [ ... ],
+    "evidence_json": { "lineage": [ ... ], "derivations": [] },
     "validation_status": "passed",
     "response_hash": "fddab222...",
     "created_at": "2026-09-15T04:39:21.767871Z"
@@ -373,15 +374,16 @@ menyimpulkan hasil dari `lifecycle` saja.
 #### `validation_status` dan kenapa `response_version` dapat bernilai 2
 
 Setiap response `analysis` **dihitung ulang terhadap ledger** sebelum di-commit
-(responses.md §3–§5): `completeness` dibandingkan dengan yang dihitung dari
-`job_node_runs`, himpunan slot auto-bind dibandingkan dengan binding yang
-benar-benar dikonsumsi node, dan setiap angka pada narasi wajib cocok dengan
-blok ber-evidence atau entri `derivation`.
+(responses.md §1–§5): bentuk tiap blok dan kosakatanya ditegakkan,
+`completeness` dihitung **per blok** lewat `derived_from` lalu diagregasi
+menjadi klaim dokumen dan dibandingkan, himpunan slot auto-bind pada blok `note`
+dibandingkan dengan binding yang benar-benar dikonsumsi node, dan setiap angka
+pada narasi wajib cocok dengan blok ber-evidence atau entri `derivation`.
 
 | `validation_status` | Arti bagi frontend |
 | --- | --- |
 | `passed` | Dokumen disajikan apa adanya |
-| `fallback` | Versi konservatif. Ada blok yang **dibuang**, dan `blocks_json` memuat blok `limitation` ber-`id` `validation_rejected` yang menyebutkan apa dan kenapa |
+| `fallback` | Versi konservatif. Ada blok yang **dibuang**, dan `blocks_json` memuat blok `limitation` ber-`block_id` `validation_rejected` yang menyebutkan apa dan kenapa |
 | `failed` | **Tidak pernah dikembalikan endpoint ini.** Ia versi yang ditolak, disimpan hanya sebagai bahan investigasi |
 
 Karena itu `response_version` dapat bernilai `2`: versi 1 adalah dokumen yang
@@ -394,24 +396,53 @@ Bila seluruh blok data terbuang, hasilnya `kind: "limitation"` dengan
 dan bukan job yang gagal diam-diam. Event `job.completed` juga membawa
 `validation_status`, jadi klien SSE mengetahuinya tanpa membaca ulang dokumen.
 
+#### Bentuk blok
+
+Setiap blok membawa **empat** field wajib (responses.md §1):
+
+| Field | Wajib | Keterangan |
+| --- | --- | --- |
+| `block_id` | ya | stabil di dalam satu `response_version`. **Bukan `id`** |
+| `type` | ya | salah satu dari sembilan tipe di bawah, tidak pernah di luar itu |
+| `schema_version` | ya | **per blok**, bukan per dokumen. Bernilai `1` hari ini |
+| `derived_from` | pada blok penyaji data | daftar rujukan `{ "node_run_id": "…" }` dan/atau `{ "dataset_id": "…" }` |
+
+Kosakata blok tertutup pada sembilan tipe: `narrative`, `metric`, `table`,
+`chart_spec`, `comparison`, `finding`, `limitation`, `suggestion`, `note`.
+Tipe di luar daftar itu **ditolak validator** dan tidak akan pernah dikirim.
+
+Blok yang tidak dikenal wajib diabaikan, bukan menggagalkan render. Karena itu
+informasi yang wajib sampai — limitation, pengungkapan auto-bind, PII yang
+ditahan — tidak pernah hanya hidup di tipe blok baru.
+
+> **Perubahan bentuk terhadap versi sebelumnya.** Sampai 2026-09-15 blok memakai
+> `id`, tanpa `schema_version` dan tanpa `derived_from`, dan memancarkan dua tipe
+> yang tidak ada di kontrak: `provenance` dan `metrics` (jamak). Keduanya hilang.
+> `metrics` menjadi **`metric` tunggal, satu blok per nilai bernama**;
+> `provenance` menjadi kolom `evidence_json`. Pengungkapan auto-bind pindah dari
+> `limitation` ke `note`.
+
 #### Blok yang benar-benar dipancarkan hari ini
 
-Setiap blok punya `type` dan `id`. Blok yang tidak dikenal wajib diabaikan,
-bukan menggagalkan render.
-
-**`metrics`** — hasil satu baris:
+**`metric`** — satu nilai bernama. Hasil satu baris berisi tiga kolom menjadi
+**tiga blok `metric`**, bukan satu blok berisi daftar:
 
 ```json
 {
-  "type": "metrics",
-  "id": "result",
-  "metrics": [
-    { "key": "account_count",  "value": 169 },
-    { "key": "total_balance",  "value": "486705.19" },
-    { "key": "average_balance","value": "2879.9123668639053254" }
-  ]
+  "block_id": "metric:total_balance",
+  "type": "metric",
+  "schema_version": 1,
+  "derived_from": [{ "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11" }],
+  "key": "total_balance",
+  "value": "486705.19",
+  "unit": null,
+  "period": { "as_of_date": "2026-09-15" }
 }
 ```
+
+`unit` bernilai `null` selama katalog belum menyatakannya — `null` berarti
+**tidak diketahui**, dan field itu tidak dihilangkan supaya perbedaan itu
+terlihat.
 
 > Angka `NUMERIC` dikirim sebagai **string**, bukan float. Pembulatan biner pada
 > angka uang adalah cara klasik total berubah satu sen tanpa ada yang
@@ -421,57 +452,167 @@ bukan menggagalkan render.
 
 ```json
 {
+  "block_id": "result",
   "type": "table",
-  "id": "result",
+  "schema_version": 1,
+  "derived_from": [{ "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11" }],
   "columns": ["savings_product_id", "savings_product_name", "client_id"],
   "rows": [[1, "Current Account - USD", 1], [9, "Current Account With OD - AED", 1]],
-  "row_count": 2
+  "row_count": 2,
+  "withheld_columns": []
 }
 ```
 
-**`narrative`** — kalimat, tanpa angka yang tidak ada di blok lain.
+`withheld_columns` dideklarasikan pada tabel **dan** dinyatakan pada blok
+`limitation`; keduanya, bukan salah satu.
 
-**`provenance`** — dari mana angkanya berasal:
+**`narrative`** — kalimat. Angka di dalamnya wajib ada di blok lain atau
+ber-`derivation`; bila ia memuat angka, ia juga wajib membawa `derived_from`.
+
+**`note`** — pengungkapan asumsi/binding. Satu-satunya tempat pengungkapan
+auto-bind dihitung sah (responses.md §5):
 
 ```json
 {
-  "type": "provenance",
-  "id": "evidence",
-  "capability_id": "savings_balance_summary",
-  "query_id": "savings.balance_summary",
-  "sql_file": "queries/savings/balance_summary.sql",
-  "catalog_version_id": "18552c18-2502-4318-9b6e-3d14f769cb17",
-  "catalog_content_hash": "a375d49a...",
-  "parameters": [
-    { "name": "office_ids", "value": "8 authorized offices" },
-    { "name": "currency_code", "value": null }
-  ],
-  "row_count": 1,
-  "duration_ms": 31
+  "block_id": "slots_auto_bound",
+  "type": "note",
+  "schema_version": 1,
+  "title": "Values chosen without asking",
+  "body": "1 value(s) were bound automatically …",
+  "auto_bound_slots": [
+    { "field_id": "client_id", "label": "Siti", "provenance": "resolver_unique" }
+  ]
 }
 ```
 
-Scope dicatat sebagai **jumlah**, bukan daftar office.
-
 **`limitation`** — pembatasan yang wajib ditampilkan, tidak boleh disembunyikan
-di balik "lihat detail". `id` yang ada hari ini:
+di balik "lihat detail". `block_id` yang ada hari ini:
 
-| `id` | Arti | Field tambahan |
+| `block_id` | Arti | Field tambahan |
 | --- | --- | --- |
 | `pii_withheld` | Kolom PII ditahan karena sakelar PII mati | `withheld_columns` |
-| `slots_auto_bound` | Slot diikat resolver karena hanya ada satu kandidat — **bukan** dikonfirmasi pengguna | `auto_bound_slots[]` dengan `field_id`, `label`, `provenance: "resolver_unique"` |
 | `skipped_inputs` | Pengguna berhenti; input yang tidak pernah diisi | `unanswered_fields`, `completed_nodes` |
+| `validation_rejected` | Ada blok yang dibuang validator | `failed_rules`, `failures` |
 | `resolver_no_candidates` | Resolver berjalan utuh dan tidak menemukan kandidat dalam scope | — |
 | `no_capability_matched` | Tidak ada capability yang disetujui mencakup permintaan | `request_echo` |
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
 | `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
 
+#### `evidence_json` — lineage
+
+Dari mana angkanya berasal. Ia **kolom, bukan blok**: blok yang tidak dikenal
+klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
+
+```json
+{
+  "lineage": [
+    {
+      "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11",
+      "dataset_id": null,
+      "capability_id": "savings_balance_summary",
+      "query_id": "savings.balance_summary",
+      "sql_file": "queries/savings/balance_summary.sql",
+      "catalog_version_id": "18552c18-2502-4318-9b6e-3d14f769cb17",
+      "catalog_content_hash": "a375d49a...",
+      "as_of": "2026-09-15",
+      "exchange_rate_id": null,
+      "parameters": [
+        { "name": "office_ids", "value": "8 authorized offices" },
+        { "name": "currency_code", "value": null }
+      ],
+      "row_count": 1,
+      "duration_ms": 31
+    }
+  ],
+  "derivations": []
+}
+```
+
+Scope dicatat sebagai **jumlah**, bukan daftar office. `derivations` kosong
+selama belum ada narasi model; ia adalah satu-satunya jalan angka turunan
+("naik 12%") menjadi sah (responses.md §4).
+
+Dokumen `limitation` yang tidak pernah menjalankan operasi sumber membawa
+`evidence_json: {}` — tidak ada lineage karena memang tidak ada operasi.
+
 ### `POST /chat/jobs/{job_id}/cancel`
 
 Mengembalikan snapshot job sesudah permintaan. Cancel pada job terminal adalah
 no-op, bukan error. Cancel berbeda dari skip: ia berakhir `Cancelled`, tanpa
 response document.
+
+---
+
+## 5b. Dataset
+
+Hasil besar disimpan sebagai *dataset* immutable, bukan ditumpahkan inline ke
+response job. Keduanya hanya baca — dataset dibuat worker dan tidak pernah
+di-UPDATE (koreksi = dataset baru). Setiap pembacaan memeriksa ulang otorisasi
+terhadap scope yang berlaku **sekarang** (I7); handle adalah rujukan, bukan izin.
+
+`handle_state` **selalu** ada (C13) dengan salah satu nilai: `live`, `expired`,
+`purged`, `none` (belum ter-materialisasi / gagal). Handle mati tetap dijawab
+`200` beserta `handle_state`-nya dan `unavailable_reason` (`dataset_expired`,
+`dataset_purged`, `dataset_not_materialized`) — dataset kedaluwarsa **masih
+terbaca statusnya**, bukan 404 dan bukan halaman kosong yang tampak seperti nol
+(§7, I5). Dataset milik user lain dijawab `404` (keberadaannya tidak diungkap);
+scope yang menyempit dijawab `403`.
+
+`truncated` = set tersimpan dibatasi cap, bukan klaim analitik dan bukan preview
+(I4). `row_count_total = null` berarti **tidak diketahui**, bukan nol.
+
+### `GET /chat/datasets/{dataset_id}`
+
+Metadata handle. `200` dengan:
+
+```json
+{
+  "success": true,
+  "data": {
+    "dataset_id": "…", "job_id": "…", "session_id": "…",
+    "node_id": null, "plan_version": null,
+    "handle_state": "live",
+    "status": "ready",
+    "schema": {}, "grain": {}, "scope": {}, "provenance": {}, "sort_key": {},
+    "completeness": "Complete", "completeness_reason": null,
+    "truncated": false,
+    "row_count_available": 120, "row_count_total": 120, "byte_size": 4096,
+    "chunk_count": 1,
+    "created_at": "…", "expires_at": null, "purged_at": null,
+    "unavailable_reason": null
+  },
+  "error": null
+}
+```
+
+### `GET /chat/datasets/{dataset_id}/rows`
+
+Satu halaman baris, keyset stabil atas `sort_key` (§4 — halaman berbeda tidak
+mengubah urutan). Query: `cursor` (opsional; kosong = mulai dari baris pertama,
+cursor rusak → `422`), `limit` (opsional, di-clamp `1..=200`). `200` dengan:
+
+```json
+{
+  "success": true,
+  "data": {
+    "dataset_id": "…",
+    "handle_state": "live",
+    "sort_key": {},
+    "rows": [],
+    "cursor": "0:0",
+    "next_cursor": null,
+    "row_count_available": 120, "row_count_total": 120,
+    "truncated": false,
+    "completeness": "Complete", "completeness_reason": null,
+    "unavailable_reason": null
+  },
+  "error": null
+}
+```
+
+`next_cursor: null` menandai halaman terakhir. Handle mati mengembalikan `rows: []`
+dengan `unavailable_reason` terisi — bukan halaman kosong tanpa penjelasan.
 
 ---
 

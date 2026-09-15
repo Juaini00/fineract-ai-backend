@@ -1,5 +1,5 @@
 info:
-  name: response analysis dengan provenance
+  name: response analysis dengan lineage
   type: http
   seq: 10
 
@@ -23,20 +23,30 @@ runtime:
           expect(document.completeness).to.equal("Complete");
         });
 
-        test("angka datang sebagai blok metrics", function () {
-          expect(blocks[0].type).to.equal("metrics");
-          const keys = blocks[0].metrics.map((m) => m.key);
+        test("angka datang sebagai blok metric tunggal, satu per nilai", function () {
+          // §6.2 — `metrics` (jamak) hilang; tiap nilai bernama adalah satu
+          // blok `metric` dengan block_id/schema_version/derived_from.
+          const metrics = blocks.filter((b) => b.type === "metric");
+          const keys = metrics.map((m) => m.key);
           expect(keys).to.include("account_count");
           expect(keys).to.include("total_balance");
+          metrics.forEach((m) => {
+            expect(m.block_id).to.be.a("string");
+            expect(m.schema_version).to.equal(1);
+            expect(m.derived_from).to.be.an("array").that.is.not.empty;
+          });
+          expect(blocks.find((b) => b.type === "metrics")).to.equal(undefined);
+          expect(blocks.find((b) => b.type === "provenance")).to.equal(undefined);
         });
 
-        test("provenance menyebut capability, query, dan versi katalog", function () {
-          const provenance = blocks.find((b) => b.type === "provenance");
-          expect(provenance.capability_id).to.equal("savings_balance_summary");
-          expect(provenance.query_id).to.equal("savings.balance_summary");
-          expect(provenance.sql_file).to.be.a("string");
-          expect(provenance.catalog_content_hash).to.have.lengthOf(64);
+        test("lineage hidup di evidence_json, bukan di blok", function () {
+          // §6.2 / #10 — provenance pindah ke evidence_json.lineage.
+          const lineage = document.evidence_json.lineage[0];
+          expect(lineage.capability_id).to.equal("savings_balance_summary");
+          expect(lineage.query_id).to.equal("savings.balance_summary");
+          expect(lineage.sql_file).to.be.a("string");
+          expect(lineage.catalog_content_hash).to.have.lengthOf(64);
           // Scope dilaporkan sebagai jumlah office, bukan daftar id.
-          const scope = provenance.parameters.find((p) => p.name === "office_ids");
+          const scope = lineage.parameters.find((p) => p.name === "office_ids");
           expect(scope.value).to.match(/authorized offices$/);
         });

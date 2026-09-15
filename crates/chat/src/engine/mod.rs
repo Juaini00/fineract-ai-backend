@@ -4,6 +4,7 @@
 //! klarifikasi belum ada — lihat [`worker`] untuk arti penyelesaian saat ini.
 
 pub mod compose;
+pub mod dataset;
 pub mod executor;
 pub mod memory;
 pub mod planner;

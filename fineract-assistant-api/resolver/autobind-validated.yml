@@ -25,7 +25,7 @@ runtime:
       code: |
         const document = res.getBody().data;
         const auto = document.blocks_json.find(function (block) {
-          return block.id === "slots_auto_bound";
+          return block.block_id === "slots_auto_bound";
         });
 
         test("dokumen dengan slot auto-bind tetap lolos validasi", function () {
@@ -43,7 +43,7 @@ runtime:
 
         test("dokumen yang lolos tidak membawa blok penolakan", function () {
           const rejected = document.blocks_json.filter(function (block) {
-            return block.id === "validation_rejected";
+            return block.block_id === "validation_rejected";
           });
           expect(rejected).to.have.lengthOf(0);
         });

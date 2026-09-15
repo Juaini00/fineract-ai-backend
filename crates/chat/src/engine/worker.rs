@@ -23,7 +23,7 @@ use crate::{
     catalog::Catalog,
     clarification::repository::{self as clarification_repository, AcceptedAnswer},
     engine::{
-        compose, executor, memory,
+        compose, dataset, executor, memory,
         planner::{self, Plan},
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
         resolver,
@@ -267,16 +267,17 @@ async fn run_job(
             // job yang dilanjutkan worker lain tetap mengungkap auto-bind-nya.
             let auto_bound = clarification_repository::auto_bound_slots(pool, job.id).await?;
 
-            let response = compose::analysis(
-                &plan,
-                &result.rows,
-                result.duration_ms,
-                pii_enabled,
-                &auto_bound,
-            );
-            let (_, withheld) = compose::visible_fields(&plan, pii_enabled);
+            let (visible, withheld) = compose::visible_fields(&plan, pii_enabled);
 
-            let node_persisted = repository::complete_node(
+            // Kolom yang ditahan dibuang SEBELUM disimpan — sekali, lalu dipakai
+            // baik oleh ledger maupun oleh chunk dataset: dua jalur penyimpanan
+            // dengan redaksi masing-masing adalah dua tempat PII dapat bocor.
+            let stored_rows = compose::redact(&result.rows, &withheld);
+
+            // Node dipersist LEBIH DULU: `derived_from` merujuk identitas baris
+            // ledger (responses.md §1), dan identitas yang belum durable bukan
+            // identitas. Komposisi karena itu menunggu hasil tulisan ini.
+            let node_run_id = repository::complete_node(
                 pool,
                 job.id,
                 job.session_id,
@@ -292,7 +293,7 @@ async fn run_job(
                     // hanya disembunyikan dari response tetap tersimpan, dan
                     // yang tersimpan cepat atau lambat terbaca.
                     output_json: Some(serde_json::json!({
-                        "rows": compose::redact(&result.rows, &withheld),
+                        "rows": stored_rows,
                         "withheld_columns": withheld,
                     })),
                     // Ledger D2: binding yang benar-benar dikonsumsi node,
@@ -313,9 +314,30 @@ async fn run_job(
             )
             .await?;
 
-            if !node_persisted {
+            let Some(node_run_id) = node_run_id else {
+                return Ok(false);
+            };
+
+            // L3 — baris hasil diretensi sebagai handle + chunk, bukan hanya
+            // dibuang inline ke ledger: tabel berpaginasi, node hilir, dan
+            // memori session merujuk HANDLE, bukan daftar baris yang dibentangkan
+            // (#11 aturan 2 dan 3). Handle-nya immutable begitu `ready`.
+            if !retain_dataset(foundation, job, &plan, node_run_id, &visible, &withheld, &authorized, &stored_rows)
+                .await?
+            {
+                // Fencing kalah saat meretensi: berhenti, jangan menulis response
+                // atas snapshot yang tidak jadi ada (C16).
                 return Ok(false);
             }
+
+            let response = compose::analysis(
+                &plan,
+                &result.rows,
+                result.duration_ms,
+                pii_enabled,
+                &auto_bound,
+                node_run_id,
+            );
 
             // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
             // adalah kecocokan dokumen dengan apa yang tersimpan.
@@ -386,6 +408,98 @@ async fn run_job(
             settle_operational_failure(foundation, job, failure_code).await
         }
     }
+}
+
+/// Retensi hasil node sebagai dataset (§3): chunk ditulis, handle menjadi
+/// `ready`, lalu ledger node menunjuknya (C5).
+///
+/// `false` berarti fencing kalah dan tidak ada apa pun yang ditulis.
+///
+/// ponytail: setiap hasil yang berhasil diretensi — bukan hanya yang besar.
+/// #11 aturan 3 mengizinkan hasil kecil hidup inline saja, tetapi setiap
+/// response hari ini memuat blok `table`, dan blok tabel adalah salah satu
+/// alasan retensi yang disebut aturan itu. Ambang "cukup besar" menunggu
+/// ukuran data nyata (runtime.md §4 masih menunggu uji kapasitas); menebak
+/// angkanya sekarang hanya memindahkan keputusan ke tempat yang lebih sulit
+/// dilihat.
+#[allow(clippy::too_many_arguments)]
+async fn retain_dataset(
+    foundation: &Foundation,
+    job: &ClaimedJob,
+    plan: &Plan,
+    node_run_id: Uuid,
+    visible: &[String],
+    withheld: &[String],
+    authorized: &[i64],
+    rows: &[serde_json::Map<String, serde_json::Value>],
+) -> anyhow::Result<bool> {
+    let pool = foundation.app_db().pool();
+    let config = foundation.config();
+    let materialized = dataset::materialize(rows);
+
+    // I4/DS-8.1 — `truncated` adalah pernyataan tentang set yang TERSIMPAN.
+    // Klaim analitiknya menurun hanya bila ada baris yang benar-benar dibuang,
+    // dan saat itu alasannya WAJIB ikut (I5).
+    let (completeness, completeness_reason) = if materialized.truncated {
+        ("Partial", Some(dataset::TRUNCATION_REASON))
+    } else {
+        ("Complete", None)
+    };
+    debug_assert!(dataset::claim_is_stated(
+        materialized.truncated,
+        completeness,
+        completeness_reason
+    ));
+
+    let mut provenance = node_provenance(plan, rows.len());
+    // Snapshot menyatakan titik datanya; kesegaran SUMBER terpisah dari ini (§3).
+    provenance["as_of"] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+
+    let created = dataset::repository::create(
+        pool,
+        dataset::repository::NewDataset {
+            job_id: job.id,
+            session_id: job.session_id,
+            owner_user_id: job.owner_user_id,
+            lease_token: job.lease_token,
+            node_id: "main",
+            plan_version: PLAN_VERSION,
+            schema_json: serde_json::json!({
+                "fields": visible,
+                "withheld_columns": withheld,
+            }),
+            // Grain belum dideklarasikan planner; kosong berarti belum
+            // dinyatakan, dan itu tidak boleh dibaca sebagai "tanpa fanout".
+            grain_json: serde_json::json!({}),
+            // Scope yang BENAR-BENAR dipakai mengeksekusi, bukan yang diminta.
+            scope_json: serde_json::json!({ "office_ids": authorized }),
+            provenance_json: provenance,
+            // Urutan dibekukan pada saat materialisasi: chunk menyimpan baris
+            // persis seperti yang dikembalikan query yang disetujui, dan
+            // paginasi mengikuti ordinal itu.
+            sort_key_json: serde_json::json!(["__row_ordinal"]),
+            completeness,
+            completeness_reason,
+            truncated: materialized.truncated,
+            row_count_available: materialized.row_count_available,
+            row_count_total: materialized.row_count_total,
+            byte_size: materialized.byte_size,
+            ttl_secs: dataset::ttl_secs(
+                config.clarification_wait_limit_secs,
+                config.job_ttl_running_secs,
+            ),
+            chunks: materialized.chunks,
+        },
+    )
+    .await?;
+
+    let Some(dataset_id) = created else {
+        return Ok(false);
+    };
+
+    dataset::repository::link_node_run(pool, node_run_id, dataset_id, job.id, job.lease_token)
+        .await
+        .map_err(Into::into)
 }
 
 /// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.
@@ -537,18 +651,19 @@ fn pii_enabled(job: &ClaimedJob) -> bool {
 /// `NotFound` + `Complete`: pencariannya selesai, bukan terpotong — dan
 /// engine.md melarang `NotFound` berpasangan dengan `Partial`.
 fn not_found_response(slot: &str, resolver_ref: &str, request_text: &str) -> SettledResponse {
-    let blocks = serde_json::json!([
-        {
-            "type": "limitation",
-            "id": "resolver_no_candidates",
+    let blocks = serde_json::json!([compose::block(
+        "resolver_no_candidates",
+        "limitation",
+        &[],
+        serde_json::json!({
             "title": "Nothing to choose from",
             "body": format!(
                 "The approved resolver '{resolver_ref}' found no candidate for '{slot}' inside your \
                  authorized scope, so there is nothing to select and the request is not answered."
             ),
             "request_echo": request_text,
-        }
-    ]);
+        }),
+    )]);
 
     SettledResponse {
         kind: "limitation",
@@ -556,6 +671,9 @@ fn not_found_response(slot: &str, resolver_ref: &str, request_text: &str) -> Set
         completeness: "Complete",
         completeness_reason: "resolver_no_candidates".to_string(),
         response_hash: hash_blocks(&blocks),
+        // Tidak ada operasi sumber yang berjalan: tidak ada lineage untuk
+        // dicatat, dan `{}` di sini berarti "tidak ada", bukan "belum diisi".
+        evidence: serde_json::json!({}),
         blocks,
     }
 }
@@ -565,15 +683,16 @@ async fn settle_operational_failure(
     job: &ClaimedJob,
     failure_code: &str,
 ) -> anyhow::Result<bool> {
-    let blocks = serde_json::json!([
-        {
-            "type": "limitation",
-            "id": failure_code,
+    let blocks = serde_json::json!([compose::block(
+        failure_code,
+        "limitation",
+        &[],
+        serde_json::json!({
             "title": "Request not answered",
             "body": "The approved source query did not complete, so no figure is reported. \
                      The outcome of the attempt is unknown, not zero.",
-        }
-    ]);
+        }),
+    )]);
 
     repository::settle_failed(
         foundation.app_db().pool(),
@@ -587,6 +706,7 @@ async fn settle_operational_failure(
             completeness: "Unknown",
             completeness_reason: failure_code.to_string(),
             response_hash: hash_blocks(&blocks),
+            evidence: serde_json::json!({}),
             blocks,
         },
     )
@@ -620,15 +740,16 @@ fn node_provenance(plan: &Plan, row_count: usize) -> serde_json::Value {
 /// (responses.md: hasilnya response `kind='limitation'`, bukan job yang gagal
 /// diam-diam).
 fn limitation_response(reason: &str, explanation: &str, request_text: &str) -> SettledResponse {
-    let blocks = serde_json::json!([
-        {
-            "type": "limitation",
-            "id": reason,
+    let blocks = serde_json::json!([compose::block(
+        reason,
+        "limitation",
+        &[],
+        serde_json::json!({
             "title": "Request not answered",
             "body": explanation,
             "request_echo": request_text,
-        }
-    ]);
+        }),
+    )]);
 
     SettledResponse {
         kind: "limitation",
@@ -638,6 +759,7 @@ fn limitation_response(reason: &str, explanation: &str, request_text: &str) -> S
         completeness: "Unknown",
         completeness_reason: reason.to_string(),
         response_hash: hash_blocks(&blocks),
+        evidence: serde_json::json!({}),
         blocks,
     }
 }

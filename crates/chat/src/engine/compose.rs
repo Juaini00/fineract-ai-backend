@@ -4,14 +4,44 @@
 //! `output_fields` manifest; narasi baru boleh ditambahkan kelak sebagai
 //! lapisan additive yang kegagalannya **tidak** menghapus structured output
 //! (responses.md).
+//!
+//! Bentuk blok mengikuti responses.md §1 dan §2 **tanpa tafsir**: `block_id`
+//! (bukan `id`), `schema_version` per blok, `derived_from` pada blok penyaji
+//! data, dan kosakata yang tertutup pada sembilan tipe. Lineage tidak menjadi
+//! blok — ia hidup di `evidence_json` (#10).
 
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::engine::{
     planner::{Bound, Plan},
     repository::SettledResponse,
 };
+
+/// Versi skema **per blok** (§1). Ia terpisah dari versi dokumen supaya
+/// menambah tipe blok baru tidak memaksa menaikkan versi seluruh dokumen.
+pub const BLOCK_SCHEMA_VERSION: i64 = 1;
+
+/// Kosakata blok responses.md §2 — **tertutup**. Tipe di luar daftar ini
+/// ditolak validator, bukan diteruskan: klien melewati tipe yang tidak dikenal,
+/// jadi tipe yang dikarang server berarti informasi yang tidak pernah sampai.
+pub const BLOCK_TYPES: [&str; 9] = [
+    "narrative",
+    "metric",
+    "table",
+    "chart_spec",
+    "comparison",
+    "finding",
+    "limitation",
+    "suggestion",
+    "note",
+];
+
+/// Blok penyaji data: `derived_from` **wajib** (§2 kolom ketiga). `narrative`
+/// tidak di sini — ia hanya wajib berderivasi bila memuat angka, dan itu
+/// diperiksa per isi, bukan per tipe.
+pub const DATA_BLOCKS: [&str; 5] = ["metric", "table", "chart_spec", "comparison", "finding"];
 
 /// Slot yang diikat resolver tanpa bertanya (K5, provenance `resolver_unique`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,99 +59,139 @@ impl AutoBound {
     }
 }
 
+/// Bungkus §1 untuk satu blok.
+///
+/// Satu tempat, bukan sembilan: `block_id` yang kadang bernama `id` dan
+/// `schema_version` yang kadang lupa ditulis adalah persis penyimpangan yang
+/// ditemukan audit 2026-09-15.
+pub fn block(block_id: &str, block_type: &str, derived_from: &[Value], payload: Value) -> Value {
+    let mut object = match payload {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    };
+
+    object.insert("block_id".into(), json!(block_id));
+    object.insert("type".into(), json!(block_type));
+    object.insert("schema_version".into(), json!(BLOCK_SCHEMA_VERSION));
+    if !derived_from.is_empty() {
+        object.insert("derived_from".into(), Value::Array(derived_from.to_vec()));
+    }
+
+    Value::Object(object)
+}
+
+/// Rujukan `derived_from` ke satu baris ledger (§1: daftar `node_run_id`
+/// dan/atau `dataset_id`).
+pub fn from_node(node_run_id: Uuid) -> Value {
+    json!({ "node_run_id": node_run_id })
+}
+
 /// Susun response dari baris hasil.
 ///
-/// Satu baris → blok `metrics` (satu angka per kolom). Lebih dari satu baris →
-/// blok `table`. Nol baris → outcome `Empty` dengan `completeness` `Complete`:
-/// pencarian yang berhasil dan memang tidak menemukan apa pun berbeda dari
-/// pencarian yang tidak selesai (engine.md melarang `Empty` + `Partial`).
+/// Satu baris → satu blok `metric` **per kolom** (§2: satu nilai bernama).
+/// Lebih dari satu baris → blok `table`. Nol baris → outcome `Empty` dengan
+/// `completeness` `Complete`: pencarian yang berhasil dan memang tidak
+/// menemukan apa pun berbeda dari pencarian yang tidak selesai (engine.md
+/// melarang `Empty` + `Partial`).
 pub fn analysis(
     plan: &Plan,
     rows: &[Map<String, Value>],
     duration_ms: i64,
     pii_enabled: bool,
     auto_bound: &[AutoBound],
+    node_run_id: Uuid,
 ) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
-    let provenance = provenance_block(plan, rows.len(), duration_ms);
+    let derived_from = [from_node(node_run_id)];
+    let period = period(plan);
 
     let (outcome, mut blocks) = match rows.len() {
         0 => (
             "Empty",
-            json!([
-                {
-                    "type": "narrative",
-                    "id": "empty",
+            vec![block(
+                "empty",
+                "narrative",
+                &derived_from,
+                json!({
                     "body": "The approved query ran successfully and returned no rows for the requested scope and period.",
-                },
-                provenance,
-            ]),
+                }),
+            )],
         ),
         1 => (
             "Answered",
-            json!([metrics_block(&visible, &rows[0]), provenance]),
+            metric_blocks(&visible, &rows[0], &period, &derived_from),
         ),
-        _ => ("Answered", json!([table_block(&visible, rows), provenance])),
+        _ => (
+            "Answered",
+            vec![table_block(&visible, &withheld, rows, &derived_from)],
+        ),
     };
 
     // I5 — tidak ada penghilangan senyap: kolom yang ditahan dinyatakan, bukan
-    // sekadar hilang dari tabel.
-    if !withheld.is_empty()
-        && let Some(array) = blocks.as_array_mut()
-    {
-        array.push(json!({
-            "type": "limitation",
-            "id": "pii_withheld",
-            "title": "Columns withheld",
-            "body": format!(
-                "PII is disabled for this deployment, so {} column(s) were withheld from the result: {}.",
-                withheld.len(),
-                withheld.join(", ")
-            ),
-            "withheld_columns": withheld,
-        }));
+    // sekadar hilang dari tabel (§7, PII #15).
+    if !withheld.is_empty() {
+        blocks.push(block(
+            "pii_withheld",
+            "limitation",
+            &[],
+            json!({
+                "title": "Columns withheld",
+                "body": format!(
+                    "PII is disabled for this deployment, so {} column(s) were withheld from the result: {}.",
+                    withheld.len(),
+                    withheld.join(", ")
+                ),
+                "withheld_columns": withheld,
+            }),
+        ));
     }
 
-    // K5 / D2 — slot yang diikat resolver karena hanya ada satu kandidat TIDAK
-    // sama dengan slot yang pengguna konfirmasi. Ia wajib dinyatakan; kalau
-    // tidak, jawaban tampak seolah pengguna memilih nasabah itu sendiri.
-    if !auto_bound.is_empty()
-        && let Some(array) = blocks.as_array_mut()
-    {
-        array.push(json!({
-            "type": "limitation",
-            "id": "slots_auto_bound",
-            "title": "Values chosen without asking",
-            "body": format!(
-                "{} value(s) were bound automatically because the approved resolver returned exactly \
-                 one candidate inside your authorized scope. Nobody confirmed them: {}.",
-                auto_bound.len(),
-                auto_bound
+    // D2 (§5) — pengungkapan auto-bind hidup di blok `note`, bukan
+    // `limitation`: slot yang diikat karena hanya ada satu kandidat adalah
+    // **asumsi yang diambil**, bukan batas jawaban. Validator memeriksa blok
+    // inilah yang memuatnya.
+    if !auto_bound.is_empty() {
+        blocks.push(block(
+            "slots_auto_bound",
+            "note",
+            &[],
+            json!({
+                "title": "Values chosen without asking",
+                "body": format!(
+                    "{} value(s) were bound automatically because the approved resolver returned exactly \
+                     one candidate inside your authorized scope. Nobody confirmed them: {}.",
+                    auto_bound.len(),
+                    auto_bound
+                        .iter()
+                        .map(AutoBound::describe)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                "auto_bound_slots": auto_bound
                     .iter()
-                    .map(AutoBound::describe)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            "auto_bound_slots": auto_bound
-                .iter()
-                .map(|slot| json!({
-                    "field_id": slot.field_id,
-                    "label": slot.label,
-                    "provenance": "resolver_unique",
-                }))
-                .collect::<Vec<_>>(),
-        }));
+                    .map(|slot| json!({
+                        "field_id": slot.field_id,
+                        "label": slot.label,
+                        "provenance": "resolver_unique",
+                    }))
+                    .collect::<Vec<_>>(),
+            }),
+        ));
     }
+
+    let blocks = Value::Array(blocks);
 
     SettledResponse {
         kind: "analysis",
         outcome,
         // Query capability berjalan utuh dalam satu eksekusi: tidak ada bagian
-        // yang dilewati, jadi klaimnya `Complete`. Begitu truncation atau
-        // fan-in parsial ada, nilai ini WAJIB dihitung ulang — bukan disalin.
+        // yang dilewati, jadi klaimnya `Complete`. Validator tetap
+        // menghitungnya ulang dari ledger lewat `derived_from` — klaim ini
+        // tidak pernah menjadi kebenaran hanya karena ditulis di sini.
         completeness: "Complete",
         completeness_reason: format!("curated_query:{}", plan.query_id),
         response_hash: hex::encode(Sha256::digest(blocks.to_string().as_bytes())),
+        evidence: evidence(plan, node_run_id, rows.len(), duration_ms),
         blocks,
     }
 }
@@ -162,21 +232,41 @@ pub fn redact(rows: &[Map<String, Value>], withheld: &[String]) -> Vec<Map<Strin
         .collect()
 }
 
-fn metrics_block(output_fields: &[String], row: &Map<String, Value>) -> Value {
-    let metrics: Vec<Value> = output_fields
+/// Satu nilai bernama = satu blok `metric` (§2).
+///
+/// `unit` belum diketahui katalog dan karena itu ditulis `null`, bukan
+/// dihilangkan: field yang hilang tidak dapat dibedakan dari field yang tidak
+/// diketahui, dan I4 menuntut ketidaktahuan terlihat.
+fn metric_blocks(
+    output_fields: &[String],
+    row: &Map<String, Value>,
+    period: &Value,
+    derived_from: &[Value],
+) -> Vec<Value> {
+    output_fields
         .iter()
         .map(|field| {
-            json!({
-                "key": field,
-                "value": row.get(field).cloned().unwrap_or(Value::Null),
-            })
+            block(
+                &format!("metric:{field}"),
+                "metric",
+                derived_from,
+                json!({
+                    "key": field,
+                    "value": row.get(field).cloned().unwrap_or(Value::Null),
+                    "unit": Value::Null,
+                    "period": period,
+                }),
+            )
         })
-        .collect();
-
-    json!({ "type": "metrics", "id": "result", "metrics": metrics })
+        .collect()
 }
 
-fn table_block(output_fields: &[String], rows: &[Map<String, Value>]) -> Value {
+fn table_block(
+    output_fields: &[String],
+    withheld: &[String],
+    rows: &[Map<String, Value>],
+    derived_from: &[Value],
+) -> Value {
     let values: Vec<Value> = rows
         .iter()
         .map(|row| {
@@ -189,18 +279,24 @@ fn table_block(output_fields: &[String], rows: &[Map<String, Value>]) -> Value {
         })
         .collect();
 
-    json!({
-        "type": "table",
-        "id": "result",
-        "columns": output_fields,
-        "rows": values,
-        "row_count": rows.len(),
-    })
+    block(
+        "result",
+        "table",
+        derived_from,
+        json!({
+            "columns": output_fields,
+            "rows": values,
+            "row_count": rows.len(),
+            // §7 — blok tabel MENDEKLARASIKAN kolom yang ditahan; blok
+            // limitation menyatakannya. Keduanya, bukan salah satu.
+            "withheld_columns": withheld,
+        }),
+    )
 }
 
 /// Parameter yang benar-benar terikat, dalam satu bentuk.
 ///
-/// Dipakai dua tempat — blok `provenance` dan `job_node_runs.input_binding_json`
+/// Dipakai dua tempat — `evidence_json` dan `job_node_runs.input_binding_json`
 /// — dan sengaja satu fungsi: dua penyusunan yang sama-sama benar hari ini akan
 /// menyimpang, dan yang menyimpang di sini adalah "dengan parameter apa angka
 /// ini dihasilkan".
@@ -235,32 +331,75 @@ pub fn bindings(plan: &Plan) -> Value {
         .collect()
 }
 
-/// Provenance: dari mana angka itu berasal, dengan versi katalog yang dipakai.
-///
-/// `office_ids` dicatat sebagai **jumlah**, bukan daftar: scope adalah
-/// metadata, dan menuliskan seluruh daftarnya pada response tidak menambah
-/// kemampuan menelusuri apa pun.
-fn provenance_block(plan: &Plan, row_count: usize, duration_ms: i64) -> Value {
-    let bindings = bindings(plan);
+/// Periode yang terikat plan, untuk blok `metric` (§2: nilai + unit + periode).
+fn period(plan: &Plan) -> Value {
+    let dates: Map<String, Value> = plan
+        .parameter_names
+        .iter()
+        .zip(&plan.parameters)
+        .filter_map(|(name, bound)| match bound {
+            Bound::Date(date) => Some((name.clone(), Value::String(date.to_string()))),
+            _ => None,
+        })
+        .collect();
 
+    if dates.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(dates)
+    }
+}
+
+/// `as_of` eksplisit bila katalog mengikat parameter bernama demikian.
+fn as_of(plan: &Plan) -> Value {
+    plan.parameter_names
+        .iter()
+        .zip(&plan.parameters)
+        .find_map(|(name, bound)| match bound {
+            Bound::Date(date) if name.contains("as_of") => Some(Value::String(date.to_string())),
+            _ => None,
+        })
+        .unwrap_or(Value::Null)
+}
+
+/// Lineage (#10, responses.md §4): rantai finding → metric → operasi → dataset
+/// → sumber.
+///
+/// Ia **bukan blok**. Blok yang tidak dikenal klien dilewati tanpa merusak
+/// render (§1), jadi menaruh jejak asal angka di dalam blok berarti jejak itu
+/// hilang pada klien pertama yang tidak mengenalnya. `evidence_json` adalah
+/// kolomnya sendiri dan selalu ikut dokumen.
+pub fn evidence(plan: &Plan, node_run_id: Uuid, row_count: usize, duration_ms: i64) -> Value {
     json!({
-        "type": "provenance",
-        "id": "evidence",
-        "capability_id": plan.capability_id,
-        "query_id": plan.query_id,
-        "sql_file": plan.sql_file,
-        "catalog_version_id": plan.catalog_version_id,
-        "catalog_content_hash": plan.catalog_content_hash,
-        "parameters": bindings,
-        "row_count": row_count,
-        "duration_ms": duration_ms,
+        "lineage": [
+            {
+                "node_run_id": node_run_id,
+                // L3 belum ada: hasil kecil disimpan inline, jadi tidak ada
+                // handle dataset untuk dirujuk. `null` berarti "tidak ada",
+                // bukan "lupa dicatat".
+                "dataset_id": Value::Null,
+                "capability_id": plan.capability_id,
+                "query_id": plan.query_id,
+                "sql_file": plan.sql_file,
+                "catalog_version_id": plan.catalog_version_id,
+                "catalog_content_hash": plan.catalog_content_hash,
+                "as_of": as_of(plan),
+                // #14 — belum ada konsolidasi mata uang.
+                "exchange_rate_id": Value::Null,
+                "parameters": bindings(plan),
+                "row_count": row_count,
+                "duration_ms": duration_ms,
+            }
+        ],
+        // §4 — angka turunan yang sah untuk prosa. Kosong selama belum ada
+        // narasi LLM; begitu ada, hanya lewat sini ia menjadi sah.
+        "derivations": [],
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
 
     fn plan() -> Plan {
         Plan {
@@ -291,24 +430,53 @@ mod tests {
         row
     }
 
+    fn node() -> Uuid {
+        Uuid::from_u128(7)
+    }
+
+    /// Setiap blok memenuhi §1 dan §2 sekaligus.
+    fn assert_shape(blocks: &Value) {
+        for block in blocks.as_array().unwrap() {
+            let block_type = block["type"].as_str().unwrap();
+            assert!(
+                BLOCK_TYPES.contains(&block_type),
+                "tipe di luar kosakata §2: {block_type}"
+            );
+            assert!(block["block_id"].is_string(), "block_id hilang: {block}");
+            assert!(block.get("id").is_none(), "field `id` lama masih ada: {block}");
+            assert_eq!(block["schema_version"], BLOCK_SCHEMA_VERSION);
+            if DATA_BLOCKS.contains(&block_type) {
+                assert!(
+                    block["derived_from"].as_array().is_some_and(|refs| !refs.is_empty()),
+                    "blok data tanpa derived_from: {block}"
+                );
+            }
+        }
+    }
+
     #[test]
-    fn single_row_becomes_metrics_with_provenance() {
-        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[]);
+    fn single_row_becomes_one_metric_block_per_named_value() {
+        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[], node());
         let blocks = response.blocks.as_array().unwrap();
 
         assert_eq!(response.outcome, "Answered");
         assert_eq!(response.completeness, "Complete");
-        assert_eq!(blocks[0]["type"], "metrics");
-        assert_eq!(blocks[0]["metrics"][0]["value"], "1500.00");
-        assert_eq!(blocks[1]["type"], "provenance");
-        assert_eq!(blocks[1]["query_id"], "savings.deposit_total");
+        assert_shape(&response.blocks);
+        // §2: `metric` tunggal, satu nilai bernama per blok — bukan `metrics`.
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["type"], "metric");
+        assert_eq!(blocks[0]["block_id"], "metric:total_deposit_amount");
+        assert_eq!(blocks[0]["value"], "1500.00");
+        assert_eq!(blocks[0]["period"]["from_date"], "2026-09-01");
+        assert_eq!(blocks[0]["derived_from"][0]["node_run_id"], node().to_string());
     }
 
     #[test]
     fn many_rows_become_a_table() {
-        let response = analysis(&plan(), &[row("1.00", 1), row("2.00", 2)], 30, false, &[]);
+        let response = analysis(&plan(), &[row("1.00", 1), row("2.00", 2)], 30, false, &[], node());
         let blocks = response.blocks.as_array().unwrap();
 
+        assert_shape(&response.blocks);
         assert_eq!(blocks[0]["type"], "table");
         assert_eq!(blocks[0]["row_count"], 2);
         assert_eq!(blocks[0]["columns"][0], "total_deposit_amount");
@@ -316,16 +484,19 @@ mod tests {
 
     #[test]
     fn no_rows_is_empty_not_a_failure() {
-        let response = analysis(&plan(), &[], 5, false, &[]);
+        let response = analysis(&plan(), &[], 5, false, &[], node());
 
         assert_eq!(response.outcome, "Empty");
         // engine.md melarang Empty + Partial: pencarian parsial tidak boleh
         // menyatakan populasi kosong.
         assert_eq!(response.completeness, "Complete");
+        assert_shape(&response.blocks);
     }
 
+    /// RESP-8.8 — PII dimatikan: kolom identitas tidak muncul dan penahanannya
+    /// dinyatakan.
     #[test]
-    fn pii_columns_are_withheld_and_declared_when_the_switch_is_off() {
+    fn resp_8_8_pii_columns_are_withheld_and_declared_when_the_switch_is_off() {
         let mut plan = plan();
         plan.output_fields.push("client_display_name".into());
         plan.output_sensitivity.push("pii".into());
@@ -333,15 +504,18 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row.clone(), row], 5, false, &[]);
+        let response = analysis(&plan, &[row.clone(), row], 5, false, &[], node());
         let rendered = response.blocks.to_string();
 
         assert!(!rendered.contains("Budi"), "PII bocor ke response: {rendered}");
         let blocks = response.blocks.as_array().unwrap();
         assert_eq!(blocks[0]["columns"].as_array().unwrap().len(), 2);
-        // Penahanan wajib dinyatakan, bukan sekadar kolomnya hilang (I5).
+        // §7 — tabel mendeklarasikan kolom yang ditahan…
+        assert_eq!(blocks[0]["withheld_columns"][0], "client_display_name");
+        // …dan blok limitation menyatakannya (I5).
         let last = blocks.last().unwrap();
         assert_eq!(last["type"], "limitation");
+        assert_eq!(last["block_id"], "pii_withheld");
         assert_eq!(last["withheld_columns"][0], "client_display_name");
     }
 
@@ -354,16 +528,51 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row], 5, true, &[]);
+        let response = analysis(&plan, &[row], 5, true, &[], node());
         assert!(response.blocks.to_string().contains("Budi"));
     }
 
+    /// RESP-8.4 — pengungkapan auto-bind hidup di blok `note` (§5), bukan
+    /// `limitation`. Validator memeriksa blok itu; mengungkapnya di tempat lain
+    /// sama dengan tidak mengungkapnya.
     #[test]
-    fn provenance_reports_scope_as_a_count_not_a_list() {
-        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[]);
-        let provenance = &response.blocks.as_array().unwrap()[1];
+    fn resp_8_4_auto_bound_slots_are_disclosed_in_a_note_block() {
+        let auto_bound = [AutoBound {
+            field_id: "client_id".into(),
+            label: Some("Siti".into()),
+        }];
+        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &auto_bound, node());
+        let blocks = response.blocks.as_array().unwrap();
 
-        assert_eq!(provenance["parameters"][1]["value"], "3 authorized offices");
-        assert_eq!(provenance["catalog_content_hash"], "hash");
+        assert_shape(&response.blocks);
+        let note = blocks.iter().find(|b| b["type"] == "note").expect("blok note");
+        assert_eq!(note["block_id"], "slots_auto_bound");
+        assert_eq!(note["auto_bound_slots"][0]["field_id"], "client_id");
+        assert_eq!(note["auto_bound_slots"][0]["provenance"], "resolver_unique");
+        assert!(
+            !blocks.iter().any(|b| b["type"] == "limitation"),
+            "auto-bind tidak boleh diungkap sebagai limitation"
+        );
+    }
+
+    /// RESP-8.3 — lineage dapat ditelusuri: ia ada di `evidence_json`, bukan di
+    /// dalam blok yang boleh dilewati klien.
+    #[test]
+    fn resp_8_3_lineage_lives_in_evidence_not_in_a_block() {
+        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[], node());
+
+        let lineage = &response.evidence["lineage"][0];
+        assert_eq!(lineage["node_run_id"], node().to_string());
+        assert_eq!(lineage["query_id"], "savings.deposit_total");
+        assert_eq!(lineage["catalog_content_hash"], "hash");
+        assert_eq!(lineage["parameters"][1]["value"], "3 authorized offices");
+        assert!(lineage.get("dataset_id").is_some(), "dataset_id wajib hadir walau null");
+        assert!(response.evidence["derivations"].is_array());
+
+        // Tidak ada blok `provenance`: ia bukan bagian dari kosakata §2.
+        assert!(
+            !response.blocks.to_string().contains("provenance"),
+            "lineage masih bocor ke dalam blok"
+        );
     }
 }

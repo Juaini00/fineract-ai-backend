@@ -20,6 +20,7 @@ use crate::{
     catalog::Catalog,
     clarification::repository::{self, AcceptedAnswer, Form},
     engine::{
+        compose,
         executor,
         planner,
         resolver::{self, Candidates, ResolverSlot},
@@ -237,31 +238,40 @@ fn skipped_response(form: &Form, completed_nodes: i64) -> repository::SkippedRes
     let partial = completed_nodes > 0;
 
     let blocks = serde_json::json!([
-        {
-            "type": "narrative",
-            "id": "skipped",
-            "title": "Stopped at your request",
-            "body": "You chose not to provide the remaining input, so Jarvis stopped here \
-                     instead of guessing a value.",
-        },
-        {
-            "type": "limitation",
-            "id": "skipped_inputs",
-            "title": "What is missing",
-            "body": if unanswered.is_empty() {
-                "No further input was supplied before the request was stopped.".to_string()
-            } else {
-                format!(
-                    "{} input(s) were never supplied, so no figure is reported for them: {}.",
-                    unanswered.len(),
-                    unanswered.join(", ")
-                )
-            },
-            "unanswered_fields": unanswered,
-            // Hasil parsial yang sudah durable TIDAK dibuang (clarifications.md);
-            // jumlahnya dinyatakan supaya pembaca tahu ada sesuatu untuk dilihat.
-            "completed_nodes": completed_nodes,
-        }
+        // Bentuk blok mengikuti responses.md §1 dan §2, sama seperti dokumen
+        // `analysis`: satu kosakata, satu bungkus, satu tempat ia dibuat.
+        compose::block(
+            "skipped",
+            "narrative",
+            &[],
+            serde_json::json!({
+                "title": "Stopped at your request",
+                "body": "You chose not to provide the remaining input, so Jarvis stopped here \
+                         instead of guessing a value.",
+            }),
+        ),
+        compose::block(
+            "skipped_inputs",
+            "limitation",
+            &[],
+            serde_json::json!({
+                "title": "What is missing",
+                "body": if unanswered.is_empty() {
+                    "No further input was supplied before the request was stopped.".to_string()
+                } else {
+                    format!(
+                        "{} input(s) were never supplied, so no figure is reported for them: {}.",
+                        unanswered.len(),
+                        unanswered.join(", ")
+                    )
+                },
+                "unanswered_fields": unanswered,
+                // Hasil parsial yang sudah durable TIDAK dibuang
+                // (clarifications.md); jumlahnya dinyatakan supaya pembaca tahu
+                // ada sesuatu untuk dilihat.
+                "completed_nodes": completed_nodes,
+            }),
+        ),
     ]);
 
     repository::SkippedResponse {
@@ -707,7 +717,7 @@ mod tests {
         assert_eq!(response.completeness_reason, "skipped_by_user");
         assert_eq!(blocks[0]["type"], "narrative");
         // I5 — gap dinyatakan, bukan sekadar tidak ada angka.
-        assert_eq!(blocks[1]["id"], "skipped_inputs");
+        assert_eq!(blocks[1]["block_id"], "skipped_inputs");
         assert_eq!(blocks[1]["unanswered_fields"][0], "from_date");
         assert_eq!(response.unanswered_fields.len(), 2);
     }

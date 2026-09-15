@@ -31,6 +31,7 @@ pub fn router(catalog: Arc<catalog::Catalog>, hub: Arc<events::Hub>) -> Router<F
         .merge(session::route::router())
         .merge(job::route::router())
         .merge(clarification::route::router())
+        .merge(engine::dataset::route::router())
         .merge(events::route::router())
         .layer(Extension(catalog))
         .layer(Extension(hub))

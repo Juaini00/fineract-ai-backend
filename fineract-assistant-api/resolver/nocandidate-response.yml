@@ -26,6 +26,6 @@ runtime:
 
         test("alasannya menyebut resolver yang dipakai", function () {
           const block = document.blocks_json[0];
-          expect(block.id).to.equal("resolver_no_candidates");
+          expect(block.block_id).to.equal("resolver_no_candidates");
           expect(block.body).to.contain("client.identity_resolve");
         });
