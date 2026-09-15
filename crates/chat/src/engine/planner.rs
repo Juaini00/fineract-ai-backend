@@ -19,9 +19,12 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::catalog::{
-    loader::Catalog,
-    model::{Capability, QueryManifest},
+use crate::{
+    catalog::{
+        loader::Catalog,
+        model::{Capability, QueryManifest},
+    },
+    engine::resolver::ResolverSlot,
 };
 
 /// Nilai parameter yang siap di-bind ke SQL, dalam urutan deklarasi manifest.
@@ -82,20 +85,37 @@ pub enum Unplannable {
 pub struct Missing {
     pub name: String,
     pub kind: String,
-    /// Slot identitas (`source: transient_sensitive_input`) tidak boleh diikat
-    /// dari teks bebas (K1); ia menuntut resolver yang menerbitkan opsi.
+    /// Slot identitas tidak boleh diikat dari teks bebas (K1); ia menuntut
+    /// resolver yang menerbitkan opsi. Dua sumbernya: manifest query menandai
+    /// parameter `transient_sensitive_input`, atau capability mendeklarasikan
+    /// `probe:` untuknya.
     pub identity: bool,
+    /// Resolver yang menerbitkan opsi untuk slot ini. `None` pada slot identitas
+    /// berarti slot itu **tidak dapat ditanyakan sama sekali**.
+    pub resolver: Option<ResolverSlot>,
 }
 
 impl Missing {
     /// Tipe semantik field pada form (`clarifications.md` — Form model).
+    ///
+    /// Slot ber-resolver **selalu** `single_choice`: jawabannya adalah id opsi
+    /// yang server terbitkan, bukan teks yang diketik pengguna.
     pub fn field_type(&self) -> &'static str {
+        if self.resolver.is_some() {
+            return "single_choice";
+        }
+
         match self.kind.as_str() {
             "date" => "date",
             "integer" | "bigint" | "decimal" => "number",
             "boolean" => "boolean",
             _ => "text",
         }
+    }
+
+    /// Slot identitas yang tidak punya resolver: tidak dapat ditanyakan (K1).
+    pub fn unanswerable(&self) -> bool {
+        self.identity && self.resolver.is_none()
     }
 }
 
@@ -105,6 +125,9 @@ impl Unplannable {
         match self {
             Self::NoCapabilityMatched => "no_capability_matched".to_string(),
             Self::QueryMissing(_) => "capability_query_missing".to_string(),
+            Self::NeedsClarification { missing, .. } if missing.iter().any(Missing::unanswerable) => {
+                "identity_slot_without_resolver".to_string()
+            }
             Self::NeedsClarification { .. } => "parameter_needs_clarification".to_string(),
             Self::ParameterUnsupported { .. } => "parameter_binding_unsupported".to_string(),
         }
@@ -121,13 +144,27 @@ impl Unplannable {
                 "The selected capability refers to query '{query_id}', which is not present in the approved catalog."
             ),
             Self::NeedsClarification { capability, missing } => {
+                let blocked: Vec<&str> = missing
+                    .iter()
+                    .filter(|item| item.unanswerable())
+                    .map(|item| item.name.as_str())
+                    .collect();
                 let names: Vec<&str> = missing.iter().map(|item| item.name.as_str()).collect();
-                format!(
-                    "Capability '{capability}' requires {} and those values cannot be derived \
-                     from the request. Identity slots need an approved resolver, which does not \
-                     exist yet, so they cannot be answered as free text.",
-                    names.join(", ")
-                )
+
+                if blocked.is_empty() {
+                    format!(
+                        "Capability '{capability}' requires {} and those values cannot be derived \
+                         from the request.",
+                        names.join(", ")
+                    )
+                } else {
+                    format!(
+                        "Capability '{capability}' requires {}, and no approved resolver publishes \
+                         options for it. An identity value is never bound from free text, so this \
+                         request is not answered rather than answered from a guess.",
+                        blocked.join(", ")
+                    )
+                }
             }
             Self::ParameterUnsupported { capability, parameter, kind } => format!(
                 "Capability '{capability}' declares parameter '{parameter}' of type '{kind}', \
@@ -184,7 +221,8 @@ pub async fn plan(
         return Ok(Err(Unplannable::QueryMissing(query_id)));
     };
 
-    let parameters = match bind_parameters(capability, query, authorized_office_ids, supplied) {
+    let parameters = match bind_parameters(catalog, capability, query, authorized_office_ids, supplied)
+    {
         Ok(parameters) => parameters,
         Err(problem) => return Ok(Err(problem)),
     };
@@ -265,6 +303,7 @@ async fn best_capability(
 /// Urutannya mengikuti deklarasi manifest, karena itulah urutan `$1..$n` pada
 /// SQL — validator katalog sudah memastikan keduanya cocok.
 fn bind_parameters(
+    catalog: &Catalog,
     capability: &Capability,
     query: &QueryManifest,
     authorized_office_ids: &[i64],
@@ -278,21 +317,21 @@ fn bind_parameters(
         // Jawaban klarifikasi menang atas default — itulah gunanya bertanya.
         // Scope TIDAK PERNAH diambil dari sini (I7): ia hanya berasal dari
         // otorisasi, dan pengguna tidak dapat memperluasnya lewat jawaban.
-        if parameter.source.as_deref() != Some("authorized_scope") {
-            if let Some(answer) = supplied.get(&parameter.name) {
-                match typed_answer(&parameter.kind, answer) {
-                    Some(value) => {
-                        bound.push(value);
-                        continue;
-                    }
-                    None => {
-                        // Jawaban tersimpan tidak dapat diparse lagi: bentuknya
-                        // berubah atau manifest berubah. Ditanyakan ulang, bukan
-                        // ditebak.
-                        missing.push(missing_parameter(parameter));
-                        bound.push(Bound::NullText);
-                        continue;
-                    }
+        if parameter.source.as_deref() != Some("authorized_scope")
+            && let Some(answer) = supplied.get(&parameter.name)
+        {
+            match typed_answer(&parameter.kind, answer) {
+                Some(value) => {
+                    bound.push(value);
+                    continue;
+                }
+                None => {
+                    // Jawaban tersimpan tidak dapat diparse lagi: bentuknya
+                    // berubah atau manifest berubah. Ditanyakan ulang, bukan
+                    // ditebak.
+                    missing.push(missing_parameter(catalog, capability, parameter));
+                    bound.push(Bound::NullText);
+                    continue;
                 }
             }
         }
@@ -351,7 +390,7 @@ fn bind_parameters(
             // menerima NULL pada slot pencarian akan menjawab "tidak ada hasil"
             // untuk pertanyaan yang tidak pernah diajukan (I5).
             (_, None) if parameter.required => {
-                missing.push(missing_parameter(parameter));
+                missing.push(missing_parameter(catalog, capability, parameter));
                 // Placeholder supaya posisi parameter tetap sejajar; pengikatan
                 // gagal di akhir sehingga nilai ini tidak pernah dieksekusi.
                 Bound::NullText
@@ -388,14 +427,33 @@ fn bind_parameters(
     Ok(bound)
 }
 
-fn missing_parameter(parameter: &crate::catalog::model::QueryParameter) -> Missing {
+fn missing_parameter(
+    catalog: &Catalog,
+    capability: &Capability,
+    parameter: &crate::catalog::model::QueryParameter,
+) -> Missing {
+    // Resolver dideklarasikan capability, bukan disimpulkan dari nama parameter:
+    // menebak "yang bernama *_id pasti identitas" akan memperlakukan kolom
+    // pencarian sebagai binding identitas dan sebaliknya.
+    let resolver = capability
+        .parameters
+        .get(&parameter.name)
+        .and_then(|declared| declared.probe.as_ref())
+        .and_then(|probe| ResolverSlot::from_catalog(catalog, probe, &parameter.kind));
+
+    let declared_probe = capability
+        .parameters
+        .get(&parameter.name)
+        .is_some_and(|declared| declared.probe.is_some());
+
     Missing {
         name: parameter.name.clone(),
         kind: parameter.kind.clone(),
-        // Hanya slot yang manifesnya sendiri menandai sebagai input sensitif
-        // yang dianggap identitas. Selebihnya — termasuk kolom pencarian nama —
+        // Dua sumber: manifest query menandainya input sensitif, atau capability
+        // mendeklarasikan `probe:`. Selebihnya — termasuk kolom pencarian nama —
         // adalah masukan pencarian, bukan binding identitas.
-        identity: parameter.source.as_deref() == Some("transient_sensitive_input"),
+        identity: parameter.source.as_deref() == Some("transient_sensitive_input") || declared_probe,
+        resolver,
     }
 }
 
@@ -458,6 +516,22 @@ mod tests {
     use crate::catalog::model::{CapabilityParameter, QueryParameter};
     use std::collections::BTreeMap;
 
+    /// Katalog kosong: test ini menguji pengikatan parameter, dan satu-satunya
+    /// hal yang dibaca dari katalog adalah resolver — yang di sini memang tidak
+    /// ada, sehingga slot identitas tampak sebagai tidak dapat ditanyakan.
+    fn catalog() -> Catalog {
+        Catalog {
+            capabilities: Vec::new(),
+            queries: Vec::new(),
+            datasets: Vec::new(),
+            safety_policy: Default::default(),
+            sensitivity_classes: Default::default(),
+            sql_files: Default::default(),
+            content_hash: String::new(),
+            unreadable: Vec::new(),
+        }
+    }
+
     fn capability(parameters: &[(&str, &str)]) -> Capability {
         capability_with_cap(parameters, None)
     }
@@ -471,6 +545,7 @@ mod tests {
                     required: false,
                     default: Some(serde_yaml::Value::String(default.to_string())),
                     hard_cap,
+                    probe: None,
                 },
             );
         }
@@ -499,6 +574,7 @@ mod tests {
             output_fields: Vec::new(),
             guards: Default::default(),
             timeout_ms: None,
+            resolves: None,
         }
     }
 
@@ -524,7 +600,7 @@ mod tests {
             parameter("office_ids", "array_bigint", true, Some("authorized_scope")),
         ]);
 
-        let bound = bind_parameters(&capability, &query, &[1, 2], &BTreeMap::new()).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[1, 2], &BTreeMap::new()).unwrap();
         let today = Utc::now().date_naive();
 
         assert_eq!(bound.len(), 3);
@@ -541,13 +617,13 @@ mod tests {
         let capability = Capability {
             parameters: BTreeMap::from([(
                 "search".to_string(),
-                CapabilityParameter { required: true, default: None, hard_cap: None },
+                CapabilityParameter { required: true, default: None, hard_cap: None, probe: None },
             )]),
             ..capability(&[])
         };
         let query = query(vec![parameter("search", "string", true, None)]);
 
-        let problem = bind_parameters(&capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya ditanyakan");
         };
@@ -563,7 +639,7 @@ mod tests {
             parameter("product_ids", "array_bigint", false, None),
         ]);
 
-        let bound = bind_parameters(&capability, &query, &[7], &BTreeMap::new()).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[7], &BTreeMap::new()).unwrap();
         assert_eq!(bound[1], Bound::NullText);
         assert_eq!(bound[2], Bound::NullBigintArray);
     }
@@ -573,7 +649,7 @@ mod tests {
         let capability = capability(&[]);
         let query = query(vec![parameter("account_number", "string", true, None)]);
 
-        let problem = bind_parameters(&capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = &problem else {
             panic!("seharusnya menuntut klarifikasi: {problem:?}");
         };
@@ -627,7 +703,7 @@ mod tests {
         let mut supplied = BTreeMap::new();
         supplied.insert("from_date".to_string(), "2026-01-01".to_string());
 
-        let bound = bind_parameters(&capability, &query, &[1], &supplied).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[1], &supplied).unwrap();
         assert_eq!(bound[0], Bound::Date(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()));
     }
 
@@ -645,7 +721,7 @@ mod tests {
         supplied.insert("office_ids".to_string(), "1,2,3,4,5,6,7,8,9".to_string());
 
         // Scope tetap dari otorisasi (I7), jawaban diabaikan.
-        let bound = bind_parameters(&capability, &query, &[3], &supplied).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[3], &supplied).unwrap();
         assert_eq!(bound[0], Bound::OfficeIds(vec![3]));
     }
 
@@ -657,7 +733,7 @@ mod tests {
             parameter("to_date", "date", true, None),
         ]);
 
-        let problem = bind_parameters(&capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya menuntut klarifikasi");
         };
@@ -672,7 +748,7 @@ mod tests {
         let capability = capability_with_cap(&[("limit", "250")], Some(100));
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
-        let bound = bind_parameters(&capability, &query, &[1], &BTreeMap::new()).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap();
         // 250 melebihi hard_cap 100 → dipotong, bukan diteruskan apa adanya.
         assert_eq!(bound[0], Bound::Bigint(100));
     }
@@ -682,7 +758,7 @@ mod tests {
         let capability = capability_with_cap(&[("limit", "10")], Some(100));
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
-        assert_eq!(bind_parameters(&capability, &query, &[1], &BTreeMap::new()).unwrap()[0], Bound::Bigint(10));
+        assert_eq!(bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap()[0], Bound::Bigint(10));
     }
 
     #[test]
@@ -695,7 +771,7 @@ mod tests {
             Some("authorized_scope"),
         )]);
 
-        let bound = bind_parameters(&capability, &query, &[3, 4], &BTreeMap::new()).unwrap();
+        let bound = bind_parameters(&catalog(), &capability, &query, &[3, 4], &BTreeMap::new()).unwrap();
         assert_eq!(bound[0], Bound::OfficeIds(vec![3, 4]));
     }
 }

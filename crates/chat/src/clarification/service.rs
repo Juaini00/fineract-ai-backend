@@ -3,17 +3,27 @@
 //! Urutan pemeriksaan mengikuti T6: idempotency → replay → ownership →
 //! lifecycle → revision → validasi field. Jawaban yang ditolak **tidak**
 //! mengubah form maupun melanjutkan eksekusi, dan tidak memicu panggilan model.
+//!
+//! Untuk field `single_choice` ada dua pemeriksaan yang **tidak boleh
+//! digabung**: opsi pernah diterbitkan untuk form+field ini (C9), dan opsi itu
+//! masih berada dalam scope terotorisasi saat submit (I7). Keanggotaan bukan
+//! otorisasi — daftar opsi lama tidak menjadi izin baru.
 
 use std::collections::BTreeMap;
 
 use foundation::{error::ApiError, state::Foundation};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use uuid::Uuid;
 
 use crate::{
-    clarification::repository::{self, Form},
-    engine::planner,
-    job::service as job_service,
+    catalog::Catalog,
+    clarification::repository::{self, AcceptedAnswer, Form},
+    engine::{
+        executor,
+        planner,
+        resolver::{self, Candidates, ResolverSlot},
+    },
+    job::{repository::Job, service as job_service},
 };
 
 /// Batas teks bebas (runtime.md §2 `MAX_RAW_TEXT_LENGTH`).
@@ -23,7 +33,34 @@ const MAX_RAW_TEXT_LENGTH: usize = 512;
 #[derive(Debug, serde::Serialize)]
 pub struct FieldError {
     pub field_id: String,
+    /// Kode stabil supaya klien dapat membedakan "salah tipe" dari "opsi tidak
+    /// pernah diterbitkan" tanpa mencocokkan kalimat.
+    pub code: &'static str,
     pub message: String,
+}
+
+/// Satu halaman opsi, beserta pernyataan tentang apa yang **tidak** dikirim.
+#[derive(Debug, serde::Serialize)]
+pub struct OptionPage {
+    pub clarification_id: Uuid,
+    pub revision: i32,
+    pub field_id: String,
+    pub resolver_ref: String,
+    pub options: Vec<IssuedOption>,
+    pub cursor: usize,
+    pub next_cursor: Option<usize>,
+    /// Jumlah kandidat yang cocok dalam scope — bukan jumlah yang dikirim.
+    pub matched_total: usize,
+    /// Kandidat melebihi `RESOLVER_MAX_CANDIDATES`: daftar ini bukan populasi
+    /// lengkap, dan klien wajib mempersempit dengan `q`.
+    pub truncated: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct IssuedOption {
+    pub option_id: String,
+    pub label: String,
+    pub attributes: Map<String, Value>,
 }
 
 /// Form terbuka milik job ini.
@@ -40,9 +77,101 @@ pub async fn active_form(
         .ok_or(ApiError::NotFound)
 }
 
+/// Terbitkan satu halaman opsi untuk sebuah field `single_choice`.
+///
+/// Baris `clarification_options` ditulis untuk halaman yang **benar-benar
+/// dikirim**, bukan untuk seluruh hasil resolver: tabel itu adalah bukti "opsi
+/// ini pernah kami tampilkan", dan mencatat yang tidak pernah terlihat
+/// menghapus artinya.
+pub async fn options(
+    foundation: &Foundation,
+    catalog: &Catalog,
+    job_id: Uuid,
+    owner_user_id: Uuid,
+    field_id: &str,
+    cursor: usize,
+    limit: Option<usize>,
+    search: Option<&str>,
+) -> Result<OptionPage, ApiError> {
+    let job = job_service::owned(foundation, job_id, owner_user_id).await?;
+    let form = repository::open_form_of(foundation.app_db().pool(), job_id)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or(ApiError::NotFound)?;
+
+    let field = find_field(&form.fields_json, field_id).ok_or(ApiError::NotFound)?;
+    let slot = slot_of(catalog, &field).ok_or_else(|| {
+        ApiError::Conflict(format!("Field '{field_id}' is not answered by choosing an option"))
+    })?;
+
+    let config = foundation.config();
+    // Default halaman berasal dari `row_cap` shape bila ada — katalog yang
+    // menyatakan berapa banyak opsi masuk akal untuk entitas itu; config hanya
+    // memberi cadangan dan batas atas yang dapat diminta klien.
+    let page_size = limit
+        .unwrap_or_else(|| slot.page_size.min(config.resolver_page_size))
+        .clamp(1, config.resolver_page_size_max);
+
+    let candidates = fetch(foundation, &job, &slot, search).await?;
+
+    let page: Vec<_> = candidates
+        .items
+        .iter()
+        .skip(cursor)
+        .take(page_size)
+        .cloned()
+        .collect();
+
+    repository::issue_options(
+        foundation.app_db().pool(),
+        &form,
+        field_id,
+        &slot.query_id,
+        &cursor.to_string(),
+        &page
+            .iter()
+            .map(|candidate| {
+                (
+                    candidate.option_id.clone(),
+                    // `label` ikut ke binding: pengungkapan K5 dan riwayat
+                    // memerlukan teks yang benar-benar dilihat pengguna, dan
+                    // opsi dipurge saat form terminal.
+                    serde_json::json!({ "value": candidate.binding, "label": candidate.label }),
+                    candidate.label.clone(),
+                    Value::Object(candidate.attributes.clone()),
+                )
+            })
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .map_err(anyhow::Error::from)?;
+
+    let next = cursor + page.len();
+
+    Ok(OptionPage {
+        clarification_id: form.clarification_id,
+        revision: form.revision,
+        field_id: field_id.to_string(),
+        resolver_ref: slot.query_id.clone(),
+        cursor,
+        next_cursor: (next < candidates.items.len()).then_some(next),
+        matched_total: candidates.matched_total,
+        truncated: candidates.truncated,
+        options: page
+            .into_iter()
+            .map(|candidate| IssuedOption {
+                option_id: candidate.option_id,
+                label: candidate.label,
+                attributes: candidate.attributes,
+            })
+            .collect(),
+    })
+}
+
 /// Terima jawaban untuk form terbuka.
 pub async fn answer(
     foundation: &Foundation,
+    catalog: &Catalog,
     job_id: Uuid,
     owner_user_id: Uuid,
     clarification_id: Uuid,
@@ -71,25 +200,25 @@ pub async fn answer(
         ));
     }
 
-    let errors = validate(&form.fields_json, answers);
+    let (accepted, errors) = resolve_answers(foundation, catalog, &job, &form, answers).await?;
     if !errors.is_empty() {
         return Err(ApiError::Unprocessable(
             serde_json::to_string(&errors).unwrap_or_else(|_| "invalid answers".to_string()),
         ));
     }
 
-    let accepted = repository::accept_answers(
+    let stored = repository::accept_answers(
         foundation.app_db().pool(),
         &form,
         job.session_id,
         owner_user_id,
-        answers,
+        &accepted,
         foundation.config().job_ttl_running_secs,
     )
     .await
     .map_err(anyhow::Error::from)?;
 
-    if !accepted {
+    if !stored {
         // Pengiriman lain menang lebih dulu.
         return Err(ApiError::Conflict(
             "This clarification was already answered".to_string(),
@@ -103,61 +232,235 @@ pub async fn answer(
 ///
 /// Field yang tidak ada di form ditolak, bukan diabaikan: menerimanya berarti
 /// klien dapat menyuntikkan parameter yang tidak pernah ditanyakan.
-fn validate(fields_json: &Value, answers: &BTreeMap<String, String>) -> Vec<FieldError> {
-    let mut errors = Vec::new();
-    let fields = fields_json.as_array().cloned().unwrap_or_default();
+async fn resolve_answers(
+    foundation: &Foundation,
+    catalog: &Catalog,
+    job: &Job,
+    form: &Form,
+    answers: &BTreeMap<String, String>,
+) -> Result<(Vec<AcceptedAnswer>, Vec<FieldError>), ApiError> {
+    let fields = form.fields_json.as_array().cloned().unwrap_or_default();
+    let mut errors = structural_errors(&fields, answers);
+    let mut accepted = Vec::new();
 
     for (field_id, value) in answers {
-        let Some(field) = fields
-            .iter()
-            .find(|field| field.get("field_id").and_then(Value::as_str) == Some(field_id.as_str()))
-        else {
-            errors.push(FieldError {
-                field_id: field_id.clone(),
-                message: "Unknown field for this clarification".to_string(),
-            });
-            continue;
+        let Some(field) = find_field(&form.fields_json, field_id) else {
+            continue; // sudah dilaporkan `structural_errors`
         };
-
         if value.chars().count() > MAX_RAW_TEXT_LENGTH {
-            errors.push(FieldError {
-                field_id: field_id.clone(),
-                message: format!("Value exceeds {MAX_RAW_TEXT_LENGTH} characters"),
-            });
             continue;
         }
 
-        let parameter_kind = field
-            .get("parameter_kind")
-            .and_then(Value::as_str)
-            .unwrap_or("string");
+        match slot_of(catalog, &field) {
+            Some(slot) => {
+                match option_answer(foundation, job, form, field_id, value, &slot).await? {
+                    Ok(answer) => accepted.push(answer),
+                    Err(error) => errors.push(error),
+                }
+            }
+            None => match typed_answer(&field, field_id, value) {
+                Ok(answer) => accepted.push(answer),
+                Err(error) => errors.push(error),
+            },
+        }
+    }
 
-        if planner::typed_answer(parameter_kind, value).is_none() {
-            let field_type = field.get("type").and_then(Value::as_str).unwrap_or("text");
+    Ok((accepted, errors))
+}
+
+/// Pemeriksaan yang tidak menyentuh katalog maupun database: field dikenal,
+/// panjang teks, dan kelengkapan field wajib.
+fn structural_errors(fields: &[Value], answers: &BTreeMap<String, String>) -> Vec<FieldError> {
+    let mut errors = Vec::new();
+
+    for (field_id, value) in answers {
+        let known = fields
+            .iter()
+            .any(|field| field.get("field_id").and_then(Value::as_str) == Some(field_id.as_str()));
+
+        if !known {
             errors.push(FieldError {
                 field_id: field_id.clone(),
-                message: match field_type {
-                    "date" => "Expected a calendar date formatted as YYYY-MM-DD".to_string(),
-                    "number" => "Expected a whole number".to_string(),
-                    other => format!("Value does not satisfy field type '{other}'"),
-                },
+                code: "unknown_field",
+                message: "Unknown field for this clarification".to_string(),
+            });
+        } else if value.chars().count() > MAX_RAW_TEXT_LENGTH {
+            errors.push(FieldError {
+                field_id: field_id.clone(),
+                code: "too_long",
+                message: format!("Value exceeds {MAX_RAW_TEXT_LENGTH} characters"),
             });
         }
     }
 
-    for field in &fields {
+    for field in fields {
         let required = field.get("required").and_then(Value::as_bool).unwrap_or(true);
         let field_id = field.get("field_id").and_then(Value::as_str).unwrap_or("");
 
         if required && !answers.contains_key(field_id) {
             errors.push(FieldError {
                 field_id: field_id.to_string(),
+                code: "required",
                 message: "This field is required".to_string(),
             });
         }
     }
 
     errors
+}
+
+fn typed_answer(field: &Value, field_id: &str, value: &str) -> Result<AcceptedAnswer, FieldError> {
+    let parameter_kind = field
+        .get("parameter_kind")
+        .and_then(Value::as_str)
+        .unwrap_or("string");
+
+    if planner::typed_answer(parameter_kind, value).is_none() {
+        let field_type = field.get("type").and_then(Value::as_str).unwrap_or("text");
+        return Err(FieldError {
+            field_id: field_id.to_string(),
+            code: "type_mismatch",
+            message: match field_type {
+                "date" => "Expected a calendar date formatted as YYYY-MM-DD".to_string(),
+                "number" => "Expected a whole number".to_string(),
+                other => format!("Value does not satisfy field type '{other}'"),
+            },
+        });
+    }
+
+    Ok(AcceptedAnswer {
+        field_id: field_id.to_string(),
+        answer_kind: "typed_value",
+        raw_text: Some(value.to_string()),
+        binding_json: serde_json::json!({ "value": value }),
+        provenance: "user_confirmed",
+        resolver_ref: None,
+        option_set_ref: None,
+    })
+}
+
+/// Jawaban berupa id opsi. Dua pemeriksaan terpisah, keduanya wajib.
+async fn option_answer(
+    foundation: &Foundation,
+    job: &Job,
+    form: &Form,
+    field_id: &str,
+    option_id: &str,
+    slot: &ResolverSlot,
+) -> Result<Result<AcceptedAnswer, FieldError>, ApiError> {
+    // 1. Pernah diterbitkan untuk form+field ini (C9).
+    let issued = repository::issued_option(foundation.app_db().pool(), form.id, field_id, option_id)
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    let Some((binding_json, label, resolver_ref)) = issued else {
+        return Ok(Err(FieldError {
+            field_id: field_id.to_string(),
+            code: "option_not_issued",
+            message: "This option was never issued for this clarification".to_string(),
+        }));
+    };
+
+    // 2. Masih dalam scope terotorisasi SAAT INI (I7). Keanggotaan pada langkah
+    //    1 hanya membuktikan penerbitan; izin dapat menyempit sesudahnya, dan
+    //    daftar lama tidak boleh menjadi izin baru.
+    let candidates = fetch(foundation, job, slot, None).await?;
+    if !candidates
+        .items
+        .iter()
+        .any(|candidate| candidate.option_id == option_id)
+    {
+        return Ok(Err(FieldError {
+            field_id: field_id.to_string(),
+            code: "option_out_of_scope",
+            message: "This option is no longer inside your authorized scope".to_string(),
+        }));
+    }
+
+    // 3. Binding wajib memenuhi tipe parameter yang akan menerimanya.
+    let value = binding_json.get("value").cloned().unwrap_or(Value::Null);
+    if !resolver::binding_matches_kind(&slot.binding_kind, &value) {
+        return Ok(Err(FieldError {
+            field_id: field_id.to_string(),
+            code: "binding_type_mismatch",
+            message: "The stored binding no longer satisfies the parameter type".to_string(),
+        }));
+    }
+
+    Ok(Ok(AcceptedAnswer {
+        field_id: field_id.to_string(),
+        answer_kind: "option_id",
+        // TIDAK ADA raw_text: tidak ada teks bebas yang menjadi binding (K1).
+        raw_text: None,
+        binding_json: serde_json::json!({
+            "value": resolver::binding_text(&value),
+            "label": label,
+        }),
+        provenance: "user_confirmed",
+        resolver_ref,
+        option_set_ref: Some(option_id.to_string()),
+    }))
+}
+
+/// Jalankan resolver dalam scope yang dihitung ulang dari otorisasi.
+async fn fetch(
+    foundation: &Foundation,
+    job: &Job,
+    slot: &ResolverSlot,
+    search: Option<&str>,
+) -> Result<Candidates, ApiError> {
+    let requested: Vec<i64> = job
+        .scope_json
+        .get("office_ids")
+        .and_then(Value::as_array)
+        .map(|ids| ids.iter().filter_map(Value::as_i64).collect())
+        .unwrap_or_default();
+
+    let authorized = executor::authorized_office_ids(foundation.fineract_db(), &requested)
+        .await
+        .map_err(|error| anyhow::anyhow!("resolver scope: {}", error.failure_code()))?;
+
+    // Sakelar PII disnapshot saat job diterima (#15): label opsi tunduk pada
+    // sakelar yang berlaku untuk job ini, bukan yang berlaku sekarang.
+    let pii_enabled = job
+        .scope_json
+        .get("pii")
+        .and_then(|pii| pii.get("enabled"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    resolver::candidates(
+        foundation.fineract_db(),
+        slot,
+        &authorized,
+        pii_enabled,
+        search,
+        foundation.config().resolver_max_candidates,
+    )
+    .await
+        .map_err(|error| anyhow::anyhow!("resolver: {}", error.failure_code()).into())
+}
+
+fn find_field(fields_json: &Value, field_id: &str) -> Option<Value> {
+    fields_json
+        .as_array()?
+        .iter()
+        .find(|field| field.get("field_id").and_then(Value::as_str) == Some(field_id))
+        .cloned()
+}
+
+/// Rebuild resolver sebuah field dari form. Form adalah catatan durable tentang
+/// apa yang ditanyakan; membangunnya ulang dari katalog saja akan mengikuti
+/// katalog yang mungkin sudah berubah sejak form terbit.
+fn slot_of(catalog: &Catalog, field: &Value) -> Option<ResolverSlot> {
+    let declared = field.get("resolver")?;
+    let probe = serde_json::from_value(declared.clone()).ok()?;
+    let kind = field
+        .get("parameter_kind")
+        .and_then(Value::as_str)
+        .unwrap_or("string");
+
+    ResolverSlot::from_catalog(catalog, &probe, kind)
 }
 
 #[cfg(test)]
@@ -172,6 +475,27 @@ mod tests {
         ])
     }
 
+    fn field(id: &str) -> Value {
+        find_field(&fields(), id).unwrap()
+    }
+
+    #[test]
+    fn accepts_well_typed_answers() {
+        let answer = typed_answer(&field("from_date"), "from_date", "2026-01-01").unwrap();
+
+        assert_eq!(answer.answer_kind, "typed_value");
+        assert_eq!(answer.provenance, "user_confirmed");
+        assert_eq!(answer.binding_json["value"], "2026-01-01");
+    }
+
+    #[test]
+    fn rejects_wrong_type_with_a_field_level_message() {
+        let error = typed_answer(&field("from_date"), "from_date", "kemarin").unwrap_err();
+
+        assert_eq!(error.code, "type_mismatch");
+        assert!(error.message.contains("YYYY-MM-DD"));
+    }
+
     fn answers(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs
             .iter()
@@ -179,47 +503,73 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn accepts_well_typed_answers() {
-        assert!(validate(&fields(), &answers(&[("from_date", "2026-01-01")])).is_empty());
-    }
-
-    #[test]
-    fn rejects_wrong_type_with_a_field_level_message() {
-        let errors = validate(&fields(), &answers(&[("from_date", "kemarin")]));
-
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].field_id, "from_date");
-        assert!(errors[0].message.contains("YYYY-MM-DD"));
+    fn structural(pairs: &[(&str, &str)]) -> Vec<FieldError> {
+        structural_errors(fields().as_array().unwrap(), &answers(pairs))
     }
 
     #[test]
     fn rejects_fields_the_form_never_issued() {
         // Field asing = parameter yang tidak pernah ditanyakan; menerimanya
         // memberi klien jalan menyuntikkan binding.
-        let errors = validate(&fields(), &answers(&[("from_date", "2026-01-01"), ("office_ids", "1,2")]));
+        let errors = structural(&[("from_date", "2026-01-01"), ("office_ids", "1,2")]);
 
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].field_id, "office_ids");
+        assert_eq!(errors[0].code, "unknown_field");
     }
 
     #[test]
     fn missing_required_field_is_reported() {
-        let errors = validate(&fields(), &answers(&[("limit", "5")]));
+        let errors = structural(&[("limit", "5")]);
 
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].field_id, "from_date");
+        assert_eq!(errors[0].code, "required");
     }
 
     #[test]
     fn oversized_free_text_is_rejected() {
         let long = "x".repeat(MAX_RAW_TEXT_LENGTH + 1);
-        let fields = json!([
-            { "field_id": "search", "type": "text", "parameter_kind": "string", "required": true }
-        ]);
+        let errors = structural_errors(
+            json!([{ "field_id": "search", "type": "text", "parameter_kind": "string", "required": true }])
+                .as_array()
+                .unwrap(),
+            &answers(&[("search", &long)]),
+        );
 
-        let errors = validate(&fields, &answers(&[("search", &long)]));
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].message.contains("512"));
+        assert_eq!(errors[0].code, "too_long");
+    }
+
+    #[test]
+    fn well_typed_answers_pass_the_structural_checks() {
+        assert!(structural(&[("from_date", "2026-01-01")]).is_empty());
+    }
+
+    #[test]
+    fn a_field_without_a_declared_resolver_is_never_treated_as_a_choice() {
+        // `slot_of` menolak field tanpa blok `resolver`, jadi tidak ada jalur
+        // yang diam-diam menerima teks bebas sebagai id opsi.
+        let catalog = crate::catalog::loader::Catalog {
+            capabilities: Vec::new(),
+            queries: Vec::new(),
+            datasets: Vec::new(),
+            safety_policy: Default::default(),
+            sensitivity_classes: Default::default(),
+            sql_files: Default::default(),
+            content_hash: String::new(),
+            unreadable: Vec::new(),
+        };
+
+        assert!(slot_of(&catalog, &field("from_date")).is_none());
+        // Dan field yang MENGAKU choice tetapi resolvernya tidak ada di katalog
+        // juga menjadi None — bukan diturunkan menjadi teks bebas.
+        let orphan = json!({
+            "field_id": "client_id",
+            "type": "single_choice",
+            "parameter_kind": "integer",
+            "resolver": { "dataset_id": "hilang", "shape_id": "hilang", "output_slot": "client_id" },
+        });
+        assert!(slot_of(&catalog, &orphan).is_none());
     }
 }

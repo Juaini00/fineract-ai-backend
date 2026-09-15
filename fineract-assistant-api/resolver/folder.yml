@@ -1,0 +1,11 @@
+info:
+  name: resolver
+  seq: 6
+  description: |
+    Resolver opsi untuk slot identitas (K1). Membuktikan empat hal yang tidak
+    dapat dibuktikan status code sendirian: opsi berpaginasi dan tidak
+    kehilangan kandidat, hanya halaman yang BENAR-BENAR dikirim yang dapat
+    dijawab, scope resolver berasal dari otorisasi, dan auto-bind
+    (`resolver_unique`) diungkap terpisah dari `user_confirmed` (K5).
+
+    Dijalankan pada tahap engine (worker menyala).

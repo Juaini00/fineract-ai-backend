@@ -111,7 +111,7 @@ Aturan yang tidak boleh dilanggar saat menulis koleksi:
   `WORKER_ENABLED=false` karena folder `chat` menguji semantik **penerimaan**
   (job tetap `Queued`, satu job nonterminal per session). Dengan worker menyala,
   job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
-  perilaku yang diuji. `engine`/`clarification` dijalankan dengan worker menyala
+  perilaku yang diuji. `engine`/`clarification`/`resolver` dijalankan dengan worker menyala
   dan `--delay 1500`.
 - **`--disable-cookies` wajib.** Cookie jar otomatis akan menimpa refresh token
   lama, sehingga uji reuse-detection tidak pernah benar-benar berjalan.

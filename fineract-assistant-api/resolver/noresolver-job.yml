@@ -1,0 +1,38 @@
+info:
+  name: slot identitas tanpa resolver
+  type: http
+  seq: 21
+  description: |
+    account_number bersumber transient_sensitive_input dan tidak punya probe:
+    K1 melarang mengikatnya dari teks bebas, jadi permintaan ini tidak dijawab.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{noResolverIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{noResolverSessionId}}",
+        "request_text": "Which office and product belong to savings account?"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("noResolverIdemKey", "bruno-resolver-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("noResolverJobId", res.getBody().data.job_id);

@@ -13,6 +13,22 @@ use crate::engine::{
     repository::SettledResponse,
 };
 
+/// Slot yang diikat resolver tanpa bertanya (K5, provenance `resolver_unique`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoBound {
+    pub field_id: String,
+    pub label: Option<String>,
+}
+
+impl AutoBound {
+    fn describe(&self) -> String {
+        match &self.label {
+            Some(label) => format!("{} = {label}", self.field_id),
+            None => self.field_id.clone(),
+        }
+    }
+}
+
 /// Susun response dari baris hasil.
 ///
 /// Satu baris → blok `metrics` (satu angka per kolom). Lebih dari satu baris →
@@ -24,6 +40,7 @@ pub fn analysis(
     rows: &[Map<String, Value>],
     duration_ms: i64,
     pii_enabled: bool,
+    auto_bound: &[AutoBound],
 ) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
     let provenance = provenance_block(plan, rows.len(), duration_ms);
@@ -49,20 +66,51 @@ pub fn analysis(
 
     // I5 — tidak ada penghilangan senyap: kolom yang ditahan dinyatakan, bukan
     // sekadar hilang dari tabel.
-    if !withheld.is_empty() {
-        if let Some(array) = blocks.as_array_mut() {
-            array.push(json!({
-                "type": "limitation",
-                "id": "pii_withheld",
-                "title": "Columns withheld",
-                "body": format!(
-                    "PII is disabled for this deployment, so {} column(s) were withheld from the result: {}.",
-                    withheld.len(),
-                    withheld.join(", ")
-                ),
-                "withheld_columns": withheld,
-            }));
-        }
+    if !withheld.is_empty()
+        && let Some(array) = blocks.as_array_mut()
+    {
+        array.push(json!({
+            "type": "limitation",
+            "id": "pii_withheld",
+            "title": "Columns withheld",
+            "body": format!(
+                "PII is disabled for this deployment, so {} column(s) were withheld from the result: {}.",
+                withheld.len(),
+                withheld.join(", ")
+            ),
+            "withheld_columns": withheld,
+        }));
+    }
+
+    // K5 / D2 — slot yang diikat resolver karena hanya ada satu kandidat TIDAK
+    // sama dengan slot yang pengguna konfirmasi. Ia wajib dinyatakan; kalau
+    // tidak, jawaban tampak seolah pengguna memilih nasabah itu sendiri.
+    if !auto_bound.is_empty()
+        && let Some(array) = blocks.as_array_mut()
+    {
+        array.push(json!({
+            "type": "limitation",
+            "id": "slots_auto_bound",
+            "title": "Values chosen without asking",
+            "body": format!(
+                "{} value(s) were bound automatically because the approved resolver returned exactly \
+                 one candidate inside your authorized scope. Nobody confirmed them: {}.",
+                auto_bound.len(),
+                auto_bound
+                    .iter()
+                    .map(AutoBound::describe)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            "auto_bound_slots": auto_bound
+                .iter()
+                .map(|slot| json!({
+                    "field_id": slot.field_id,
+                    "label": slot.label,
+                    "provenance": "resolver_unique",
+                }))
+                .collect::<Vec<_>>(),
+        }));
     }
 
     SettledResponse {
@@ -233,7 +281,7 @@ mod tests {
 
     #[test]
     fn single_row_becomes_metrics_with_provenance() {
-        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false);
+        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[]);
         let blocks = response.blocks.as_array().unwrap();
 
         assert_eq!(response.outcome, "Answered");
@@ -246,7 +294,7 @@ mod tests {
 
     #[test]
     fn many_rows_become_a_table() {
-        let response = analysis(&plan(), &[row("1.00", 1), row("2.00", 2)], 30, false);
+        let response = analysis(&plan(), &[row("1.00", 1), row("2.00", 2)], 30, false, &[]);
         let blocks = response.blocks.as_array().unwrap();
 
         assert_eq!(blocks[0]["type"], "table");
@@ -256,7 +304,7 @@ mod tests {
 
     #[test]
     fn no_rows_is_empty_not_a_failure() {
-        let response = analysis(&plan(), &[], 5, false);
+        let response = analysis(&plan(), &[], 5, false, &[]);
 
         assert_eq!(response.outcome, "Empty");
         // engine.md melarang Empty + Partial: pencarian parsial tidak boleh
@@ -273,7 +321,7 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row.clone(), row], 5, false);
+        let response = analysis(&plan, &[row.clone(), row], 5, false, &[]);
         let rendered = response.blocks.to_string();
 
         assert!(!rendered.contains("Budi"), "PII bocor ke response: {rendered}");
@@ -294,13 +342,13 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row], 5, true);
+        let response = analysis(&plan, &[row], 5, true, &[]);
         assert!(response.blocks.to_string().contains("Budi"));
     }
 
     #[test]
     fn provenance_reports_scope_as_a_count_not_a_list() {
-        let response = analysis(&plan(), &[row("1.00", 1)], 5, false);
+        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[]);
         let provenance = &response.blocks.as_array().unwrap()[1];
 
         assert_eq!(provenance["parameters"][1]["value"], "3 authorized offices");

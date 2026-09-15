@@ -10,6 +10,10 @@ sql_file: queries/datasets/client/identity.source.sql
 data_areas: [client_foundation, organization_foundation]
 tables: [m_client, m_office]
 metrics: [client.relationship_lookup]
+# Tautan ke shape dataset yang dibungkus manifest ini. Sebelumnya tautan itu
+# hanya hidup sebagai komentar di atas, dan koneksi yang hanya berupa prosa
+# adalah persis yang invarian I6 larang.
+resolves: { dataset_id: client.identity, shape_id: identity_candidates }
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 output_fields:

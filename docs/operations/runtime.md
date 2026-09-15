@@ -33,6 +33,7 @@ Referensi terbukti dari repo lama (`ai_report/.env.example`): `FINERACT_DATABASE
 | Parameter | Nilai awal | Alasan | Pemicu revisi |
 | --- | --- | --- | --- |
 | `RESOLVER_PAGE_SIZE` | **25** (maks. diterima 50) | clarifications.md melarang mengirim ribuan opsi. Batas atas nyata adalah manusia: daftar >25 baris tidak dipindai. Konsekuensi schema: hanya halaman yang **benar-benar dikirim** dipersist ke `clarification_options` (#8), jadi page size = unit pertumbuhan tabel berisi nama nasabah. | >20% pengguna memilih opsi dari halaman ≥2 → biasanya kualitas ranking resolver, bukan page size |
+| `RESOLVER_MAX_CANDIDATES` | **500** | Resolver memuat kandidatnya utuh lalu memaginasi di memori: manifest resolver tidak mendeklarasikan parameter cursor, dan menambahkannya di aplikasi berarti mengarang predikat SQL. Angka ini adalah langit-langitnya, dan kelebihannya dinyatakan `truncated: true` pada halaman — bukan daftar yang diam-diam lebih pendek (I5). | sebuah resolver rutin menyentuh batas ini pada halaman pertama → beri resolver itu keyset SQL-side, jangan naikkan angkanya |
 | `CLARIFICATION_OPTION_TTL` | **diturunkan dari `clarification_forms.expires_at`** | **Tidak boleh angka independen.** Opsi yang kedaluwarsa lebih dulu daripada form-nya membuat jawaban sah ditolak "option tidak dikenal" tanpa kesalahan pengguna. Lihat **K4**. | ukuran `clarification_options` > **1 GB** → purge saat form terminal (#8) tidak berjalan |
 | `MAX_CLARIFICATION_STAGES` | **3** | clarifications.md mewajibkan membatch ambiguitas yang sudah diketahui; contoh terdokumentasi adalah dua tahap (client → account). Tiga memberi cadangan untuk kasus tiga tingkat. Stage keempat hampir pasti berarti intent tidak didukung — dan kontraknya mewajibkan melaporkan keterbatasan, bukan loop bertanya. | >2% job mencapai stage 3 **dan** `Answered` (naikkan); stage 3 selalu `Unsupported`/`expired` (turunkan ke 2) |
 | `MAX_REVISIONS_PER_CLARIFICATION` | **10** | Sengaja dipisah dari batas stage karena biayanya berbeda dua orde: `refine_search` hanya memanggil resolver (**tanpa** panggilan LLM), sedangkan stage baru berarti perencanaan/komposisi model. Menyatukannya menghukum pencarian ulang yang murah. | p95 revisi per stage > **4** → perbaiki resolver, jangan naikkan batas |
@@ -219,6 +220,7 @@ NODE_ATTEMPT_CAP_DETERMINISTIC        = 1      # kegagalan diketahui (Failed)
 
 # Klarifikasi (#8, K5)
 RESOLVER_PAGE_SIZE                    = 25     # maks diterima 50
+RESOLVER_MAX_CANDIDATES               = 500    # langit-langit paginasi di memori
 CLARIFICATION_OPTION_TTL              = derived from form.expires_at   # K4
 MAX_CLARIFICATION_STAGES              = 3
 MAX_REVISIONS_PER_CLARIFICATION       = 10     # K15

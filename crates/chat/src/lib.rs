@@ -15,13 +15,20 @@ pub mod job;
 pub mod session;
 pub mod settings;
 
-use axum::Router;
+use std::sync::Arc;
+
+use axum::{Extension, Router};
 use foundation::state::Foundation;
 
 /// Seluruh route fitur chat, dirakit oleh `app`.
-pub fn router() -> Router<Foundation> {
+///
+/// Katalog dibawa sebagai `Extension`, bukan dimuat per request: isinya tetap
+/// selama proses hidup, dan resolver opsi wajib memakai katalog yang **sama**
+/// dengan yang dilihat worker — dua pemuatan berarti dua kebenaran.
+pub fn router(catalog: Arc<catalog::Catalog>) -> Router<Foundation> {
     Router::new()
         .merge(session::route::router())
         .merge(job::route::router())
         .merge(clarification::route::router())
+        .layer(Extension(catalog))
 }

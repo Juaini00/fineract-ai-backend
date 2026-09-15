@@ -3,26 +3,32 @@
 //! `POST /chat/jobs/{id}/responses` menjawab form pada job yang **sama** — ia
 //! tidak pernah membuat job pengganti (clarifications.md).
 
+use std::{collections::BTreeMap, sync::Arc};
+
 use axum::{
-    Json, Router,
-    extract::{Path, State},
+    Extension, Json, Router,
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
 };
 use foundation::{AuthUser, Envelope, error::ApiError, state::Foundation};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::{
-    clarification::{repository::Form, service},
+    catalog::Catalog,
+    clarification::{
+        repository::Form,
+        service::{self, OptionPage},
+    },
     job::route::idempotency_key,
 };
 
 pub fn router() -> Router<Foundation> {
     Router::new()
         .route("/chat/jobs/{job_id}/clarification", get(active))
+        .route("/chat/jobs/{job_id}/clarification/options", get(options))
         .route("/chat/jobs/{job_id}/responses", post(answer))
 }
 
@@ -30,9 +36,23 @@ pub fn router() -> Router<Foundation> {
 pub struct AnswerRequest {
     clarification_id: Uuid,
     revision: i32,
-    /// Nilai bertipe per field. Bentuk v1: teks yang diparse menurut tipe
-    /// parameter. Opsi dari resolver (`option_id`) menyusul bersama resolver.
+    /// Satu nilai per field. Untuk field `single_choice` nilainya adalah
+    /// `option_id` yang server terbitkan — bukan teks bebas, dan bukan nilai
+    /// binding yang dikirim klien (K1).
     answers: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OptionsQuery {
+    field_id: String,
+    #[serde(default)]
+    cursor: usize,
+    #[serde(default)]
+    limit: Option<usize>,
+    /// Penyaring atas kandidat yang sudah ter-scope. Ia mempersempit daftar
+    /// yang ditampilkan; ia tidak pernah memperluas scope.
+    #[serde(default, rename = "q")]
+    search: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -52,8 +72,31 @@ async fn active(
     Ok(Json(Envelope::ok(form)))
 }
 
+async fn options(
+    State(foundation): State<Foundation>,
+    Extension(catalog): Extension<Arc<Catalog>>,
+    user: AuthUser,
+    Path(job_id): Path<Uuid>,
+    Query(query): Query<OptionsQuery>,
+) -> Result<Json<Envelope<OptionPage>>, ApiError> {
+    let page = service::options(
+        &foundation,
+        &catalog,
+        job_id,
+        user.user_id,
+        &query.field_id,
+        query.cursor,
+        query.limit,
+        query.search.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(Envelope::ok(page)))
+}
+
 async fn answer(
     State(foundation): State<Foundation>,
+    Extension(catalog): Extension<Arc<Catalog>>,
     user: AuthUser,
     Path(job_id): Path<Uuid>,
     headers: HeaderMap,
@@ -66,6 +109,7 @@ async fn answer(
 
     let form = service::answer(
         &foundation,
+        &catalog,
         job_id,
         user.user_id,
         request.clarification_id,

@@ -1,0 +1,33 @@
+info:
+  name: jawab dengan opsi yang diterbitkan
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{resolverJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{resolverIdemKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{resolverClarificationId}}",
+        "revision": 1,
+        "answers": { "client_id": "{{resolverOptionId}}" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("202: jawaban durable, job yang SAMA kembali mengantre", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("resolverJobId"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

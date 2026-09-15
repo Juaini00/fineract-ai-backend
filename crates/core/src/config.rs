@@ -86,8 +86,6 @@ pub struct Config {
     pub catalog_path: String,
     #[serde(default = "default_query_path")]
     pub query_path: String,
-    #[serde(default = "default_true")]
-    pub catalog_validate_on_startup: bool,
     #[serde(default)]
     pub catalog_sync_on_startup: bool,
 
@@ -107,6 +105,21 @@ pub struct Config {
     /// session semalaman karena satu job nonterminal per session (#13).
     #[serde(default = "default_clarification_wait_limit_secs")]
     pub clarification_wait_limit_secs: i64,
+    /// Ukuran halaman opsi resolver (runtime.md §2). `*_max` adalah batas yang
+    /// dapat diminta klien; tanpa batas atas, `limit` menjadi cara menerbitkan
+    /// seluruh daftar identitas dalam satu permintaan.
+    #[serde(default = "default_resolver_page_size")]
+    pub resolver_page_size: usize,
+    #[serde(default = "default_resolver_page_size_max")]
+    pub resolver_page_size_max: usize,
+    /// Batas kandidat resolver yang dimaterialisasi sekaligus.
+    ///
+    /// Nilai awal, bukan hasil tuning: ia adalah langit-langit paginasi di
+    /// memori. Pemicu revisi terukur — begitu sebuah resolver rutin menyentuh
+    /// batas ini (`truncated: true` pada halaman pertama), jawabannya bukan
+    /// menaikkan angka melainkan memberi resolver itu keyset SQL-side.
+    #[serde(default = "default_resolver_max_candidates")]
+    pub resolver_max_candidates: usize,
     /// Jeda polling antrean. Sementara: notifikasi Redis belum dipakai, jadi
     /// worker memeriksa PostgreSQL secara berkala. Setelah notifikasi ada,
     /// polling menjadi fallback, bukan jalur utama (SSE §transport).
@@ -284,6 +297,15 @@ fn default_clarification_wait_limit_secs() -> i64 {
 }
 fn default_worker_poll_interval_ms() -> u64 {
     1_000
+}
+fn default_resolver_page_size() -> usize {
+    25
+}
+fn default_resolver_page_size_max() -> usize {
+    50
+}
+fn default_resolver_max_candidates() -> usize {
+    500
 }
 fn default_catalog_path() -> String {
     "knowledge".to_string()

@@ -1,0 +1,39 @@
+info:
+  name: office tanpa satu pun nasabah
+  type: http
+  seq: 18
+  description: |
+    Resolver berjalan utuh dalam scope dan tidak menemukan apa pun: NotFound,
+    bukan form kosong yang memindahkan kebuntuan ke pengguna.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{emptyIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{emptySessionId}}",
+        "request_text": "What savings products does this client hold?",
+        "office_ids": [9]
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("emptyIdemKey", "bruno-resolver-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("emptyJobId", res.getBody().data.job_id);

@@ -1,0 +1,40 @@
+info:
+  name: id opsi yang tidak pernah diterbitkan ditolak
+  type: http
+  seq: 7
+  description: |
+    C9 — `clarification_options` adalah bukti "opsi ini pernah kami kirim".
+    Id yang tidak ada di sana berasal dari form lain, job lain, atau dikarang
+    klien; menerimanya berarti klien dapat mengikat identitas apa pun yang ada
+    di database.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{resolverJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{resolverIdemKey}}-unissued"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{resolverClarificationId}}",
+        "revision": 1,
+        "answers": { "client_id": "999999" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422 dengan kode field yang membedakan sebabnya", function () {
+          expect(res.getStatus()).to.equal(422);
+          const errors = JSON.parse(res.getBody().error.message);
+          expect(errors).to.have.lengthOf(1);
+          expect(errors[0].field_id).to.equal("client_id");
+          expect(errors[0].code).to.equal("option_not_issued");
+        });

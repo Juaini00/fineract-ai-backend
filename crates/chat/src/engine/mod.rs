@@ -8,6 +8,7 @@ pub mod executor;
 pub mod planner;
 pub mod reaper;
 pub mod repository;
+pub mod resolver;
 pub mod worker;
 
 use std::{sync::Arc, time::Duration};
@@ -15,7 +16,8 @@ use std::{sync::Arc, time::Duration};
 use foundation::state::Foundation;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::info;
+use uuid::Uuid;
 
 /// Task latar Engine, dimatikan bersama proses.
 pub struct Background {
@@ -30,45 +32,15 @@ impl Background {
     /// hidup, dan `content_hash`-nya yang menjadi identitas plan. Versinya
     /// didaftarkan supaya plan punya sesuatu untuk dirujuk — tanpa itu Engine
     /// menolak mengeksekusi capability apa pun.
-    pub async fn spawn(foundation: &Foundation) -> anyhow::Result<Self> {
+    pub async fn spawn(
+        foundation: &Foundation,
+        catalog: Arc<crate::catalog::Catalog>,
+        catalog_version_id: Uuid,
+    ) -> anyhow::Result<Self> {
         let shutdown = CancellationToken::new();
         let mut tasks = Vec::new();
 
         if foundation.config().worker_enabled {
-            let checked = crate::catalog::check(foundation, false).await?;
-            let status = checked.status();
-            let catalog = Arc::new(checked.catalog);
-
-            let catalog_version_id = match repository::catalog_version_id(
-                foundation.app_db().pool(),
-                &catalog.content_hash,
-            )
-            .await?
-            {
-                Some(id) => Some(id),
-                None => {
-                    // Versi belum tercatat (mis. `catalog --sync` belum pernah
-                    // dijalankan). Dicatat sekarang apa adanya — termasuk bila
-                    // statusnya `failed`.
-                    Some(
-                        crate::catalog::repository::upsert_version(
-                            foundation.app_db().pool(),
-                            &catalog,
-                            status,
-                            serde_json::json!({ "registered_by": "engine_startup" }),
-                        )
-                        .await?,
-                    )
-                }
-            };
-
-            if status != "validated" {
-                warn!(
-                    content_hash = %catalog.content_hash,
-                    "katalog berstatus {status}; capability darinya tetap dieksekusi hanya bila planner memilihnya"
-                );
-            }
-
             tasks.push(tokio::spawn(worker::run(
                 foundation.clone(),
                 catalog,

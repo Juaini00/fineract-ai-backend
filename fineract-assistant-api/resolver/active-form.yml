@@ -1,0 +1,54 @@
+info:
+  name: form menuntut pilihan, bukan teks bebas
+  type: http
+  seq: 4
+  description: |
+    K1: slot identitas menjadi field `single_choice` yang menyebut resolver
+    yang menerbitkannya. Opsi TIDAK disematkan pada form — ia diterbitkan per
+    halaman, supaya `clarification_options` hanya memuat yang benar-benar
+    dikirim.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{resolverJobId}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const form = res.getBody().data;
+        const field = form.fields_json[0];
+
+        test("job ditangguhkan pada job yang sama, form terbuka", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(form.state).to.equal("open");
+          expect(form.job_id).to.equal(bru.getVar("resolverJobId"));
+        });
+
+        test("slot identitas berupa single_choice, bukan teks", function () {
+          expect(field.field_id).to.equal("client_id");
+          expect(field.type).to.equal("single_choice");
+          expect(field.parameter_kind).to.equal("integer");
+        });
+
+        test("form menyebut resolver yang disetujui, bukan pencarian bebas", function () {
+          expect(field.resolver_ref).to.equal("client.identity_resolve");
+          expect(field.resolver.dataset_id).to.equal("client.identity");
+          expect(field.resolver.shape_id).to.equal("identity_candidates");
+          expect(field.resolver.output_slot).to.equal("client_id");
+        });
+
+        test("jumlah kandidat = seluruh klien dalam scope terotorisasi (43)", function () {
+          expect(field.candidate_count).to.equal(43);
+          expect(field.candidates_truncated).to.equal(false);
+        });
+
+        test("opsi tidak disematkan pada form", function () {
+          expect(field.options).to.equal(undefined);
+          expect(field.options_path).to.be.a("string");
+        });
+
+        bru.setVar("resolverClarificationId", form.clarification_id);

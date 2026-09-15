@@ -1,0 +1,26 @@
+info:
+  name: sesi untuk office tanpa nasabah
+  type: http
+  seq: 17
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno resolver run" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () {
+          expect(res.getStatus()).to.equal(201);
+        });
+        bru.setVar("emptySessionId", res.getBody().data.id);

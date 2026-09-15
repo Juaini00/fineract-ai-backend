@@ -10,6 +10,16 @@ use uuid::Uuid;
 
 use crate::catalog::loader::Catalog;
 
+/// Id versi yang sudah tercatat untuk sebuah `content_hash`.
+pub async fn version_id(pool: &PgPool, content_hash: &str) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM knowledge_catalog_versions WHERE content_hash = $1",
+    )
+    .bind(content_hash)
+    .fetch_optional(pool)
+    .await
+}
+
 /// Simpan (atau temukan kembali) versi katalog untuk `content_hash` ini.
 ///
 /// Hash yang sama berarti isi yang sama, jadi baris lama dipakai ulang —

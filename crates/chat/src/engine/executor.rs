@@ -43,8 +43,22 @@ impl ExecutionError {
 
 /// Jalankan query capability terhadap Fineract.
 pub async fn execute(fineract: &FineractDb, plan: &Plan) -> Result<Executed, ExecutionError> {
+    run(fineract, &plan.sql, &plan.parameters, plan.timeout_ms).await
+}
+
+/// Jalankan satu SQL yang sudah disetujui katalog dengan parameter terikat.
+///
+/// Dipakai capability (lewat [`execute`]) maupun resolver opsi: keduanya wajib
+/// melewati batas waktu dan pengikatan parameter yang sama — dua jalur eksekusi
+/// yang berbeda adalah dua tempat sebuah guard dapat menghilang.
+pub async fn run(
+    fineract: &FineractDb,
+    sql: &str,
+    parameters: &[Bound],
+    timeout_ms: u64,
+) -> Result<Executed, ExecutionError> {
     let started = std::time::Instant::now();
-    let timeout = Duration::from_millis(plan.timeout_ms);
+    let timeout = Duration::from_millis(timeout_ms);
 
     let run = async {
         let mut connection = fineract
@@ -59,17 +73,16 @@ pub async fn execute(fineract: &FineractDb, plan: &Plan) -> Result<Executed, Exe
         // integer oleh tipe `u64` — bukan dari input pengguna maupun model.
         sqlx::query(AssertSqlSafe(format!(
             "SET statement_timeout = {}",
-            plan.timeout_ms.max(1)
+            timeout_ms.max(1)
         )))
         .execute(&mut *connection)
         .await
         .map_err(|error| ExecutionError::Database(error.to_string()))?;
 
-        let statement =
-            AssertSqlSafe(plan.sql.trim().trim_end_matches(';').to_string()).into_sql_str();
+        let statement = AssertSqlSafe(sql.trim().trim_end_matches(';').to_string()).into_sql_str();
         let mut query = sqlx::query(statement);
 
-        for parameter in &plan.parameters {
+        for parameter in parameters {
             query = match parameter {
                 Bound::Date(date) => query.bind(*date),
                 Bound::OfficeIds(ids) => query.bind(ids.clone()),
@@ -89,11 +102,7 @@ pub async fn execute(fineract: &FineractDb, plan: &Plan) -> Result<Executed, Exe
 
     let rows = match tokio::time::timeout(timeout, run).await {
         Ok(result) => result?,
-        Err(_) => {
-            return Err(ExecutionError::TimedOut {
-                timeout_ms: plan.timeout_ms,
-            });
-        }
+        Err(_) => return Err(ExecutionError::TimedOut { timeout_ms }),
     };
 
     Ok(Executed {

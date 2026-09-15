@@ -44,6 +44,19 @@ pub struct CapabilityParameter {
     /// yang melebihi cap dipotong ke cap — cap adalah janji, bukan saran.
     #[serde(default)]
     pub hard_cap: Option<i64>,
+    /// Slot yang diisi resolver terotorisasi, bukan teks bebas (K1).
+    #[serde(default)]
+    pub probe: Option<ProbeRef>,
+}
+
+/// `probe:` pada parameter capability — shape dataset yang menerbitkan opsi
+/// untuk slot ini.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProbeRef {
+    pub dataset_id: String,
+    pub shape_id: String,
+    /// Kolom hasil resolver yang menjadi nilai binding slot.
+    pub output_slot: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,6 +82,60 @@ pub struct QueryManifest {
     pub guards: QueryGuards,
     #[serde(default)]
     pub timeout_ms: Option<u64>,
+    /// Shape dataset yang dibungkus manifest ini. Sebelum ini tautannya hanya
+    /// hidup sebagai komentar prosa di tiap manifest resolver — persis kelas
+    /// koneksi yang I6 menuntut ditegakkan mesin, bukan konvensi.
+    #[serde(default)]
+    pub resolves: Option<ResolvesShape>,
+}
+
+/// `resolves:` pada manifest query.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResolvesShape {
+    pub dataset_id: String,
+    pub shape_id: String,
+}
+
+/// `knowledge/datasets/**`. Hanya bagian yang dipakai resolver yang
+/// dideklarasikan; sisanya (filters, fragment, recipe) belum punya konsumen.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Dataset {
+    pub id: String,
+    #[serde(default)]
+    pub entity: Option<DatasetEntity>,
+    #[serde(default)]
+    pub shapes: Vec<DatasetShape>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DatasetEntity {
+    /// Kolom yang menjadi `option_id` — identitas opsi yang diterbitkan.
+    pub id_field: String,
+    #[serde(default)]
+    pub label_fields: Vec<String>,
+    /// Label cadangan bila seluruh `label_fields` kosong/ditahan, mis.
+    /// `"Client {client_id}"`. Tanpa ini sebuah opsi dapat terkirim tanpa teks
+    /// apa pun untuk dipilih.
+    #[serde(default)]
+    pub label_fallback: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DatasetShape {
+    pub id: String,
+    #[serde(default)]
+    pub role: Option<String>,
+    /// Batas baris yang dideklarasikan shape. Dipakai sebagai batas kandidat
+    /// resolver; kelebihannya dinyatakan sebagai truncation (I5), bukan dibuang.
+    #[serde(default)]
+    pub row_cap: Option<usize>,
+    #[serde(default)]
+    pub produces: Vec<ProducedSlot>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ProducedSlot {
+    pub slot: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

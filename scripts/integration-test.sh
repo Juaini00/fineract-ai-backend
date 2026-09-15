@@ -9,7 +9,8 @@
 #      nonterminal per session, cancel memindahkan ke `Cancelling`. Dengan
 #      worker menyala, job diselesaikan dalam hitungan milidetik dan hasil test
 #      bergantung pada balapan, bukan pada perilaku yang diuji.
-#   2. `engine` dijalankan dengan worker menyala dan jeda antar-request, untuk
+#   2. `engine`, `clarification` dan `resolver` dijalankan dengan worker menyala
+#      dan jeda antar-request, untuk
 #      membuktikan job benar-benar bergerak sampai terminal tanpa campur tangan
 #      klien.
 #
@@ -34,7 +35,7 @@ if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ]; then
+        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -42,7 +43,7 @@ if [ "$#" -gt 0 ]; then
     done
 else
     INTAKE_FOLDERS=(health auth chat)
-    ENGINE_FOLDERS=(engine clarification)
+    ENGINE_FOLDERS=(engine clarification resolver)
 fi
 
 command -v bru >/dev/null || {

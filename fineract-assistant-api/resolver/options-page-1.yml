@@ -1,0 +1,60 @@
+info:
+  name: halaman opsi pertama
+  type: http
+  seq: 5
+  description: |
+    Halaman pertama memakai `row_cap` shape (25). Angkanya dicocokkan dengan
+    Fineract yang benar-benar ada isinya: 43 klien dalam 8 office.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{resolverJobId}}/clarification/options?field_id=client_id"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("halaman terikat form dan field, bukan daftar global", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.clarification_id).to.equal(bru.getVar("resolverClarificationId"));
+          expect(page.field_id).to.equal("client_id");
+          expect(page.resolver_ref).to.equal("client.identity_resolve");
+        });
+
+        test("25 opsi dari 43 kandidat, cursor menunjuk sisanya", function () {
+          expect(page.options).to.have.lengthOf(25);
+          expect(page.matched_total).to.equal(43);
+          expect(page.cursor).to.equal(0);
+          expect(page.next_cursor).to.equal(25);
+          // Tidak dipotong: 43 masih di bawah RESOLVER_MAX_CANDIDATES.
+          expect(page.truncated).to.equal(false);
+        });
+
+        test("urutan stabil dan numerik, supaya halaman berikutnya tidak tumpang tindih", function () {
+          const ids = page.options.map(function (option) { return Number(option.option_id); });
+          for (let i = 1; i < ids.length; i += 1) {
+            expect(ids[i]).to.be.above(ids[i - 1]);
+          }
+        });
+
+        test("PII mati: label memakai fallback katalog, bukan nama nasabah", function () {
+          // PII_ENABLED_SEED=false dan snapshotnya ikut pada job ini, jadi
+          // `client_display_name` (kelas pii) tidak boleh muncul sebagai label.
+          page.options.forEach(function (option) {
+            expect(option.label).to.match(/^Client \d+$/);
+          });
+        });
+
+        test("atribut hanya kolom public_business", function () {
+          const attributes = page.options[0].attributes;
+          expect(attributes).to.have.property("office_name");
+          expect(attributes).to.not.have.property("client_display_name");
+        });
+
+        bru.setVar("resolverFirstPageIds", page.options.map(function (o) { return o.option_id; }).join(","));
+        bru.setVar("resolverOptionId", page.options[0].option_id);

@@ -36,19 +36,21 @@ async fn main() -> anyhow::Result<()> {
         foundation.app_db().migrate().await?;
     }
 
-    if foundation.config().catalog_validate_on_startup {
-        chat::catalog::validate_on_startup(&foundation).await?;
-    }
-
     if foundation.config().may_bootstrap_admin() {
         auth::service::bootstrap_admin(&foundation).await?;
     }
 
-    let engine = chat::engine::Background::spawn(&foundation).await?;
+    // Satu pemuatan katalog untuk seluruh proses: worker dan resolver opsi wajib
+    // melihat isi yang sama, jika tidak plan dan opsi dapat merujuk versi yang
+    // berbeda tanpa satu pun sinyal kegagalan.
+    let (catalog, catalog_version_id) = chat::catalog::prepare(&foundation).await?;
+
+    let engine =
+        chat::engine::Background::spawn(&foundation, catalog.clone(), catalog_version_id).await?;
 
     let router = health::router()
         .merge(auth::route::router())
-        .merge(chat::router())
+        .merge(chat::router(catalog))
         .with_state(foundation);
 
     let listener = TcpListener::bind(&bind_address).await?;

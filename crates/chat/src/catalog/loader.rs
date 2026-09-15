@@ -12,13 +12,16 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-use crate::catalog::model::{Capability, QueryManifest, SafetyPolicy, SensitivityClasses};
+use crate::catalog::model::{
+    Capability, Dataset, DatasetShape, QueryManifest, SafetyPolicy, SensitivityClasses,
+};
 
 /// Katalog yang sudah dimuat, belum divalidasi.
 #[derive(Debug)]
 pub struct Catalog {
     pub capabilities: Vec<Loaded<Capability>>,
     pub queries: Vec<Loaded<QueryManifest>>,
+    pub datasets: Vec<Loaded<Dataset>>,
     pub safety_policy: SafetyPolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
@@ -46,6 +49,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
 
     let mut capabilities = Vec::new();
     let mut queries = Vec::new();
+    let mut datasets = Vec::new();
     let mut safety_policy = SafetyPolicy::default();
     let mut sensitivity_classes = BTreeSet::new();
     let mut sql_files = BTreeMap::new();
@@ -73,6 +77,11 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
                 Ok(entry) => queries.push(Loaded { path: relative, entry }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
+        } else if under("datasets") {
+            match serde_yaml::from_str::<Dataset>(&text) {
+                Ok(entry) => datasets.push(Loaded { path: relative, entry }),
+                Err(error) => unreadable.push((relative, error.to_string())),
+            }
         } else if relative.ends_with("columns/sensitivity.yaml") {
             match serde_yaml::from_str::<SensitivityClasses>(&text) {
                 Ok(declared) => sensitivity_classes.extend(declared.classes.into_keys()),
@@ -84,7 +93,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         }
-        // Berkas lain (domains, schema, metrics, datasets, parameters) ikut
+        // Berkas lain (domains, schema, metrics, parameters) ikut
         // dihitung ke dalam content_hash tetapi belum punya validator sendiri;
         // cakupannya dinyatakan eksplisit oleh `coverage()`.
     }
@@ -99,6 +108,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     Ok(Catalog {
         capabilities,
         queries,
+        datasets,
         safety_policy,
         sensitivity_classes,
         sql_files,
@@ -107,10 +117,51 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     })
 }
 
+/// Resolver yang disetujui untuk sebuah shape dataset: manifest query yang
+/// membungkusnya, entity yang memberi id/label opsi, dan shape itu sendiri.
+#[derive(Debug, Clone, Copy)]
+pub struct Resolver<'a> {
+    pub query: &'a QueryManifest,
+    pub dataset: &'a Dataset,
+    pub shape: &'a DatasetShape,
+}
+
 impl Catalog {
     /// Jumlah dokumen yang benar-benar dimuat sebagai entri bertipe.
     pub fn document_count(&self) -> usize {
-        self.capabilities.len() + self.queries.len() + self.sql_files.len()
+        self.capabilities.len() + self.queries.len() + self.datasets.len() + self.sql_files.len()
+    }
+
+    pub fn dataset(&self, dataset_id: &str) -> Option<&Dataset> {
+        self.datasets
+            .iter()
+            .map(|loaded| &loaded.entry)
+            .find(|dataset| dataset.id == dataset_id)
+    }
+
+    /// Resolver untuk sebuah `(dataset_id, shape_id)`.
+    ///
+    /// `None` berarti shape itu tidak punya query yang disetujui — dan sebuah
+    /// slot yang menuntut resolver karena itu **tidak dapat ditanyakan**, bukan
+    /// ditanyakan sebagai teks bebas (K1).
+    pub fn resolver_for(&self, dataset_id: &str, shape_id: &str) -> Option<Resolver<'_>> {
+        let dataset = self.dataset(dataset_id)?;
+        let shape = dataset.shapes.iter().find(|shape| shape.id == shape_id)?;
+        let query = self
+            .queries
+            .iter()
+            .map(|loaded| &loaded.entry)
+            .find(|query| {
+                query.resolves.as_ref().is_some_and(|resolves| {
+                    resolves.dataset_id == dataset_id && resolves.shape_id == shape_id
+                })
+            })?;
+
+        Some(Resolver {
+            query,
+            dataset,
+            shape,
+        })
     }
 }
 

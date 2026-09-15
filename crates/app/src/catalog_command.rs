@@ -14,9 +14,10 @@ pub async fn run(foundation: &Foundation, sync: bool, skip_probe: bool) -> anyho
 
     println!("content_hash : {}", checked.catalog.content_hash);
     println!(
-        "dimuat       : {} capability, {} query manifest, {} file SQL",
+        "dimuat       : {} capability, {} query manifest, {} dataset, {} file SQL",
         checked.catalog.capabilities.len(),
         checked.catalog.queries.len(),
+        checked.catalog.datasets.len(),
         checked.catalog.sql_files.len()
     );
     println!(

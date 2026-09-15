@@ -1,0 +1,39 @@
+info:
+  name: office dengan tepat satu nasabah
+  type: http
+  seq: 14
+  description: |
+    K5 — satu kandidat berarti server mengikat tanpa bertanya. Job TIDAK boleh
+    pernah menyatakan menunggu manusia, dan pengikatan itu wajib diungkap.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{autobindIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{autobindSessionId}}",
+        "request_text": "What savings products does this client hold?",
+        "office_ids": [6]
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("autobindIdemKey", "bruno-resolver-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("autobindJobId", res.getBody().data.job_id);

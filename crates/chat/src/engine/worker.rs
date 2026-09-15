@@ -21,11 +21,12 @@ use uuid::Uuid;
 
 use crate::{
     catalog::Catalog,
-    clarification::repository as clarification_repository,
+    clarification::repository::{self as clarification_repository, AcceptedAnswer},
     engine::{
         compose, executor,
         planner::{self, Plan},
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
+        resolver,
     },
 };
 
@@ -37,7 +38,7 @@ const PLAN_VERSION: i32 = 1;
 pub async fn run(
     foundation: Foundation,
     catalog: Arc<Catalog>,
-    catalog_version_id: Option<Uuid>,
+    catalog_version_id: Uuid,
     shutdown: CancellationToken,
 ) {
     let config = foundation.config();
@@ -89,7 +90,7 @@ pub async fn run(
 async fn process(
     foundation: &Foundation,
     catalog: &Catalog,
-    catalog_version_id: Option<Uuid>,
+    catalog_version_id: Uuid,
     worker: &str,
     job: ClaimedJob,
 ) -> anyhow::Result<()> {
@@ -160,29 +161,10 @@ async fn heartbeat_loop(
 async fn run_job(
     foundation: &Foundation,
     catalog: &Catalog,
-    catalog_version_id: Option<Uuid>,
+    catalog_version_id: Uuid,
     job: &ClaimedJob,
 ) -> anyhow::Result<bool> {
     let pool = foundation.app_db().pool();
-
-    // Tanpa versi katalog tercatat, tidak ada yang dapat dirujuk plan sebagai
-    // "kontrak yang dilihat planner" — dan plan tanpa rujukan itu tidak dapat
-    // diinvestigasi (migrasi 3).
-    let Some(catalog_version_id) = catalog_version_id else {
-        return repository::settle_with_response(
-            pool,
-            job.id,
-            job.session_id,
-            job.lease_token,
-            limitation_response(
-                "catalog_version_unavailable",
-                "The approved catalog version is not registered, so no capability can be executed.",
-                &job.request_text,
-            ),
-        )
-        .await
-        .map_err(Into::into);
-    };
 
     // Scope dari otorisasi, dipersempit oleh permintaan — tidak pernah
     // diperlebar olehnya (I7).
@@ -216,12 +198,14 @@ async fn run_job(
 
     let plan = match planned {
         Ok(plan) => plan,
-        // Parameter yang kurang dan dapat dijawab pengguna → tanyakan (T5),
-        // jangan tolak. Job yang sama ditangguhkan; tidak ada job pengganti.
+        // Parameter yang kurang dan dapat ditanyakan → tanyakan (T5), jangan
+        // tolak. Job yang sama ditangguhkan; tidak ada job pengganti. Slot
+        // identitas tanpa resolver TIDAK dapat ditanyakan (K1) dan jatuh ke arm
+        // berikutnya sebagai `Unsupported`.
         Err(planner::Unplannable::NeedsClarification { capability, missing })
-            if missing.iter().all(|item| !item.identity) =>
+            if !missing.iter().any(planner::Missing::unanswerable) =>
         {
-            return open_clarification(foundation, job, &capability, &missing).await;
+            return open_clarification(foundation, job, &capability, &missing, &authorized).await;
         }
         Err(problem) => {
             return repository::settle_with_response(
@@ -268,14 +252,19 @@ async fn run_job(
             // Sakelar PII disnapshot saat job diterima (#15), bukan dibaca ulang
             // sekarang: laporan tidak boleh berubah makna karena konfigurasi
             // berubah di tengah eksekusi.
-            let pii_enabled = job
-                .scope_json
-                .get("pii")
-                .and_then(|pii| pii.get("enabled"))
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false);
+            let pii_enabled = pii_enabled(job);
 
-            let response = compose::analysis(&plan, &result.rows, result.duration_ms, pii_enabled);
+            // K5 — dibaca dari yang tersimpan, bukan dari ingatan proses ini:
+            // job yang dilanjutkan worker lain tetap mengungkap auto-bind-nya.
+            let auto_bound = clarification_repository::auto_bound_slots(pool, job.id).await?;
+
+            let response = compose::analysis(
+                &plan,
+                &result.rows,
+                result.duration_ms,
+                pii_enabled,
+                &auto_bound,
+            );
             let (_, withheld) = compose::visible_fields(&plan, pii_enabled);
 
             let node_persisted = repository::complete_node(
@@ -349,27 +338,102 @@ async fn run_job(
 }
 
 /// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.
+///
+/// Slot ber-resolver dijalankan lebih dulu, karena hasilnya menentukan bentuk
+/// pertanyaannya: nol kandidat berarti tidak ada yang dapat ditanyakan, satu
+/// kandidat diikat tanpa bertanya (K5), lebih dari satu menjadi `single_choice`.
 async fn open_clarification(
     foundation: &Foundation,
     job: &ClaimedJob,
     capability: &str,
     missing: &[planner::Missing],
+    authorized: &[i64],
 ) -> anyhow::Result<bool> {
-    let fields: Vec<serde_json::Value> = missing
-        .iter()
-        .map(|item| {
-            serde_json::json!({
-                "field_id": item.name,
-                "type": item.field_type(),
-                // Tipe parameter ikut dibawa supaya validasi jawaban memakai
-                // kontrak yang sama dengan pengikatan parameter — bukan dua
-                // aturan yang dapat menyimpang.
-                "parameter_kind": item.kind,
-                "label": item.name.replace('_', " "),
-                "required": true,
-            })
-        })
-        .collect();
+    let pii_enabled = pii_enabled(job);
+    let mut fields: Vec<serde_json::Value> = Vec::with_capacity(missing.len());
+    let mut auto_bound: Vec<AcceptedAnswer> = Vec::new();
+
+    for item in missing {
+        let mut field = serde_json::json!({
+            "field_id": item.name,
+            "type": item.field_type(),
+            // Tipe parameter ikut dibawa supaya validasi jawaban memakai
+            // kontrak yang sama dengan pengikatan parameter — bukan dua
+            // aturan yang dapat menyimpang.
+            "parameter_kind": item.kind,
+            "label": item.name.replace('_', " "),
+            "required": true,
+        });
+
+        let Some(slot) = &item.resolver else {
+            fields.push(field);
+            continue;
+        };
+
+        let candidates = match resolver::candidates(
+            foundation.fineract_db(),
+            slot,
+            authorized,
+            pii_enabled,
+            None,
+            foundation.config().resolver_max_candidates,
+        )
+        .await
+        {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                warn!(job_id = %job.id, code = error.failure_code(), slot = %item.name, "resolver gagal");
+                return settle_operational_failure(foundation, job, error.failure_code()).await;
+            }
+        };
+
+        // Nol kandidat: tidak ada yang dapat dipilih, dan menanyakan slot yang
+        // tidak punya jawaban sah hanya memindahkan kebuntuan ke pengguna.
+        if candidates.items.is_empty() {
+            return repository::settle_with_response(
+                foundation.app_db().pool(),
+                job.id,
+                job.session_id,
+                job.lease_token,
+                not_found_response(&item.name, &slot.query_id, &job.request_text),
+            )
+            .await
+            .map_err(Into::into);
+        }
+
+        if candidates.matched_total == 1 {
+            let only = &candidates.items[0];
+            auto_bound.push(AcceptedAnswer {
+                field_id: item.name.clone(),
+                answer_kind: "option_id",
+                raw_text: None,
+                binding_json: serde_json::json!({
+                    "value": resolver::binding_text(&only.binding),
+                    "label": only.label,
+                }),
+                // K5 — BUKAN `user_confirmed`: tidak ada yang mengonfirmasi.
+                provenance: "resolver_unique",
+                resolver_ref: Some(slot.query_id.clone()),
+                option_set_ref: Some(only.option_id.clone()),
+            });
+        }
+
+        field["resolver"] = serde_json::json!({
+            "dataset_id": slot.dataset_id,
+            "shape_id": slot.shape_id,
+            "output_slot": slot.binding_field,
+        });
+        field["resolver_ref"] = serde_json::Value::String(slot.query_id.clone());
+        field["candidate_count"] = serde_json::Value::from(candidates.matched_total);
+        field["candidates_truncated"] = serde_json::Value::Bool(candidates.truncated);
+        // Opsi TIDAK disematkan di form: ia diterbitkan per halaman oleh
+        // endpoint, dan hanya halaman yang benar-benar dikirim yang dicatat.
+        field["options_path"] = serde_json::Value::String(format!(
+            "/chat/jobs/{}/clarification/options?field_id={}",
+            job.id, item.name
+        ));
+        fields.push(field);
+    }
 
     let form = clarification_repository::open_form(
         foundation.app_db().pool(),
@@ -380,17 +444,62 @@ async fn open_clarification(
         &format!("Missing input for capability '{capability}'"),
         "Additional input needed",
         &serde_json::Value::Array(fields),
+        &auto_bound,
         foundation.config().clarification_wait_limit_secs,
+        foundation.config().job_ttl_running_secs,
     )
     .await?;
 
     match form {
         Some(form) => {
-            info!(job_id = %job.id, clarification_id = %form.clarification_id, "klarifikasi dibuka");
+            info!(
+                job_id = %job.id,
+                clarification_id = %form.clarification_id,
+                state = %form.state,
+                auto_bound = auto_bound.len(),
+                "klarifikasi dibuka"
+            );
             Ok(true)
         }
         // Fencing kalah.
         None => Ok(false),
+    }
+}
+
+/// Sakelar PII yang berlaku untuk job ini, disnapshot saat diterima (#15).
+fn pii_enabled(job: &ClaimedJob) -> bool {
+    job.scope_json
+        .get("pii")
+        .and_then(|pii| pii.get("enabled"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// Resolver berjalan utuh dalam scope dan tidak menemukan satu pun kandidat.
+///
+/// `NotFound` + `Complete`: pencariannya selesai, bukan terpotong — dan
+/// engine.md melarang `NotFound` berpasangan dengan `Partial`.
+fn not_found_response(slot: &str, resolver_ref: &str, request_text: &str) -> SettledResponse {
+    let blocks = serde_json::json!([
+        {
+            "type": "limitation",
+            "id": "resolver_no_candidates",
+            "title": "Nothing to choose from",
+            "body": format!(
+                "The approved resolver '{resolver_ref}' found no candidate for '{slot}' inside your \
+                 authorized scope, so there is nothing to select and the request is not answered."
+            ),
+            "request_echo": request_text,
+        }
+    ]);
+
+    SettledResponse {
+        kind: "limitation",
+        outcome: "NotFound",
+        completeness: "Complete",
+        completeness_reason: "resolver_no_candidates".to_string(),
+        response_hash: hash_blocks(&blocks),
+        blocks,
     }
 }
 

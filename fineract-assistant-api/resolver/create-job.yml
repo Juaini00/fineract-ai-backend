@@ -1,0 +1,38 @@
+info:
+  name: pertanyaan yang menuntut slot identitas
+  type: http
+  seq: 3
+  description: |
+    client_id dideklarasikan katalog sebagai probe: ia tidak pernah
+    ditanyakan sebagai teks bebas.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+    - name: Idempotency-Key
+      value: "{{resolverIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{resolverSessionId}}",
+        "request_text": "What savings products does this client hold?"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("resolverIdemKey", "bruno-resolver-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("resolverJobId", res.getBody().data.job_id);

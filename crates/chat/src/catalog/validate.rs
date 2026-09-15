@@ -97,8 +97,10 @@ pub fn validate(catalog: &Catalog) -> Report {
     }
 
     for loaded in &catalog.capabilities {
-        check_capability(&loaded.entry, &loaded.path, &queries, &mut findings);
+        check_capability(catalog, &loaded.entry, &loaded.path, &queries, &mut findings);
     }
+
+    check_resolvers(catalog, &mut findings);
 
     // SQL yatim: ada di `queries/` tetapi tidak dirujuk manifest mana pun.
     // Bukan sekadar kerapian — SQL yang tidak punya kontrak tidak punya
@@ -307,7 +309,114 @@ fn check_query(
     }
 }
 
+/// Integritas tautan resolver — I6: koneksi yang hanya hidup sebagai prosa
+/// dicatat sebagai utang, bukan dianggap selesai.
+///
+/// Empat hal yang diperiksa:
+/// 1. `resolves:` menunjuk dataset + shape yang benar-benar ada;
+/// 2. satu shape tidak dibungkus dua manifest (mana yang dipakai akan menjadi
+///    tebakan urutan pembacaan direktori);
+/// 3. resolver hanya boleh punya parameter bersumber `authorized_scope` — satu
+///    parameter lain berarti ada nilai yang datang dari luar otorisasi;
+/// 4. shape resolver punya `entity.id_field`, tanpanya opsi tidak punya id.
+fn check_resolvers(catalog: &Catalog, findings: &mut Vec<Finding>) {
+    let mut wrapped: BTreeMap<(&str, &str), Vec<&str>> = BTreeMap::new();
+
+    for loaded in &catalog.queries {
+        let Some(resolves) = &loaded.entry.resolves else {
+            continue;
+        };
+        let subject = format!("{} ({})", loaded.entry.id, loaded.path);
+
+        wrapped
+            .entry((&resolves.dataset_id, &resolves.shape_id))
+            .or_default()
+            .push(&loaded.entry.id);
+
+        let Some(dataset) = catalog.dataset(&resolves.dataset_id) else {
+            findings.push(Finding::error(
+                &subject,
+                "resolver_shape_exists",
+                format!("dataset '{}' tidak ada di knowledge/datasets", resolves.dataset_id),
+            ));
+            continue;
+        };
+
+        if !dataset
+            .shapes
+            .iter()
+            .any(|shape| shape.id == resolves.shape_id)
+        {
+            findings.push(Finding::error(
+                &subject,
+                "resolver_shape_exists",
+                format!(
+                    "dataset '{}' tidak punya shape '{}'",
+                    resolves.dataset_id, resolves.shape_id
+                ),
+            ));
+        }
+
+        if dataset.entity.is_none() {
+            findings.push(Finding::error(
+                &subject,
+                "resolver_entity_declared",
+                format!(
+                    "dataset '{}' tanpa blok entity: opsi tidak punya id maupun label",
+                    resolves.dataset_id
+                ),
+            ));
+        }
+
+        for parameter in &loaded.entry.parameters {
+            if parameter.source.as_deref() != Some("authorized_scope") {
+                findings.push(Finding::error(
+                    &subject,
+                    "resolver_parameters_are_scope_only",
+                    format!(
+                        "resolver mendeklarasikan parameter '{}' yang bukan authorized_scope; \
+                         nilainya akan datang dari luar otorisasi (I7)",
+                        parameter.name
+                    ),
+                ));
+            }
+        }
+    }
+
+    for ((dataset_id, shape_id), manifests) in &wrapped {
+        if manifests.len() > 1 {
+            findings.push(Finding::error(
+                format!("{dataset_id}/{shape_id}"),
+                "resolver_shape_has_one_query",
+                format!("shape dibungkus lebih dari satu manifest: {}", manifests.join(", ")),
+            ));
+        }
+    }
+
+    // Shape ber-role resolver yang tidak dibungkus manifest mana pun: ia tidak
+    // dapat menerbitkan opsi, jadi slot yang menunjuknya akan gagal diam-diam.
+    for loaded in &catalog.datasets {
+        for shape in &loaded.entry.shapes {
+            if shape.role.as_deref() != Some("resolver") {
+                continue;
+            }
+            if !wrapped.contains_key(&(loaded.entry.id.as_str(), shape.id.as_str())) {
+                findings.push(Finding::warning(
+                    format!("{} ({})", loaded.entry.id, loaded.path),
+                    "resolver_shape_has_one_query",
+                    format!(
+                        "shape resolver '{}' tidak dibungkus manifest query mana pun; \
+                         slot yang menunjuknya tidak akan punya opsi",
+                        shape.id
+                    ),
+                ));
+            }
+        }
+    }
+}
+
 fn check_capability(
+    catalog: &Catalog,
     capability: &Capability,
     path: &str,
     queries: &BTreeMap<&str, &QueryManifest>,
@@ -365,6 +474,70 @@ fn check_capability(
                 "required_parameters_match_query",
                 format!(
                     "query mewajibkan '{}' tetapi capability tidak menyediakannya (tanpa required maupun default)",
+                    parameter.name
+                ),
+            ));
+        }
+    }
+
+    // Slot identitas: yang menuntut resolver wajib benar-benar punya satu, dan
+    // yang punya wajib menghasilkan kolom binding yang dijanjikan. K1 hanya
+    // berlaku bila tautannya diperiksa — kalau tidak, slot itu menjadi teks
+    // bebas yang menyamar sebagai pilihan.
+    for (name, declared) in &capability.parameters {
+        let Some(probe) = &declared.probe else {
+            continue;
+        };
+
+        match catalog.resolver_for(&probe.dataset_id, &probe.shape_id) {
+            None => findings.push(Finding::error(
+                &subject,
+                "probe_has_resolver",
+                format!(
+                    "parameter '{name}' menunjuk probe {}/{} yang tidak punya query resolver disetujui",
+                    probe.dataset_id, probe.shape_id
+                ),
+            )),
+            Some(resolver) => {
+                if !resolver
+                    .query
+                    .output_fields
+                    .iter()
+                    .any(|field| field.name == probe.output_slot)
+                {
+                    findings.push(Finding::error(
+                        &subject,
+                        "probe_has_resolver",
+                        format!(
+                            "parameter '{name}' mengambil output_slot '{}' yang tidak ada di kolom hasil {}",
+                            probe.output_slot, resolver.query.id
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    // Slot `transient_sensitive_input` tanpa probe: tidak dapat ditanyakan sama
+    // sekali (K1). Warning, bukan error — capability-nya sah, ia hanya tidak
+    // dapat dijalankan sampai resolvernya ada, dan Engine menyatakan itu pada
+    // response alih-alih menebak.
+    for parameter in &query.parameters {
+        if parameter.source.as_deref() != Some("transient_sensitive_input") {
+            continue;
+        }
+        let has_probe = capability
+            .parameters
+            .get(&parameter.name)
+            .is_some_and(|declared| declared.probe.is_some());
+
+        if !has_probe {
+            findings.push(Finding::warning(
+                &subject,
+                "identity_slot_has_resolver",
+                format!(
+                    "slot identitas '{}' tidak punya probe: permintaan yang memerlukannya akan \
+                     dijawab Unsupported, bukan ditanyakan sebagai teks bebas",
                     parameter.name
                 ),
             ));
@@ -448,7 +621,9 @@ pub fn coverage() -> &'static [&'static str] {
         "capabilities/**: query_id, parameter, PII output, office scope, prosa",
         "queries/**: sql_file, SELECT-only, single statement, token terlarang, placeholder, office binding, output_fields",
         "queries/**/*.sql (non-dataset): keterhubungan ke manifest",
-        "BELUM DIVALIDASI: datasets/**, fragment *.frag.sql, metrics/**, schema/**, parameters/**, domains/**, responses/**",
+        "resolver: resolves: -> dataset/shape ada, satu manifest per shape, parameter hanya authorized_scope, entity dideklarasikan",
+        "capabilities/**: probe: -> resolver ada dan output_slot benar-benar kolom hasilnya",
+        "BELUM DIVALIDASI: datasets/** selain entity+shape resolver, fragment *.frag.sql, metrics/**, schema/**, parameters/**, domains/**, responses/**",
         "BELUM DIBUKTIKAN oleh validator mana pun: kebenaran angka, grain, dan semantik as-of (jalankan contohnya)",
     ]
 }

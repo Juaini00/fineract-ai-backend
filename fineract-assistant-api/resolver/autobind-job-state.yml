@@ -1,0 +1,27 @@
+info:
+  name: auto-bind tidak pernah melewati WaitingForUser
+  type: http
+  seq: 15
+  description: |
+    Tidak ada yang ditanyakan, jadi menyatakan job menunggu manusia akan
+    merusak setiap metrik waktu tunggu klarifikasi.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{autobindJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("terminal Completed/Answered, plan tetap versi 1", function () {
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness).to.equal("Complete");
+          expect(job.plan_version).to.equal(1);
+        });

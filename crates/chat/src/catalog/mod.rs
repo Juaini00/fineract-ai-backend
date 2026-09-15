@@ -15,6 +15,7 @@ use std::path::Path;
 
 use foundation::state::Foundation;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 pub use loader::Catalog;
 pub use validate::{Finding, Report, Severity};
@@ -55,16 +56,16 @@ pub async fn check(foundation: &Foundation, probe_fineract: bool) -> anyhow::Res
     Ok(Checked { catalog, report })
 }
 
-/// Dipanggil saat startup bila `CATALOG_VALIDATE_ON_STARTUP=true`.
+/// Muat katalog **sekali** untuk seluruh proses, lalu pastikan versinya
+/// tercatat.
 ///
-/// Startup **tidak** digagalkan oleh temuan: katalog carry-over memang belum
-/// direview (`knowledge/CARRY-OVER.md`), dan menolak boot hanya memindahkan
-/// review menjadi penghalang tanpa mempercepatnya. Yang ditegakkan adalah
-/// sebaliknya — versi katalog dicatat apa adanya, `failed` tetap `failed`, dan
-/// Engine kelak menolak mengeksekusi capability dari versi yang bukan
-/// `validated`.
-pub async fn validate_on_startup(foundation: &Foundation) -> anyhow::Result<()> {
+/// Satu pemuatan dipakai bersama worker dan route resolver: dua pemuatan
+/// berarti plan dapat merujuk `content_hash` yang berbeda dari katalog yang
+/// menerbitkan opsi, dan perbedaan itu tidak akan terlihat sebagai kesalahan
+/// apa pun.
+pub async fn prepare(foundation: &Foundation) -> anyhow::Result<(std::sync::Arc<Catalog>, Uuid)> {
     let checked = check(foundation, false).await?;
+    let status = checked.status();
     let report = &checked.report;
 
     if report.errors() > 0 {
@@ -79,25 +80,31 @@ pub async fn validate_on_startup(foundation: &Foundation) -> anyhow::Result<()> 
             content_hash = %checked.catalog.content_hash,
             capabilities = checked.catalog.capabilities.len(),
             queries = checked.catalog.queries.len(),
+            datasets = checked.catalog.datasets.len(),
             warnings = report.warnings(),
             "katalog tervalidasi"
         );
     }
 
-    if foundation.config().catalog_sync_on_startup {
-        let version_id = repository::upsert_version(
-            foundation.app_db().pool(),
-            &checked.catalog,
-            checked.status(),
-            serde_json::json!({
-                "errors": report.errors(),
-                "warnings": report.warnings(),
-                "probe": "skipped_on_startup",
-            }),
-        )
-        .await?;
-        info!(%version_id, "versi katalog dicatat");
-    }
+    let pool = foundation.app_db().pool();
+    let version_id = match repository::version_id(pool, &checked.catalog.content_hash).await? {
+        Some(id) => id,
+        // Versi dicatat apa adanya — termasuk bila statusnya `failed`. Plan tanpa
+        // versi katalog untuk dirujuk tidak dapat diinvestigasi (migrasi 3).
+        None => {
+            repository::upsert_version(
+                pool,
+                &checked.catalog,
+                status,
+                serde_json::json!({
+                    "errors": report.errors(),
+                    "warnings": report.warnings(),
+                    "probe": "skipped_on_startup",
+                }),
+            )
+            .await?
+        }
+    };
 
-    Ok(())
+    Ok((std::sync::Arc::new(checked.catalog), version_id))
 }

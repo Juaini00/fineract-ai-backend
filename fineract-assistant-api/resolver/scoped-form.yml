@@ -1,0 +1,34 @@
+info:
+  name: kandidat hanya dari office yang diizinkan
+  type: http
+  seq: 12
+  description: |
+    8 office berisi 43 klien; office 1 sendirian berisi 9. Angka inilah yang
+    membuktikan resolver terikat scope — status code 200 tidak membuktikan apa
+    pun tentang baris mana yang boleh dilihat.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{scopedJobId}}/clarification/options?field_id=client_id"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("9 kandidat, bukan 43: scope mempersempit", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.matched_total).to.equal(9);
+          expect(page.options).to.have.lengthOf(9);
+          expect(page.next_cursor).to.equal(null);
+        });
+
+        test("seluruh kandidat berasal dari office yang diminta", function () {
+          page.options.forEach(function (option) {
+            expect(option.attributes.office_id).to.equal(1);
+          });
+        });

@@ -8,6 +8,10 @@ sql_file: queries/datasets/savings/charge_definitions.source.sql
 data_areas: [organization_foundation, client_foundation, savings_core, savings_charges_fees]
 tables: [m_charge, m_savings_account_charge, m_savings_account, m_client]
 metrics: [savings.charge_count]
+# Tautan ke shape dataset yang dibungkus manifest ini. Sebelumnya tautan itu
+# hanya hidup sebagai komentar di atas, dan koneksi yang hanya berupa prosa
+# adalah persis yang invarian I6 larang.
+resolves: { dataset_id: savings.charge_definitions, shape_id: charge_type_candidates }
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 output_fields:
