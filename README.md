@@ -48,9 +48,12 @@ Jalankan setiap kali migrasi berubah.
 
 ## Integration test
 
-Tanpa test integrasi di dalam Rust: permukaan HTTP diuji sebagai HTTP, lewat
-[Bruno CLI](https://docs.usebruno.com) terhadap aplikasi yang benar-benar
-berjalan dan PostgreSQL yang benar-benar dimigrasi.
+**Tanpa test integrasi di dalam Rust — ini keputusan, bukan kebetulan.**
+Permukaan HTTP diuji sebagai HTTP lewat [Bruno CLI](https://docs.usebruno.com)
+terhadap aplikasi yang benar-benar berjalan dan PostgreSQL yang benar-benar
+dimigrasi. `cargo test` hanya untuk logika murni (config, token, hashing,
+binding parameter, komposisi blok). Aturan lengkap beserta format berkasnya ada
+di [AGENTS.md](AGENTS.md#integration-test-bruno-cli-bukan-test-integrasi-di-dalam-rust).
 
 ```bash
 npm install -g @usebruno/cli     # sekali saja

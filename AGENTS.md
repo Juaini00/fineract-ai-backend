@@ -39,10 +39,98 @@ Jangan pulihkan pola lama itu.
 ```bash
 cargo check --workspace
 cargo clippy --workspace -- -D warnings
+cargo test --workspace
 psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql
+cargo run -p app -- catalog          # katalog: validasi + prepare SQL ke Fineract
+./scripts/integration-test.sh        # permukaan HTTP lewat Bruno CLI
 ```
 
 `tests/schema_smoke.sql` menguji **perilaku**, bukan sekadar DDL berhasil di-parse: ia gagal bila K4, fencing, constraint satu-job-per-session, atau rantai CASCADE rusak. Jalankan setelah setiap perubahan migrasi.
+
+## Integration test: Bruno CLI, bukan test integrasi di dalam Rust
+
+**Keputusan yang mengikat.** Permukaan HTTP diuji sebagai HTTP, lewat
+[Bruno CLI](https://docs.usebruno.com) terhadap aplikasi yang benar-benar
+berjalan dan PostgreSQL yang benar-benar dimigrasi. **Jangan** menambahkan
+`tests/*.rs` yang menyalakan server, memakai `axum::Router::oneshot`, atau
+sejenisnya.
+
+`cargo test` tetap dipakai — hanya untuk logika murni yang tidak menyentuh
+jaringan maupun database (validasi config, verifikasi token, hashing, binding
+parameter, komposisi blok response).
+
+```bash
+npm install -g @usebruno/cli            # sekali saja; binernya bernama `bru`
+./scripts/integration-test.sh           # dua tahap, lihat di bawah
+./scripts/integration-test.sh auth      # satu folder saja
+./scripts/integration-test.sh engine    # tahap engine saja
+PORT=3210 ./scripts/integration-test.sh # port lain bila 3107 dipakai
+KEEP_RUNNING=1 ./scripts/integration-test.sh  # app dibiarkan hidup untuk debug
+```
+
+Koleksi ada di `fineract-assistant-api/` dengan format **OpenCollection 1.0**
+(`opencollection.yml` di root koleksi). Satu request = satu berkas `.yml`:
+
+```yaml
+info:
+  name: read job
+  type: http          # WAJIB; tanpa ini berkas dilewati sebagai "invalid item"
+  seq: 3              # urutan di dalam folder
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{token}}"
+  body:               # hanya untuk POST/PUT
+    type: json
+    data: |
+      { "session_id": "{{sessionId}}" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("idemKey", "bruno-" + Date.now());
+    - type: tests
+      code: |
+        test("nama test", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+        bru.setVar("jobId", res.getBody().data.job_id);
+```
+
+Folder punya `folder.yml` (`info.name`, `info.seq`), environment ada di
+`environments/local.yml`.
+
+Aturan yang tidak boleh dilanggar saat menulis koleksi:
+
+- **Request dalam satu folder berurutan dan saling bergantung.** Rotasi refresh
+  token hanya dapat diuji setelah login; deteksi pemakaian ulang hanya setelah
+  rotasi. Jangan berharap satu request lolos bila dijalankan sendirian.
+- **Runner berjalan dua tahap.** `health`/`auth`/`chat` dijalankan dengan
+  `WORKER_ENABLED=false` karena folder `chat` menguji semantik **penerimaan**
+  (job tetap `Queued`, satu job nonterminal per session). Dengan worker menyala,
+  job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
+  perilaku yang diuji. `engine`/`clarification` dijalankan dengan worker menyala
+  dan `--delay 1500`.
+- **`--disable-cookies` wajib.** Cookie jar otomatis akan menimpa refresh token
+  lama, sehingga uji reuse-detection tidak pernah benar-benar berjalan.
+- **Kunci `Idempotency-Key` dibuat unik per run** lewat script `before-request`.
+  Kunci tetap akan di-replay pada run kedua dan menutupi kegagalan pembuatan job
+  yang sebenarnya.
+- Test menegaskan **perilaku yang dijanjikan kontrak**, bukan sekadar status
+  code: pesan 401 untuk password salah dan user tak dikenal dibandingkan
+  byte-per-byte, cursor event diperiksa angkanya, kolom PII yang ditahan
+  diperiksa keberadaannya pada blok `limitation`.
+
+Menjalankan `bru` langsung juga sah untuk iterasi cepat, asalkan app sudah
+hidup:
+
+```bash
+cd fineract-assistant-api
+bru run engine -r --env local --env-var baseUrl=http://127.0.0.1:3107 \
+  --disable-cookies --delay 1500 --bail
+```
 
 ## Yang mudah salah
 
