@@ -201,6 +201,57 @@ Halaman berikutnya: kirim kembali kedua `next_*` sebagai `before_*`. Keduanya
 
 Bentuk sama dengan hasil `POST`.
 
+### `GET /chat/sessions/{session_id}/messages`
+
+Riwayat percakapan untuk render ulang sesudah refresh. Keyset pagination,
+`created_at DESC, id DESC` — **terbaru lebih dulu**. Query opsional:
+`before_created_at`, `before_id` (wajib berpasangan; satu saja → `422`),
+`limit` (maksimum 50). Session milik orang lain atau tidak dikenal → `404`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "id": "0c6f2a1e-6f4e-4c38-9f03-6a0b6a7c9a11",
+        "job_id": "f51f9e7a-2a4d-4a55-9b9c-0c2a9f0c4c31",
+        "role": "assistant",
+        "request_text": null,
+        "response_version": 1,
+        "clarification_id": null,
+        "clarification_revision": null,
+        "created_at": "2026-09-15T04:39:21.767871Z"
+      },
+      {
+        "id": "b2b3f0dd-1f77-4a3e-9d18-2d4fd0b7f0a2",
+        "job_id": "f51f9e7a-2a4d-4a55-9b9c-0c2a9f0c4c31",
+        "role": "user",
+        "request_text": "berapa total saldo tabungan?",
+        "response_version": null,
+        "clarification_id": null,
+        "clarification_revision": null,
+        "created_at": "2026-09-15T04:39:19.204118Z"
+      }
+    ],
+    "next_before_created_at": "2026-09-15T04:39:19.204118Z",
+    "next_before_id": "b2b3f0dd-1f77-4a3e-9d18-2d4fd0b7f0a2"
+  },
+  "error": null
+}
+```
+
+**Indeksnya tipis, dan itu disengaja.** Teks tidak disalin ke riwayat; ia tetap
+tinggal di rumahnya yang immutable. Karena itu:
+
+- `role`: `user`, `assistant`, atau `clarification`.
+- `request_text` hanya terisi pada baris `user` — pada baris lain nilainya
+  `null`, bukan pertanyaan yang sama diulang.
+- Isi jawaban diambil lewat `GET /chat/jobs/{job_id}/response`
+  (`response_version` menyebut versi yang ditulis turn itu).
+- Isi form klarifikasi diambil lewat `GET /chat/jobs/{job_id}/clarification`
+  (`clarification_id` + `clarification_revision` menyebut revisi turn itu).
+
 ---
 
 ## 5. Job
@@ -695,8 +746,6 @@ GET  /chat/jobs/{id}/response                       → kind: "skipped", blok sk
 Endpoint dan field berikut **tidak** ada hari ini. Jangan dirancang ke dalam FE
 seolah sudah ada:
 
-- Riwayat pesan (`GET /chat/sessions/{id}/messages`) — `chat_messages` sudah
-  terisi, endpointnya belum ada.
 - Dataset/handle berchunk dan pagination hasil besar.
 - Blok `chart`, `findings`, `comparison`, `suggestions`.
 - Narasi LLM. Seluruh teks hari ini deterministik.

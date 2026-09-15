@@ -1,0 +1,20 @@
+info:
+  name: riwayat pesan - session tidak dikenal
+  type: http
+  seq: 18
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions/00000000-0000-0000-0000-000000000000/messages"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("404 dari pemeriksaan kepemilikan, bukan halaman kosong", function () {
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().error.code).to.equal("NOT_FOUND");
+        });

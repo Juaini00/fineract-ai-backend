@@ -1,0 +1,20 @@
+info:
+  name: riwayat pesan - cursor setengah
+  type: http
+  seq: 17
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions/{{sessionId}}/messages?before_id={{sessionId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422: satu komponen cursor tidak menentukan posisi", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().data).to.equal(null);
+        });

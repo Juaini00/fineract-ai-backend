@@ -23,8 +23,8 @@ Jangan menghitung persentase dari jumlah baris. Bobotnya tidak sama.
 
 | | |
 | --- | --- |
-| Permukaan HTTP | 15 route / **16 operasi** (auth 4, session 3, job 5, klarifikasi 2, SSE 1, health 1) |
-| Unit test | 87 pass (`cargo test --workspace`) |
+| Permukaan HTTP | 16 route / **17 operasi** (auth 4, session 4, job 5, klarifikasi 2, SSE 1, health 1) |
+| Unit test | 88 pass (`cargo test --workspace`) |
 | Integration test | 104 request / 156 test hijau (Bruno CLI, tiga tahap) |
 | Lint | `cargo clippy --workspace -- -D warnings` bersih |
 | Schema | 6 migrasi, 23 tabel, `tests/schema_smoke.sql` lulus |
@@ -79,7 +79,7 @@ kebenaran prosa — tidak ada yang bisa.
 | T1 penerimaan job | ✅ | Idempotency, snapshot scope+PII, audit, event — satu transaksi |
 | Satu job nonterminal per session | ✅ | Ditegakkan partial unique index, bukan pemeriksaan aplikasi |
 | Cancel (T9) | ✅ | Cancel berulang no-op, bukan transisi kedua |
-| Riwayat pesan | 🟡 | `chat_messages` terisi benar; **endpoint pembacanya belum ada** |
+| Riwayat pesan | ✅ | `GET /chat/sessions/{id}/messages`, keyset terbaru-dulu. Indeks tipis: `request_text` dibaca dari `chat_jobs`, isi jawaban/form tetap di endpointnya sendiri |
 
 ### Engine
 
@@ -137,20 +137,19 @@ Urut menurut apa yang paling menghalangi integrasi frontend penuh.
 
 | # | Bagian | Kenapa penting | Pemilik desain |
 | --- | --- | --- | --- |
-| 1 | **Endpoint riwayat pesan** | FE tidak dapat merender ulang percakapan setelah refresh. Datanya sudah ada di `chat_messages`; hanya pembacanya yang hilang | `contracts/api.md` |
-| 2 | **Session memory + promotion** | `session_memory` kosong. Pertanyaan lanjutan tidak membawa konteks apa pun | `architecture/memory-context.md` |
-| 3 | **Integrasi LLM** | Planner dan composer deterministik. Narasi additive belum ada | `architecture/tech-stack.md` |
-| 4 | **Plan multi-node + fan-in** | Setiap pertanyaan menjadi tepat satu query. Pertanyaan komparatif tidak dapat direncanakan | `architecture/engine.md` |
-| 5 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
-| 6 | **Analytical contract (Mode 2)** | Hanya capability tetap yang dapat dijalankan | `data/analytical-contracts.md` |
-| 7 | **Blok response lanjutan** | `chart`, `findings`, `comparison`, `suggestions` belum dipancarkan | `contracts/responses.md` |
-| 8 | **Validator response (D1–D3)** | Hitung ulang completeness dan lineage evidence belum ditegakkan runtime | `contracts/responses.md` |
-| 9 | **Klarifikasi bertahap** | Form kedua sesudah slot pertama terjawab | `contracts/clarifications.md` |
-| 10 | **Embedding retrieval** | Retrieval masih leksikal; fail-closed ke leksikal sudah dirancang | `migration/carry-over.md` #7 |
-| 11 | **Security/identity final** | SSO, tenant model, izin PII per pengguna | `security/access-data-policy.md` (belum ada) |
-| 12 | **Observability** | Metrics, traces, alerting, exporter | `operations/observability.md` (belum ada) |
-| 13 | **Acceptance matrix** | Requirement → skenario → hasil terukur | `verification/acceptance.md` (belum ada) |
-| 14 | **OpenAPI** | Schema formal; FE masih memakai `contracts/api-reference.md` | `contracts/api.md` |
+| 1 | **Session memory + promotion** | `session_memory` kosong. Pertanyaan lanjutan tidak membawa konteks apa pun | `architecture/memory-context.md` |
+| 2 | **Integrasi LLM** | Planner dan composer deterministik. Narasi additive belum ada | `architecture/tech-stack.md` |
+| 3 | **Plan multi-node + fan-in** | Setiap pertanyaan menjadi tepat satu query. Pertanyaan komparatif tidak dapat direncanakan | `architecture/engine.md` |
+| 4 | **Dataset berchunk + handle** | Hasil besar belum punya jalur; tidak ada pagination hasil | `data/dataset-lifecycle.md` |
+| 5 | **Analytical contract (Mode 2)** | Hanya capability tetap yang dapat dijalankan | `data/analytical-contracts.md` |
+| 6 | **Blok response lanjutan** | `chart`, `findings`, `comparison`, `suggestions` belum dipancarkan | `contracts/responses.md` |
+| 7 | **Validator response (D1–D3)** | Hitung ulang completeness dan lineage evidence belum ditegakkan runtime | `contracts/responses.md` |
+| 8 | **Klarifikasi bertahap** | Form kedua sesudah slot pertama terjawab | `contracts/clarifications.md` |
+| 9 | **Embedding retrieval** | Retrieval masih leksikal; fail-closed ke leksikal sudah dirancang | `migration/carry-over.md` #7 |
+| 10 | **Security/identity final** | SSO, tenant model, izin PII per pengguna | `security/access-data-policy.md` (belum ada) |
+| 11 | **Observability** | Metrics, traces, alerting, exporter | `operations/observability.md` (belum ada) |
+| 12 | **Acceptance matrix** | Requirement → skenario → hasil terukur | `verification/acceptance.md` (belum ada) |
+| 13 | **OpenAPI** | Schema formal; FE masih memakai `contracts/api-reference.md` | `contracts/api.md` |
 
 ---
 
@@ -175,18 +174,16 @@ Bukan "belum sempat" — ini keputusan sadar yang punya alasan dan pemicu revisi
 
 Dependensi, bukan prioritas produk.
 
-1. **Endpoint riwayat pesan.** Kecil, tidak bergantung apa pun, dan langsung
-   membuka refresh-safe UI untuk frontend.
-2. **Session memory + promotion pada response commit.** K4 sudah ditegakkan
+1. **Session memory + promotion pada response commit.** K4 sudah ditegakkan
    schema (FK komposit ke `job_responses`), jadi jalur tulisnya sudah aman.
    Tanpa ini tidak ada percakapan, hanya pertanyaan berturut-turut.
-3. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
+2. **Validator response (D1–D3).** Sebelum blok bertambah banyak — menambahkan
    validator sesudahnya berarti memvalidasi permukaan yang sudah menyebar.
-4. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
+3. **Plan multi-node + fan-in**, lalu **dataset berchunk**. Keduanya mengubah
    arti `completeness`, jadi keduanya menunggu validator di atas.
-5. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
+4. **Integrasi LLM** sebagai lapisan additive: kegagalannya tidak boleh
    menghapus structured output.
-6. **Security/identity final**, sebelum deployment nyata.
+5. **Security/identity final**, sebelum deployment nyata.
 
 ---
 

@@ -59,6 +59,65 @@ pub async fn list_for_owner(
     }
 }
 
+/// Satu turn riwayat. Indeksnya tipis (§3 database-design): konten tidak
+/// disalin ke sini. `request_text` dibaca kembali dari `chat_jobs` — rumah
+/// aslinya, immutable — dan hanya untuk baris `user`; pada baris `assistant`
+/// teks itu adalah pertanyaan yang sama, bukan jawabannya. Isi jawaban diambil
+/// frontend lewat `GET /chat/jobs/{job_id}/response`.
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+pub struct Message {
+    pub id: Uuid,
+    pub job_id: Uuid,
+    pub role: String,
+    pub request_text: Option<String>,
+    pub response_version: Option<i32>,
+    pub clarification_id: Option<Uuid>,
+    pub clarification_revision: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Keyset `created_at DESC, id DESC` — arah yang sama dengan daftar session,
+/// sehingga frontend memakai satu pola cursor untuk keduanya.
+pub async fn list_messages(
+    pool: &PgPool,
+    session_id: Uuid,
+    before: Option<(DateTime<Utc>, Uuid)>,
+    limit: i64,
+) -> sqlx::Result<Vec<Message>> {
+    match before {
+        Some((created_at, id)) => {
+            sqlx::query_as::<_, Message>(
+                "SELECT m.id, m.job_id, m.role,
+                        CASE WHEN m.role = 'user' THEN j.request_text END AS request_text,
+                        m.response_version, m.clarification_id, m.clarification_revision, m.created_at
+                 FROM chat_messages m JOIN chat_jobs j ON j.id = m.job_id
+                 WHERE m.session_id = $1 AND (m.created_at, m.id) < ($2, $3)
+                 ORDER BY m.created_at DESC, m.id DESC LIMIT $4",
+            )
+            .bind(session_id)
+            .bind(created_at)
+            .bind(id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+        }
+        None => {
+            sqlx::query_as::<_, Message>(
+                "SELECT m.id, m.job_id, m.role,
+                        CASE WHEN m.role = 'user' THEN j.request_text END AS request_text,
+                        m.response_version, m.clarification_id, m.clarification_revision, m.created_at
+                 FROM chat_messages m JOIN chat_jobs j ON j.id = m.job_id
+                 WHERE m.session_id = $1
+                 ORDER BY m.created_at DESC, m.id DESC LIMIT $2",
+            )
+            .bind(session_id)
+            .bind(limit)
+            .fetch_all(pool)
+            .await
+        }
+    }
+}
+
 pub async fn find(pool: &PgPool, session_id: Uuid) -> sqlx::Result<Option<Session>> {
     sqlx::query_as::<_, Session>("SELECT id, owner_user_id, title, status, created_at, updated_at FROM chat_sessions WHERE id = $1"
     )

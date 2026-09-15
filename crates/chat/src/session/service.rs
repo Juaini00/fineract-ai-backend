@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use foundation::{error::ApiError, state::Foundation};
 use uuid::Uuid;
 
-use crate::session::repository::{self, Session};
+use crate::session::repository::{self, Message, Session};
 
 /// Batas atas satu halaman. Klien boleh meminta lebih kecil, tidak lebih besar:
 /// halaman tak berbatas adalah cara paling mudah membuat satu request menarik
@@ -30,6 +30,27 @@ pub async fn list(
     repository::list_for_owner(
         foundation.app_db().pool(),
         owner_user_id,
+        before,
+        limit.clamp(1, MAX_PAGE_SIZE),
+    )
+    .await
+    .map_err(|error| anyhow::Error::from(error).into())
+}
+
+/// Riwayat satu session. Kepemilikan diperiksa lewat `owned` lebih dulu (I7):
+/// otorisasi dibaca dari `chat_sessions.owner_user_id`, bukan dari baris riwayat.
+pub async fn messages(
+    foundation: &Foundation,
+    session_id: Uuid,
+    owner_user_id: Uuid,
+    before: Option<(DateTime<Utc>, Uuid)>,
+    limit: i64,
+) -> Result<Vec<Message>, ApiError> {
+    owned(foundation, session_id, owner_user_id).await?;
+
+    repository::list_messages(
+        foundation.app_db().pool(),
+        session_id,
         before,
         limit.clamp(1, MAX_PAGE_SIZE),
     )
