@@ -4,7 +4,7 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: implementasi berjalan.** Fondasi (`core`), autentikasi, session, penerimaan job (T1), validator katalog, serta siklus hidup job — klaim/lease/fencing (T2), recovery (T11), dan commit response (T7) — sudah berjalan dan terverifikasi terhadap PostgreSQL nyata. Planner, eksekusi node, klarifikasi, dataset dan SSE belum ada; setiap job karena itu diselesaikan sebagai `Unsupported` dengan response `kind='limitation'` yang menyatakan sebabnya. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: menjawab pertanyaan nyata.** Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus hidup job (T2/T7/T11), planner deterministik (T3), dan eksekusi capability yang disetujui ke Fineract (T4) sudah berjalan dan terverifikasi terhadap data nyata. Pertanyaan yang tercakup capability dijawab dengan angka + provenance; yang tidak tercakup ditolak sebagai `Unsupported` dengan sebab yang dinyatakan. Klarifikasi, dataset berchunk, memori session, SSE dan integrasi LLM belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
 
 ## Dokumen
 
@@ -95,8 +95,10 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 ## Yang belum ada
 
-- Engine: worker lease/fencing (T2), plan (T3), eksekusi node (T4), klarifikasi (T5–T6), response commit (T7–T8), reaper (T11).
-- SSE `/chat/jobs/{id}/events`, dataset/handle, memori session, dan integrasi LLM/embedding.
+- Klarifikasi (T5–T6) dan skip (T8): parameter wajib yang tidak dapat diturunkan saat ini menghasilkan `Unsupported`, bukan pertanyaan balik.
+- Plan multi-node dan fan-in: planner menghasilkan tepat satu node `CuratedQuery`.
+- Analytical contract (Mode 2), dataset berchunk/handle, memori session.
+- SSE `/chat/jobs/{id}/events`, dan integrasi LLM/embedding (narasi additive).
 - `docs/security/access-data-policy.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
 
 ## Aturan yang tidak boleh dilanggar

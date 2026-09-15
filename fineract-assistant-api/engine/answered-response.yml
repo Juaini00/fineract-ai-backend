@@ -1,0 +1,42 @@
+info:
+  name: response analysis dengan provenance
+  type: http
+  seq: 10
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answeredJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const blocks = document.blocks_json;
+
+        test("kind analysis, bukan limitation", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("analysis");
+          expect(document.completeness).to.equal("Complete");
+        });
+
+        test("angka datang sebagai blok metrics", function () {
+          expect(blocks[0].type).to.equal("metrics");
+          const keys = blocks[0].metrics.map((m) => m.key);
+          expect(keys).to.include("account_count");
+          expect(keys).to.include("total_balance");
+        });
+
+        test("provenance menyebut capability, query, dan versi katalog", function () {
+          const provenance = blocks.find((b) => b.type === "provenance");
+          expect(provenance.capability_id).to.equal("savings_balance_summary");
+          expect(provenance.query_id).to.equal("savings.balance_summary");
+          expect(provenance.sql_file).to.be.a("string");
+          expect(provenance.catalog_content_hash).to.have.lengthOf(64);
+          // Scope dilaporkan sebagai jumlah office, bukan daftar id.
+          const scope = provenance.parameters.find((p) => p.name === "office_ids");
+          expect(scope.value).to.match(/authorized offices$/);
+        });

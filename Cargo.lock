@@ -321,6 +321,7 @@ dependencies = [
  "chrono",
  "core",
  "hex",
+ "rust_decimal",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2747,6 +2748,7 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "rustversion",
+ "serde",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
 ]

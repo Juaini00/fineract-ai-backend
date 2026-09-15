@@ -516,3 +516,306 @@ pub async fn find_response(
     .fetch_optional(pool)
     .await
 }
+
+/// T3 — plan terverifikasi dipersist.
+///
+/// `contract_versions_json` menyimpan `catalog_version_id` + `content_hash`,
+/// bukan teks versi: di sistem lama kolom versi literal selalu berisi "local",
+/// dan investigasi "prosa kontrak mana yang dilihat planner" karena itu tidak
+/// pernah terjawab (migrasi 3).
+pub async fn persist_plan(
+    pool: &PgPool,
+    job_id: Uuid,
+    session_id: Uuid,
+    lease_token: Uuid,
+    plan_version: i32,
+    graph_json: &Value,
+    graph_hash: &str,
+    contract_versions: &Value,
+    capability_id: &str,
+) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    let updated = sqlx::query(
+        "UPDATE chat_jobs SET plan_version = $3, updated_at = now()
+         WHERE id = $1 AND lease_token = $2 AND lifecycle = 'Running'",
+    )
+    .bind(job_id)
+    .bind(lease_token)
+    .bind(plan_version)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+
+    sqlx::query(
+        "INSERT INTO job_plans
+            (job_id, plan_version, graph_json, graph_hash, contract_versions_json, verified_at)
+         VALUES ($1, $2, $3, $4, $5, now())",
+    )
+    .bind(job_id)
+    .bind(plan_version)
+    .bind(graph_json)
+    .bind(graph_hash)
+    .bind(contract_versions)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO job_node_runs
+            (job_id, plan_version, node_id, node_kind, attempt, status, started_at)
+         VALUES ($1, $2, 'main', 'CuratedQuery', 1, 'Runnable', now())",
+    )
+    .bind(job_id)
+    .bind(plan_version)
+    .execute(&mut *tx)
+    .await?;
+
+    append_event(
+        &mut tx,
+        job_id,
+        "job.phase_changed",
+        Some(serde_json::json!({ "phase": "plan_verified", "plan_version": plan_version })),
+    )
+    .await?;
+
+    audit::insert(
+        &mut tx,
+        AuditEvent {
+            actor_kind: "worker",
+            job_id: Some(job_id),
+            session_id: Some(session_id),
+            stage: "plan_verify",
+            action: "plan.persisted",
+            result: "ok",
+            detail_json: Some(serde_json::json!({
+                "plan_version": plan_version,
+                "graph_hash": graph_hash,
+                "capability_id": capability_id,
+            })),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Hasil satu node yang akan dipersist lewat T4.
+#[derive(Debug)]
+pub struct NodeOutcome<'a> {
+    pub status: &'a str,
+    pub completeness: Option<&'a str>,
+    pub failure_code: Option<&'a str>,
+    pub output_json: Option<Value>,
+    pub provenance_json: Value,
+    pub rows_returned: Option<i64>,
+    pub duration_ms: Option<i64>,
+}
+
+/// T4 — node selesai.
+///
+/// Eksekusi query terjadi **di luar** transaksi ini (I1). Fencing dilakukan
+/// lewat `EXISTS` terhadap token job, karena baris node tidak menyimpan token
+/// sendiri: pemegang token basi tidak boleh mempersist hasilnya.
+pub async fn complete_node(
+    pool: &PgPool,
+    job_id: Uuid,
+    session_id: Uuid,
+    lease_token: Uuid,
+    plan_version: i32,
+    outcome: NodeOutcome<'_>,
+) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    let updated = sqlx::query(
+        "UPDATE job_node_runs
+         SET status = $4,
+             completeness = $5,
+             failure_code = $6,
+             output_json = $7,
+             provenance_json = $8,
+             rows_returned = $9,
+             duration_ms = $10,
+             finished_at = now()
+         WHERE job_id = $1 AND plan_version = $2 AND node_id = 'main' AND attempt = 1
+           AND EXISTS (
+               SELECT 1 FROM chat_jobs
+               WHERE id = $1 AND lease_token = $3 AND lifecycle = 'Running'
+           )",
+    )
+    .bind(job_id)
+    .bind(plan_version)
+    .bind(lease_token)
+    .bind(outcome.status)
+    .bind(outcome.completeness)
+    .bind(outcome.failure_code)
+    .bind(&outcome.output_json)
+    .bind(&outcome.provenance_json)
+    .bind(outcome.rows_returned)
+    .bind(outcome.duration_ms)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+
+    // Budget dihitung pada baris job, bukan disimpulkan dari jumlah baris
+    // ledger: attempt yang Abandoned tetap memakai kuota.
+    sqlx::query(
+        "UPDATE chat_jobs SET query_count = query_count + 1, updated_at = now() WHERE id = $1",
+    )
+    .bind(job_id)
+    .execute(&mut *tx)
+    .await?;
+
+    append_event(
+        &mut tx,
+        job_id,
+        "node.status_changed",
+        Some(serde_json::json!({
+            "node_id": "main",
+            "status": outcome.status,
+            "rows_returned": outcome.rows_returned,
+        })),
+    )
+    .await?;
+
+    audit::insert(
+        &mut tx,
+        AuditEvent {
+            actor_kind: "worker",
+            job_id: Some(job_id),
+            session_id: Some(session_id),
+            stage: "source_query",
+            action: "node.completed",
+            result: if outcome.status == "Completed" { "ok" } else { "failed" },
+            failure_code: outcome.failure_code,
+            detail_json: Some(outcome.provenance_json.clone()),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Selesaikan job sebagai kegagalan operasional (T7 jalur gagal).
+pub async fn settle_failed(
+    pool: &PgPool,
+    job_id: Uuid,
+    session_id: Uuid,
+    lease_token: Uuid,
+    failure_code: &str,
+    response: SettledResponse,
+) -> sqlx::Result<bool> {
+    let mut tx = pool.begin().await?;
+
+    const RESPONSE_VERSION: i32 = 1;
+
+    let updated = sqlx::query(
+        "UPDATE chat_jobs
+         SET lifecycle = 'Failed',
+             outcome = 'OperationalFailure',
+             completeness = $4,
+             completeness_reason = $5,
+             failure_code = $3,
+             final_response_version = $6,
+             terminal_at = now(),
+             expires_at = NULL,
+             lease_owner = NULL,
+             lease_token = NULL,
+             lease_expires_at = NULL,
+             updated_at = now()
+         WHERE id = $1 AND lease_token = $2 AND lifecycle = 'Running'",
+    )
+    .bind(job_id)
+    .bind(lease_token)
+    .bind(failure_code)
+    .bind(response.completeness)
+    .bind(&response.completeness_reason)
+    .bind(RESPONSE_VERSION)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+
+    // Response tetap ditulis: pengguna berhak tahu APA yang gagal, dan
+    // investigasi berhak melihat dokumen yang dilihat pengguna.
+    sqlx::query(
+        "INSERT INTO job_responses
+            (job_id, response_version, kind, outcome, completeness, completeness_reason,
+             blocks_json, validation_status, response_hash, composed_at)
+         VALUES ($1, $2, $3, 'OperationalFailure', $4, $5, $6, 'passed', $7, now())",
+    )
+    .bind(job_id)
+    .bind(RESPONSE_VERSION)
+    .bind(response.kind)
+    .bind(response.completeness)
+    .bind(&response.completeness_reason)
+    .bind(&response.blocks)
+    .bind(&response.response_hash)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO chat_messages (session_id, job_id, role, response_version)
+         VALUES ($1, $2, 'assistant', $3)",
+    )
+    .bind(session_id)
+    .bind(job_id)
+    .bind(RESPONSE_VERSION)
+    .execute(&mut *tx)
+    .await?;
+
+    append_event(
+        &mut tx,
+        job_id,
+        "job.failed",
+        Some(serde_json::json!({ "failure_code": failure_code })),
+    )
+    .await?;
+
+    audit::insert(
+        &mut tx,
+        AuditEvent {
+            actor_kind: "worker",
+            job_id: Some(job_id),
+            session_id: Some(session_id),
+            stage: "commit",
+            action: "job.failed",
+            result: "failed",
+            failure_code: Some(failure_code),
+            job_outcome: Some("OperationalFailure"),
+            job_completeness: Some(response.completeness),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Id versi katalog yang tercatat untuk sebuah `content_hash`.
+pub async fn catalog_version_id(pool: &PgPool, content_hash: &str) -> sqlx::Result<Option<Uuid>> {
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM knowledge_catalog_versions WHERE content_hash = $1",
+    )
+    .bind(content_hash)
+    .fetch_optional(pool)
+    .await
+}

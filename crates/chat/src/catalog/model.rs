@@ -40,6 +40,10 @@ pub struct CapabilityParameter {
     pub required: bool,
     #[serde(default)]
     pub default: Option<serde_yaml::Value>,
+    /// Batas atas yang dideklarasikan capability, mis. `limit`. Nilai default
+    /// yang melebihi cap dipotong ke cap — cap adalah janji, bukan saran.
+    #[serde(default)]
+    pub hard_cap: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,6 +74,10 @@ pub struct QueryManifest {
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryParameter {
     pub name: String,
+    /// Tipe pada YAML. `type` adalah kata kunci Rust, jadi field-nya bernama
+    /// `kind` dan dipetakan lewat serde.
+    #[serde(rename = "type", default)]
+    pub kind: String,
     #[serde(default)]
     pub required: bool,
     /// `authorized_scope` berarti nilainya berasal dari otorisasi, bukan dari

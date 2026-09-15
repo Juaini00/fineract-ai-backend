@@ -1,0 +1,30 @@
+info:
+  name: job terjawab dengan plan tercatat
+  type: http
+  seq: 9
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answeredJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("Answered + Complete, dengan plan berversi", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness).to.equal("Complete");
+          expect(job.plan_version).to.equal(1);
+        });
+
+        test("event bertambah untuk plan dan node", function () {
+          // accepted, phase_changed(Running), phase_changed(plan), node.status_changed, completed
+          expect(job.last_event_sequence).to.equal(5);
+        });

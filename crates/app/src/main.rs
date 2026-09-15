@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         auth::service::bootstrap_admin(&foundation).await?;
     }
 
-    let engine = chat::engine::Background::spawn(&foundation);
+    let engine = chat::engine::Background::spawn(&foundation).await?;
 
     let router = health::router()
         .merge(auth::route::router())
