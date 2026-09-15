@@ -73,7 +73,7 @@ Runner menjalankannya dalam **dua tahap**. `health`/`auth`/`chat` berjalan
 dengan `WORKER_ENABLED=false` karena folder `chat` menguji semantik penerimaan
 (job tetap `Queued`, satu job nonterminal per session); dengan worker menyala,
 job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
-perilaku yang diuji. `engine`, `clarification` dan `resolver` berjalan dengan worker
+perilaku yang diuji. `engine`, `clarification`, `resolver` dan `sse` berjalan dengan worker
 menyala untuk membuktikan job bergerak sampai terminal tanpa campur tangan
 klien, dan bahwa job yang ditangguhkan melanjutkan setelah dijawab.
 

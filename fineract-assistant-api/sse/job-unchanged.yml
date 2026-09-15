@@ -1,0 +1,27 @@
+info:
+  name: membaca stream tidak mengubah job
+  type: http
+  seq: 12
+  description: |
+    sse.md: "Connection loss never cancels a job." Stream adalah proyeksi baca;
+    empat kali membukanya tidak boleh memindahkan lifecycle, menambah event,
+    atau menggeser cursor.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("lifecycle dan cursor persis seperti sebelum stream dibuka", function () {
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(String(job.last_event_sequence)).to.equal(bru.getVar("sseLastSequence"));
+        });

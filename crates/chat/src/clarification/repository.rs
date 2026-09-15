@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     audit::{self, AuditEvent},
     engine::compose::AutoBound,
-    job::repository::append_event,
+    job::repository::{EventRef, append_event_ref},
 };
 
 /// Form yang sedang terbuka untuk sebuah job.
@@ -171,13 +171,19 @@ pub async fn open_form(
         .map(|answer| answer.field_id.as_str())
         .collect();
 
-    append_event(
+    append_event_ref(
         &mut tx,
         job_id,
         if fully_resolved {
             "clarification.auto_resolved"
         } else {
             "clarification.required"
+        },
+        EventRef {
+            clarification_id: Some(clarification_id),
+            clarification_revision: Some(1),
+            plan_version,
+            ..Default::default()
         },
         Some(serde_json::json!({
             "clarification_id": clarification_id,
@@ -420,10 +426,15 @@ pub async fn accept_answers(
     .execute(&mut *tx)
     .await?;
 
-    append_event(
+    append_event_ref(
         &mut tx,
         form.job_id,
         "clarification.accepted",
+        EventRef {
+            clarification_id: Some(form.clarification_id),
+            clarification_revision: Some(form.revision),
+            ..Default::default()
+        },
         Some(serde_json::json!({
             "clarification_id": form.clarification_id,
             "revision": form.revision,

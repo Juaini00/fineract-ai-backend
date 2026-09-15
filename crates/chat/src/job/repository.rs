@@ -282,6 +282,21 @@ async fn insert_job_chain(
     })
 }
 
+/// Referensi bertipe pada sebuah event.
+///
+/// Ini **kolom**, bukan isi payload (migrasi 4): kolom selalu tersedia berapa
+/// pun ambang inline payload, sehingga ambang itu dapat diubah tanpa membuat
+/// klien kehilangan rujukan yang ia pakai untuk menyusun tampilan.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct EventRef<'a> {
+    pub plan_version: Option<i32>,
+    pub node_id: Option<&'a str>,
+    pub node_attempt: Option<i32>,
+    pub clarification_id: Option<Uuid>,
+    pub clarification_revision: Option<i32>,
+    pub response_version: Option<i32>,
+}
+
 /// Alokasikan sequence lalu sisipkan event, atomik dengan transisi state (C14).
 ///
 /// Alokator adalah `UPDATE ... RETURNING` pada baris job — bukan sequence
@@ -290,6 +305,17 @@ pub async fn append_event(
     tx: &mut Transaction<'_, Postgres>,
     job_id: Uuid,
     event_type: &str,
+    payload: Option<Value>,
+) -> sqlx::Result<i64> {
+    append_event_ref(tx, job_id, event_type, EventRef::default(), payload).await
+}
+
+/// Seperti [`append_event`], dengan referensi bertipe yang ikut sebagai kolom.
+pub async fn append_event_ref(
+    tx: &mut Transaction<'_, Postgres>,
+    job_id: Uuid,
+    event_type: &str,
+    references: EventRef<'_>,
     payload: Option<Value>,
 ) -> sqlx::Result<i64> {
     let sequence = sqlx::query_scalar::<_, i64>(
@@ -301,15 +327,36 @@ pub async fn append_event(
     .await?;
 
     sqlx::query(
-        "INSERT INTO job_events (job_id, sequence, event_type, payload_json)
-         VALUES ($1, $2, $3, $4)",
+        "INSERT INTO job_events
+            (job_id, sequence, event_type, plan_version, node_id, node_attempt,
+             clarification_id, clarification_revision, response_version, payload_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     )
     .bind(job_id)
     .bind(sequence)
     .bind(event_type)
+    .bind(references.plan_version)
+    .bind(references.node_id)
+    .bind(references.node_attempt)
+    .bind(references.clarification_id)
+    .bind(references.clarification_revision)
+    .bind(references.response_version)
     .bind(payload)
     .execute(&mut **tx)
     .await?;
+
+    // Notifikasi dipancarkan DI SINI, satu-satunya tempat sequence dialokasikan,
+    // dan sebagai `pg_notify` — bukan panggilan jaringan. Ia tetap tulisan lokal
+    // PostgreSQL (I1) dan baru terkirim saat transaksi commit, sehingga mustahil
+    // memberi tahu subscriber tentang event yang kemudian di-rollback.
+    //
+    // Memancarkannya dari tiap pemanggil akan mengulang kesalahan yang
+    // AGENTS.md peringatkan: satu jalur transisi lupa memancarkan, dan tidak ada
+    // yang gagal — stream hanya terlambat sampai fallback polling menutupinya.
+    sqlx::query("SELECT pg_notify('job_events', $1)")
+        .bind(job_id.to_string())
+        .execute(&mut **tx)
+        .await?;
 
     Ok(sequence)
 }

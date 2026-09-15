@@ -1,0 +1,28 @@
+info:
+  name: job sudah terminal sebelum stream dibaca
+  type: http
+  seq: 4
+  description: |
+    sse.md: penyelesaian cepat sebelum klien berlangganan tetap menghasilkan
+    response akhir. Stream berikutnya adalah replay murni.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("terminal, dengan cursor yang sudah bergerak", function () {
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.last_event_sequence).to.be.above(1);
+        });
+
+        bru.setVar("sseLastSequence", String(job.last_event_sequence));

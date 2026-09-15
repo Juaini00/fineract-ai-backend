@@ -52,6 +52,38 @@ impl Notifier {
             Self::Disabled => "disabled",
         }
     }
+
+    pub fn is_live(&self) -> bool {
+        matches!(self, Self::Live(_))
+    }
+
+    /// Pancarkan notifikasi. Kegagalan **tidak** dinaikkan sebagai error:
+    /// notifikasi bukan sumber kebenaran, dan subscriber yang kehilangannya
+    /// tetap menemukan event itu lewat PostgreSQL. Yang dilarang adalah
+    /// kehilangan yang tidak terlihat — karena itu ia tetap di-log.
+    pub async fn publish(&self, channel: &str, payload: &str) {
+        let Self::Live(manager) = self else {
+            return;
+        };
+
+        let mut manager = manager.clone();
+        if let Err(error) = redis::cmd("PUBLISH")
+            .arg(channel)
+            .arg(payload)
+            .exec_async(&mut manager)
+            .await
+        {
+            warn!(error = %error, channel, "notifikasi redis gagal dipancarkan");
+        }
+    }
+}
+
+/// Buka koneksi subscribe tersendiri.
+///
+/// Pub/sub tidak dapat berbagi koneksi dengan perintah biasa: koneksi yang
+/// sudah `SUBSCRIBE` hanya menerima perintah pub/sub.
+pub async fn subscriber(url: &str) -> anyhow::Result<redis::aio::PubSub> {
+    Ok(redis::Client::open(url)?.get_async_pubsub().await?)
 }
 
 async fn connect(url: &str) -> anyhow::Result<ConnectionManager> {

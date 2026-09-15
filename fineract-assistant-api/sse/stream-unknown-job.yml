@@ -1,0 +1,19 @@
+info:
+  name: stream job yang bukan milik pemanggil
+  type: http
+  seq: 11
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/00000000-0000-0000-0000-000000000000/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("404: cursor tidak pernah menjadi jalan masuk ke job orang lain", function () {
+          expect(res.getStatus()).to.equal(404);
+        });

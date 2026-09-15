@@ -126,6 +126,34 @@ pub struct Config {
     #[serde(default = "default_worker_poll_interval_ms")]
     pub worker_poll_interval_ms: u64,
 
+    // ---- Event dan SSE (runtime.md §5) ----
+    /// Jeda baca PostgreSQL saat tidak ada notifikasi. Ini **fallback yang
+    /// wajib**, bukan optimasi: notifikasi bukan sumber kebenaran, dan stream
+    /// yang hanya menunggu notifikasi akan menggantung selamanya saat satu
+    /// notifikasi hilang.
+    #[serde(default = "default_sse_fallback_poll_interval_secs")]
+    pub sse_fallback_poll_interval_secs: u64,
+    /// Batas atas jeda itu saat job menganggur lama.
+    #[serde(default = "default_sse_fallback_poll_max_interval_secs")]
+    pub sse_fallback_poll_max_interval_secs: u64,
+    /// Jeda komentar keep-alive. Ia menjaga transport hidup dan **bukan** bukti
+    /// worker masih bekerja — itu tugas lease.
+    #[serde(default = "default_sse_transport_comment_interval_secs")]
+    pub sse_transport_comment_interval_secs: u64,
+    /// Batas frame yang dibaca sekaligus per stream: klien yang menyambung ke
+    /// job beriwayat panjang tidak boleh memaksa seluruh riwayat masuk memori.
+    #[serde(default = "default_sse_outgoing_buffer_frames")]
+    pub sse_outgoing_buffer_frames: usize,
+    /// Matikan seluruh jalur notifikasi (`pg_notify` dan Redis).
+    ///
+    /// Bukan sakelar test: ini mode degradasi yang didukung untuk deployment
+    /// yang tidak mengizinkan `LISTEN` (mis. beberapa pooler dalam mode
+    /// transaction). Stream tetap benar — ia hanya bergantung sepenuhnya pada
+    /// fallback polling, dan itulah yang membuktikan notifikasi memang bukan
+    /// sumber kebenaran.
+    #[serde(default = "default_true")]
+    pub sse_notifications_enabled: bool,
+
     // ---- Idempotency (runtime.md §3) ----
     #[serde(default = "default_idempotency_ttl_secs")]
     pub idempotency_ttl_secs: i64,
@@ -236,6 +264,18 @@ impl Config {
             );
         }
 
+        // Fallback polling adalah jaring pengaman notifikasi. Interval awal
+        // yang lebih longgar daripada batas atasnya berarti jaring itu dipasang
+        // terbalik, dan stream akan terasa lambat tanpa sebab yang terlihat.
+        if self.sse_fallback_poll_interval_secs > self.sse_fallback_poll_max_interval_secs {
+            anyhow::bail!(
+                "SSE_FALLBACK_POLL_INTERVAL_SECS ({}) tidak boleh melebihi \
+                 SSE_FALLBACK_POLL_MAX_INTERVAL_SECS ({})",
+                self.sse_fallback_poll_interval_secs,
+                self.sse_fallback_poll_max_interval_secs
+            );
+        }
+
         if self.jwt_access_token_expiry_seconds >= self.jwt_refresh_token_expiry_seconds {
             anyhow::bail!(
                 "JWT_ACCESS_TOKEN_EXPIRY_SECONDS harus lebih pendek daripada \
@@ -306,6 +346,18 @@ fn default_resolver_page_size_max() -> usize {
 }
 fn default_resolver_max_candidates() -> usize {
     500
+}
+fn default_sse_fallback_poll_interval_secs() -> u64 {
+    2
+}
+fn default_sse_fallback_poll_max_interval_secs() -> u64 {
+    15
+}
+fn default_sse_transport_comment_interval_secs() -> u64 {
+    15
+}
+fn default_sse_outgoing_buffer_frames() -> usize {
+    64
 }
 fn default_catalog_path() -> String {
     "knowledge".to_string()
@@ -433,6 +485,16 @@ mod tests {
         let config = build(entries).unwrap();
         assert!(config.app_database_migrate_on_startup);
         assert!(!config.may_migrate_on_startup(), "migrasi startup bocor ke production");
+    }
+
+    #[test]
+    fn fallback_poll_interval_may_not_exceed_its_own_ceiling() {
+        let mut entries = minimal();
+        entries.push(("sse_fallback_poll_interval_secs", "30".into()));
+        entries.push(("sse_fallback_poll_max_interval_secs", "15".into()));
+
+        let error = build(entries).unwrap_err().to_string();
+        assert!(error.contains("SSE_FALLBACK_POLL_INTERVAL_SECS"), "{error}");
     }
 
     #[test]

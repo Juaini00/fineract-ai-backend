@@ -1,0 +1,24 @@
+info:
+  name: Last-Event-ID bukan angka ditolak
+  type: http
+  seq: 9
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+    - name: Last-Event-ID
+      value: "bukan-angka"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("422, bukan diam-diam mengulang dari nol", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().error.message).to.equal(
+            "Last-Event-ID must be an event sequence number"
+          );
+        });

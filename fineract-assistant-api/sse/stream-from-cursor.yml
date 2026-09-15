@@ -1,0 +1,38 @@
+info:
+  name: replay dari cursor melanjutkan, bukan mengulang
+  type: http
+  seq: 6
+  description: |
+    `Last-Event-ID` adalah cara klien melanjutkan setelah koneksi putus.
+    Ia BUKAN kredensial: kepemilikan job diperiksa terpisah, dan cursor hanya
+    menentukan titik mulai.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+    - name: Last-Event-ID
+      value: "2"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const ids = (String(res.getBody()).match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+
+        test("mulai tepat setelah cursor, tanpa mengulang 1 dan 2", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(ids[0]).to.equal(3);
+          expect(ids).to.not.include(1);
+          expect(ids).to.not.include(2);
+        });
+
+        test("sisanya utuh sampai terminal", function () {
+          const last = Number(bru.getVar("sseLastSequence"));
+          expect(ids[ids.length - 1]).to.equal(last);
+          expect(ids).to.have.lengthOf(last - 2);
+        });

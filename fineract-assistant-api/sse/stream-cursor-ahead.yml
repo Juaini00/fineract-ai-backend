@@ -1,0 +1,27 @@
+info:
+  name: cursor mendahului riwayat ditolak eksplisit
+  type: http
+  seq: 8
+  description: |
+    sse.md aturan 5: cursor yang tidak sah menuntut snapshot baru secara
+    eksplisit. Diam-diam mulai dari nol akan mengirim ulang seluruh riwayat
+    seolah itu kemajuan baru, dan UI akan memutar mundur.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events?cursor=999999"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409 yang menyebut sequence terakhir yang benar", function () {
+          expect(res.getStatus()).to.equal(409);
+          const message = res.getBody().error.message;
+          expect(message).to.contain("ahead of this job");
+          expect(message).to.contain(bru.getVar("sseLastSequence"));
+          expect(message).to.contain("fresh job snapshot");
+        });

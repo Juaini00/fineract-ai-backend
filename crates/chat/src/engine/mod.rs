@@ -61,6 +61,12 @@ impl Background {
         Ok(Self { shutdown, tasks })
     }
 
+    /// Token yang ikut dibatalkan saat proses berhenti. Dibagikan supaya task
+    /// latar lain (mis. hub notifikasi) mati bersama, bukan menggantung.
+    pub fn shutdown_token(&self) -> CancellationToken {
+        self.shutdown.clone()
+    }
+
     /// Minta berhenti lalu tunggu task selesai.
     pub async fn shutdown(self) {
         self.shutdown.cancel();

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     audit::{self, AuditEvent},
-    job::repository::append_event,
+    job::repository::{EventRef, append_event, append_event_ref},
 };
 
 /// Job yang berhasil diklaim, beserta token pagarnya.
@@ -82,7 +82,10 @@ pub async fn claim_next(
         &mut tx,
         job.id,
         "job.phase_changed",
-        Some(serde_json::json!({ "lifecycle": "Running" })),
+        // Kosakata fase PUBLIK (sse.md), bukan nama lifecycle internal: fase
+        // adalah proyeksi pengalaman, dan membocorkan lifecycle memberi klien
+        // state machine kedua untuk diikuti.
+        Some(serde_json::json!({ "phase": "understanding", "message": "Understanding your request." })),
     )
     .await?;
 
@@ -228,12 +231,12 @@ pub async fn settle_with_response(
     .execute(&mut *tx)
     .await?;
 
-    append_event(
+    append_event_ref(
         &mut tx,
         job_id,
         "job.completed",
+        EventRef { response_version: Some(RESPONSE_VERSION), ..Default::default() },
         Some(serde_json::json!({
-            "response_version": RESPONSE_VERSION,
             "outcome": response.outcome,
             "completeness": response.completeness,
         })),
@@ -575,11 +578,12 @@ pub async fn persist_plan(
     .execute(&mut *tx)
     .await?;
 
-    append_event(
+    append_event_ref(
         &mut tx,
         job_id,
         "job.phase_changed",
-        Some(serde_json::json!({ "phase": "plan_verified", "plan_version": plan_version })),
+        EventRef { plan_version: Some(plan_version), ..Default::default() },
+        Some(serde_json::json!({ "phase": "planning", "message": "Preparing the analysis." })),
     )
     .await?;
 
@@ -677,12 +681,17 @@ pub async fn complete_node(
     .execute(&mut *tx)
     .await?;
 
-    append_event(
+    append_event_ref(
         &mut tx,
         job_id,
         "node.status_changed",
+        EventRef {
+            plan_version: Some(plan_version),
+            node_id: Some("main"),
+            node_attempt: Some(1),
+            ..Default::default()
+        },
         Some(serde_json::json!({
-            "node_id": "main",
             "status": outcome.status,
             "rows_returned": outcome.rows_returned,
         })),
@@ -781,10 +790,11 @@ pub async fn settle_failed(
     .execute(&mut *tx)
     .await?;
 
-    append_event(
+    append_event_ref(
         &mut tx,
         job_id,
         "job.failed",
+        EventRef { response_version: Some(RESPONSE_VERSION), ..Default::default() },
         Some(serde_json::json!({ "failure_code": failure_code })),
     )
     .await?;

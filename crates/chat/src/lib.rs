@@ -11,6 +11,7 @@ pub mod audit;
 pub mod catalog;
 pub mod clarification;
 pub mod engine;
+pub mod events;
 pub mod job;
 pub mod session;
 pub mod settings;
@@ -25,10 +26,12 @@ use foundation::state::Foundation;
 /// Katalog dibawa sebagai `Extension`, bukan dimuat per request: isinya tetap
 /// selama proses hidup, dan resolver opsi wajib memakai katalog yang **sama**
 /// dengan yang dilihat worker — dua pemuatan berarti dua kebenaran.
-pub fn router(catalog: Arc<catalog::Catalog>) -> Router<Foundation> {
+pub fn router(catalog: Arc<catalog::Catalog>, hub: Arc<events::Hub>) -> Router<Foundation> {
     Router::new()
         .merge(session::route::router())
         .merge(job::route::router())
         .merge(clarification::route::router())
+        .merge(events::route::router())
         .layer(Extension(catalog))
+        .layer(Extension(hub))
 }

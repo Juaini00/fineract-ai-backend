@@ -48,9 +48,14 @@ async fn main() -> anyhow::Result<()> {
     let engine =
         chat::engine::Background::spawn(&foundation, catalog.clone(), catalog_version_id).await?;
 
+    // Hub notifikasi hidup selama proses, terlepas dari worker: instance yang
+    // tidak menjalankan worker tetap harus menstream kemajuan job yang
+    // dikerjakan instance lain.
+    let hub = chat::events::Hub::spawn(&foundation, engine.shutdown_token());
+
     let router = health::router()
         .merge(auth::route::router())
-        .merge(chat::router(catalog))
+        .merge(chat::router(catalog, hub))
         .with_state(foundation);
 
     let listener = TcpListener::bind(&bind_address).await?;

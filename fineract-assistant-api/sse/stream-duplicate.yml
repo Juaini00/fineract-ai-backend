@@ -1,0 +1,29 @@
+info:
+  name: pengiriman ulang aman
+  type: http
+  seq: 7
+  description: |
+    sse.md: "Deliver duplicates safely; do not promise exactly-once delivery."
+    Berlangganan ulang dari nol wajib menghasilkan riwayat yang sama persis —
+    bukan riwayat yang bergeser karena sudah pernah dibaca.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events?cursor=0"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const ids = function (text) {
+          return (text.match(/^id: (\d+)$/gm) || []).join(",");
+        };
+
+        test("id yang sama persis seperti pembacaan pertama", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(ids(body)).to.equal(ids(bru.getVar("sseFullBody")));
+        });

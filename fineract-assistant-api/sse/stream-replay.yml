@@ -1,0 +1,87 @@
+info:
+  name: replay penuh dari awal
+  type: http
+  seq: 5
+  description: |
+    Sequence strictly increasing tanpa lubang (I3), dan stream berakhir tepat
+    pada event terminal — bukan pada koneksi yang kebetulan tertutup.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const ids = (body.match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+        const names = (body.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+
+        test("text/event-stream", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(String(res.getHeader("content-type"))).to.contain("text/event-stream");
+        });
+
+        test("sequence 1..N tanpa lubang", function () {
+          const last = Number(bru.getVar("sseLastSequence"));
+          expect(ids).to.have.lengthOf(last);
+          ids.forEach(function (id, index) {
+            expect(id).to.equal(index + 1);
+          });
+        });
+
+        test("dimulai dengan penerimaan dan berakhir dengan penyelesaian", function () {
+          expect(names[0]).to.equal("job.accepted");
+          expect(names[names.length - 1]).to.equal("job.completed");
+          // Lifecycle terminal muncul TEPAT sekali: stream tidak boleh
+          // mengulang penyelesaian sebagai kemajuan baru.
+          const terminals = names.filter(function (name) {
+            return ["job.completed", "job.failed", "job.cancelled", "job.expired"].includes(name);
+          });
+          expect(terminals).to.have.lengthOf(1);
+        });
+
+        test("fase memakai kosakata publik, bukan nama lifecycle internal", function () {
+          const phases = (body.match(/"phase":"([a-z_]+)"/g) || []).map(function (match) {
+            return match.split('"')[3];
+          });
+          const allowed = [
+            "queued", "understanding", "mapping_knowledge", "planning", "validating",
+            "resolving_entities", "querying", "analyzing", "composing_response",
+            "validating_response", "waiting_for_user",
+          ];
+          expect(phases.length).to.be.above(0);
+          phases.forEach(function (phase) {
+            expect(allowed).to.include(phase);
+          });
+        });
+
+        test("referensi bertipe ikut sebagai field envelope, bukan hanya di payload", function () {
+          const lines = body.split("\n").filter(function (line) { return line.startsWith("data: "); });
+          const events = lines.map(function (line) { return JSON.parse(line.slice(6)); });
+
+          const node = events.find(function (event) { return event.event === "node.status_changed"; });
+          expect(node.node_id).to.equal("main");
+          expect(node.node_attempt).to.equal(1);
+          expect(node.plan_version).to.equal(1);
+
+          const completed = events[events.length - 1];
+          expect(completed.response_version).to.equal(1);
+          expect(completed.schema_version).to.equal(1);
+        });
+
+        test("tidak ada SQL, prompt, atau stack yang bocor ke stream", function () {
+          expect(body).to.not.contain("SELECT");
+          expect(body).to.not.contain("m_savings");
+          expect(body).to.not.contain(".sql");
+        });
+
+        bru.setVar("sseFullBody", body);

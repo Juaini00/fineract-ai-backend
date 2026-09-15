@@ -9,10 +9,13 @@
 #      nonterminal per session, cancel memindahkan ke `Cancelling`. Dengan
 #      worker menyala, job diselesaikan dalam hitungan milidetik dan hasil test
 #      bergantung pada balapan, bukan pada perilaku yang diuji.
-#   2. `engine`, `clarification` dan `resolver` dijalankan dengan worker menyala
-#      dan jeda antar-request, untuk
-#      membuktikan job benar-benar bergerak sampai terminal tanpa campur tangan
-#      klien.
+#   2. `engine`, `clarification`, `resolver` dan `sse` dijalankan dengan worker
+#      menyala dan jeda antar-request, untuk membuktikan job benar-benar
+#      bergerak sampai terminal tanpa campur tangan klien.
+#   3. `sse` DIULANG dengan SSE_NOTIFICATIONS_ENABLED=false. Assertion-nya
+#      identik dengan tahap 2, dan itulah buktinya: notifikasi bukan sumber
+#      kebenaran, jadi menghilangkannya tidak boleh mengubah satu pun hasil —
+#      hanya latensinya. Tanpa tahap ini, "fallback polling" hanya klaim.
 #
 # Pakai:
 #   scripts/integration-test.sh                 # kedua tahap
@@ -35,7 +38,7 @@ if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ]; then
+        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -43,7 +46,7 @@ if [ "$#" -gt 0 ]; then
     done
 else
     INTAKE_FOLDERS=(health auth chat)
-    ENGINE_FOLDERS=(engine clarification resolver)
+    ENGINE_FOLDERS=(engine clarification resolver sse)
 fi
 
 command -v bru >/dev/null || {
@@ -84,9 +87,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-start_app() {  # $1 = nilai WORKER_ENABLED
-    echo "==> menyalakan app pada $BASE_URL (worker=$1, log: $LOG)"
-    APP_PORT="$PORT" WORKER_ENABLED="$1" "$ROOT/target/debug/app" >>"$LOG" 2>&1 &
+start_app() {  # $1 = nilai WORKER_ENABLED, sisanya = VAR=nilai tambahan
+    local worker="$1"
+    shift
+    echo "==> menyalakan app pada $BASE_URL (worker=$worker $*, log: $LOG)"
+    env APP_PORT="$PORT" WORKER_ENABLED="$worker" "$@" "$ROOT/target/debug/app" >>"$LOG" 2>&1 &
     APP_PID=$!
 
     # Tunggu sampai SEHAT, bukan sekadar sampai port terbuka: port yang sudah
@@ -144,4 +149,15 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
     # Jeda memberi worker kesempatan mengklaim dan menyelesaikan job sebelum
     # request berikutnya membacanya.
     run_folders 1500 "${ENGINE_FOLDERS[@]}"
+
+    # Tahap 3 — SSE tanpa notifikasi sama sekali. Assertion-nya sama; yang
+    # berubah hanya dari mana stream tahu ada event baru.
+    for folder in "${ENGINE_FOLDERS[@]}"; do
+        if [ "$folder" = "sse" ]; then
+            stop_app
+            start_app true SSE_NOTIFICATIONS_ENABLED=false
+            echo "==> bru run sse (tanpa notifikasi; hanya fallback polling)"
+            run_folders 1500 sse
+        fi
+    done
 fi
