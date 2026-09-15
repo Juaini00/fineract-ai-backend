@@ -81,6 +81,22 @@ pub async fn cancel(
     owned(foundation, job_id, owner_user_id).await
 }
 
+/// Ambil response final job. `NotFound` selama belum ada response durable —
+/// klien tidak boleh menyimpulkan hasil dari lifecycle saja.
+pub async fn response(
+    foundation: &Foundation,
+    job_id: Uuid,
+    owner_user_id: Uuid,
+) -> Result<crate::engine::repository::ResponseDocument, ApiError> {
+    let job = owned(foundation, job_id, owner_user_id).await?;
+    let version = job.final_response_version.ok_or(ApiError::NotFound)?;
+
+    crate::engine::repository::find_response(foundation.app_db().pool(), job_id, version)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or(ApiError::NotFound)
+}
+
 /// Sidik jari payload kanonik — bukan body mentah, karena yang perlu diketahui
 /// hanya "sama atau tidak" dan payload dapat memuat PII.
 ///

@@ -1,0 +1,34 @@
+info:
+  name: job diselesaikan worker
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{engineJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("job mencapai state terminal tanpa campur tangan klien", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.terminal_at).to.be.a("string");
+        });
+
+        test("Completed + Unsupported wajib berpasangan dengan completeness Unknown", function () {
+          // engine.md: tidak ada klaim kelengkapan analitis atas data sumber.
+          expect(job.outcome).to.equal("Unsupported");
+          expect(job.completeness).to.equal("Unknown");
+        });
+
+        test("cursor event maju: accepted, phase_changed, completed", function () {
+          expect(job.last_event_sequence).to.equal(3);
+          expect(job.final_response_version).to.equal(1);
+        });

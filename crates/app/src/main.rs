@@ -44,6 +44,8 @@ async fn main() -> anyhow::Result<()> {
         auth::service::bootstrap_admin(&foundation).await?;
     }
 
+    let engine = chat::engine::Background::spawn(&foundation);
+
     let router = health::router()
         .merge(auth::route::router())
         .merge(chat::router())
@@ -60,6 +62,10 @@ async fn main() -> anyhow::Result<()> {
     )
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+
+    // Worker dihentikan SETELAH server berhenti menerima request: job yang
+    // sudah diterima tetap punya kesempatan diklaim dan diselesaikan.
+    engine.shutdown().await;
 
     info!("jarvis berhenti");
     Ok(())

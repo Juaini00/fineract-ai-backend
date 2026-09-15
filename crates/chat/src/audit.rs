@@ -20,6 +20,11 @@ pub struct AuditEvent<'a> {
     pub action: &'a str,
     pub result: &'a str,
     pub failure_code: Option<&'a str>,
+    /// Kosakata job-level (#1). CHECK `audit_events_job_result_scope` hanya
+    /// mengizinkannya pada `stage` commit/settle — dan karena tabel ini
+    /// append-only, keduanya wajib ikut pada INSERT, tidak bisa ditambal.
+    pub job_outcome: Option<&'a str>,
+    pub job_completeness: Option<&'a str>,
     /// Scope TEREDAKSI: metadata, bukan nilai filter.
     pub scope_json: Option<Value>,
     /// Keputusan terstruktur tersanitasi. SQL/prompt/stack tidak pernah masuk.
@@ -33,9 +38,9 @@ pub async fn insert(
     sqlx::query(
         "INSERT INTO audit_events
             (actor_kind, actor_user_id, session_id, job_id, stage, action, result,
-             failure_code, scope_json, detail_json)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-                 COALESCE($9, '{}'::jsonb), COALESCE($10, '{}'::jsonb))",
+             failure_code, job_outcome, job_completeness, scope_json, detail_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                 COALESCE($11, '{}'::jsonb), COALESCE($12, '{}'::jsonb))",
     )
     .bind(event.actor_kind)
     .bind(event.actor_user_id)
@@ -45,6 +50,8 @@ pub async fn insert(
     .bind(event.action)
     .bind(event.result)
     .bind(event.failure_code)
+    .bind(event.job_outcome)
+    .bind(event.job_completeness)
     .bind(event.scope_json)
     .bind(event.detail_json)
     .execute(&mut **tx)

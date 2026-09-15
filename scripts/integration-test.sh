@@ -2,19 +2,25 @@
 #
 # Integration test lewat Bruno CLI.
 #
-# Membangun biner, menyalakannya pada port bebas, menunggu /health benar-benar
-# sehat, menjalankan koleksi `fineract-assistant-api/`, lalu mematikan proses —
-# berhasil atau gagal. Exit code adalah exit code Bruno.
+# Dua tahap, dengan alasan yang mengikat:
+#
+#   1. `health`, `auth`, `chat` dijalankan dengan WORKER_ENABLED=false. Folder
+#      `chat` menguji semantik PENERIMAAN — job tetap `Queued`, satu job
+#      nonterminal per session, cancel memindahkan ke `Cancelling`. Dengan
+#      worker menyala, job diselesaikan dalam hitungan milidetik dan hasil test
+#      bergantung pada balapan, bukan pada perilaku yang diuji.
+#   2. `engine` dijalankan dengan worker menyala dan jeda antar-request, untuk
+#      membuktikan job benar-benar bergerak sampai terminal tanpa campur tangan
+#      klien.
 #
 # Pakai:
-#   scripts/integration-test.sh                 # seluruh koleksi
-#   scripts/integration-test.sh auth            # satu folder
+#   scripts/integration-test.sh                 # kedua tahap
+#   scripts/integration-test.sh auth            # satu folder (tahap intake)
+#   scripts/integration-test.sh engine          # tahap engine saja
 #   PORT=3210 scripts/integration-test.sh       # port tertentu
-#   KEEP_RUNNING=1 scripts/integration-test.sh  # biarkan app hidup untuk debug
+#   KEEP_RUNNING=1 scripts/integration-test.sh  # biarkan app terakhir hidup
 #
 # Prasyarat: PostgreSQL aplikasi hidup dan sudah dimigrasi (`sqlx migrate run`).
-# Script ini TIDAK memigrasi database Anda — `.env` lokal yang menentukan, dan
-# migrasi otomatis hanya sah di APP_ENV=local (lihat Config::may_migrate_on_startup).
 
 set -euo pipefail
 
@@ -23,10 +29,20 @@ COLLECTION="$ROOT/fineract-assistant-api"
 PORT="${PORT:-3107}"
 BASE_URL="http://127.0.0.1:$PORT"
 LOG="${LOG:-/tmp/jarvis-integration.log}"
+
 if [ "$#" -gt 0 ]; then
-    FOLDERS=("$@")
+    INTAKE_FOLDERS=()
+    ENGINE_FOLDERS=()
+    for folder in "$@"; do
+        if [ "$folder" = "engine" ]; then
+            ENGINE_FOLDERS+=("$folder")
+        else
+            INTAKE_FOLDERS+=("$folder")
+        fi
+    done
 else
-    FOLDERS=(health auth chat)
+    INTAKE_FOLDERS=(health auth chat)
+    ENGINE_FOLDERS=(engine)
 fi
 
 command -v bru >/dev/null || {
@@ -43,54 +59,88 @@ echo "==> build"
 cargo build -p app --quiet
 
 # Katalog diperiksa lebih dulu: capability yang tidak lolos tidak layak
-# dieksekusi, dan menemukannya setelah 29 request HTTP hanya menunda kabar buruk.
+# dieksekusi, dan menemukannya setelah puluhan request HTTP hanya menunda kabar
+# buruk.
 echo "==> memeriksa katalog"
 "$ROOT/target/debug/app" catalog
 
-echo "==> menyalakan app pada $BASE_URL (log: $LOG)"
-APP_PORT="$PORT" "$ROOT/target/debug/app" >"$LOG" 2>&1 &
-APP_PID=$!
+APP_PID=""
+
+stop_app() {
+    [ -n "$APP_PID" ] || return 0
+    # SIGTERM, bukan SIGKILL: jalur graceful shutdown ikut terlatih setiap run.
+    kill -TERM "$APP_PID" 2>/dev/null || true
+    wait "$APP_PID" 2>/dev/null || true
+    APP_PID=""
+}
 
 cleanup() {
     if [ -n "${KEEP_RUNNING:-}" ]; then
         echo "==> app dibiarkan hidup (pid $APP_PID) karena KEEP_RUNNING diset"
         return
     fi
-    # SIGTERM, bukan SIGKILL: jalur graceful shutdown ikut terlatih setiap run.
-    kill -TERM "$APP_PID" 2>/dev/null || true
-    wait "$APP_PID" 2>/dev/null || true
+    stop_app
 }
 trap cleanup EXIT
 
-# Tunggu sampai SEHAT, bukan sekadar sampai port terbuka: port yang sudah
-# menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan kegagalan
-# test yang menyesatkan.
-echo "==> menunggu /health"
-for attempt in $(seq 1 40); do
-    if [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/health" 2>/dev/null)" = "200" ]; then
-        break
-    fi
-    if ! kill -0 "$APP_PID" 2>/dev/null; then
-        echo "app berhenti saat startup:" >&2
-        tail -20 "$LOG" >&2
-        exit 1
-    fi
-    if [ "$attempt" -eq 40 ]; then
-        echo "/health tidak pernah 200 dalam 20 detik:" >&2
-        curl -s "$BASE_URL/health" >&2 || true
-        tail -20 "$LOG" >&2
-        exit 1
-    fi
-    sleep 0.5
-done
+start_app() {  # $1 = nilai WORKER_ENABLED
+    echo "==> menyalakan app pada $BASE_URL (worker=$1, log: $LOG)"
+    APP_PORT="$PORT" WORKER_ENABLED="$1" "$ROOT/target/debug/app" >>"$LOG" 2>&1 &
+    APP_PID=$!
 
-echo "==> bru run ${FOLDERS[*]}"
-cd "$COLLECTION"
+    # Tunggu sampai SEHAT, bukan sekadar sampai port terbuka: port yang sudah
+    # menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan
+    # kegagalan test yang menyesatkan.
+    for attempt in $(seq 1 40); do
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/health" 2>/dev/null)" = "200" ]; then
+            return 0
+        fi
+        if ! kill -0 "$APP_PID" 2>/dev/null; then
+            echo "app berhenti saat startup:" >&2
+            tail -20 "$LOG" >&2
+            exit 1
+        fi
+        sleep 0.5
+    done
+
+    echo "/health tidak pernah 200 dalam 20 detik:" >&2
+    tail -20 "$LOG" >&2
+    exit 1
+}
+
 # --disable-cookies: rotasi dan reuse-detection menuntut kontrol penuh atas
 # refresh token yang dikirim; cookie jar otomatis akan menimpa token lama dan
 # membuat uji reuse tidak pernah benar-benar berjalan.
-bru run "${FOLDERS[@]}" -r \
-    --env local \
-    --env-var "baseUrl=$BASE_URL" \
-    --disable-cookies \
-    --bail
+run_folders() {  # $1 = jeda ms, sisanya = folder
+    local delay="$1"
+    shift
+    # Subshell: `bru` harus dijalankan dari direktori koleksi, tetapi app dibaca
+    # dengan path katalog relatif terhadap root repo — cwd tidak boleh bocor ke
+    # tahap berikutnya.
+    (
+        cd "$COLLECTION"
+        bru run "$@" -r \
+            --env local \
+            --env-var "baseUrl=$BASE_URL" \
+            --disable-cookies \
+            --delay "$delay" \
+            --bail
+    )
+}
+
+: >"$LOG"
+
+if [ "${#INTAKE_FOLDERS[@]}" -gt 0 ]; then
+    start_app false
+    echo "==> bru run ${INTAKE_FOLDERS[*]} (tanpa worker)"
+    run_folders 0 "${INTAKE_FOLDERS[@]}"
+    stop_app
+fi
+
+if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
+    start_app true
+    echo "==> bru run ${ENGINE_FOLDERS[*]} (worker menyala)"
+    # Jeda memberi worker kesempatan mengklaim dan menyelesaikan job sebelum
+    # request berikutnya membacanya.
+    run_folders 1500 "${ENGINE_FOLDERS[@]}"
+fi

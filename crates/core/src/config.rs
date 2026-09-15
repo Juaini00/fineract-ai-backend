@@ -91,6 +91,23 @@ pub struct Config {
     #[serde(default)]
     pub catalog_sync_on_startup: bool,
 
+    // ---- Worker, lease dan recovery (runtime.md §1) ----
+    #[serde(default = "default_true")]
+    pub worker_enabled: bool,
+    #[serde(default = "default_lease_duration_secs")]
+    pub worker_lease_duration_secs: i64,
+    #[serde(default = "default_lease_heartbeat_interval_secs")]
+    pub worker_lease_heartbeat_interval_secs: u64,
+    #[serde(default = "default_reaper_interval_secs")]
+    pub reaper_interval_secs: u64,
+    #[serde(default = "default_job_ttl_running_secs")]
+    pub job_ttl_running_secs: i64,
+    /// Jeda polling antrean. Sementara: notifikasi Redis belum dipakai, jadi
+    /// worker memeriksa PostgreSQL secara berkala. Setelah notifikasi ada,
+    /// polling menjadi fallback, bukan jalur utama (SSE §transport).
+    #[serde(default = "default_worker_poll_interval_ms")]
+    pub worker_poll_interval_ms: u64,
+
     // ---- Idempotency (runtime.md §3) ----
     #[serde(default = "default_idempotency_ttl_secs")]
     pub idempotency_ttl_secs: i64,
@@ -189,6 +206,18 @@ impl Config {
             );
         }
 
+        // K1: lease diperpanjang task heartbeat independen. Interval yang tidak
+        // lebih rapat daripada lease berarti worker sehat dipagari di tengah
+        // kerja — kegagalan yang tampak seperti bug acak.
+        if self.worker_lease_heartbeat_interval_secs as i64 * 3 > self.worker_lease_duration_secs {
+            anyhow::bail!(
+                "WORKER_LEASE_HEARTBEAT_INTERVAL_SECS ({}) terlalu longgar untuk \
+                 WORKER_LEASE_DURATION_SECS ({}): butuh setidaknya tiga kesempatan renewal",
+                self.worker_lease_heartbeat_interval_secs,
+                self.worker_lease_duration_secs
+            );
+        }
+
         if self.jwt_access_token_expiry_seconds >= self.jwt_refresh_token_expiry_seconds {
             anyhow::bail!(
                 "JWT_ACCESS_TOKEN_EXPIRY_SECONDS harus lebih pendek daripada \
@@ -232,6 +261,21 @@ fn default_jwt_issuer() -> String {
 }
 fn default_jwt_audience() -> String {
     "jarvis-api".to_string()
+}
+fn default_lease_duration_secs() -> i64 {
+    60
+}
+fn default_lease_heartbeat_interval_secs() -> u64 {
+    10
+}
+fn default_reaper_interval_secs() -> u64 {
+    30
+}
+fn default_job_ttl_running_secs() -> i64 {
+    1_800
+}
+fn default_worker_poll_interval_ms() -> u64 {
+    1_000
 }
 fn default_catalog_path() -> String {
     "knowledge".to_string()

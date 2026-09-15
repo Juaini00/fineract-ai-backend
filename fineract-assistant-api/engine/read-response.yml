@@ -1,0 +1,33 @@
+info:
+  name: response document
+  type: http
+  seq: 5
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{engineJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+
+        test("200 dan response durable", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.response_version).to.equal(1);
+          expect(document.validation_status).to.equal("passed");
+          expect(document.response_hash).to.have.lengthOf(64);
+        });
+
+        test("kind limitation menyebut apa yang tidak terjawab, bukan dokumen kosong", function () {
+          expect(document.kind).to.equal("limitation");
+          expect(document.completeness_reason).to.equal("planner_not_implemented");
+          const blocks = document.blocks_json;
+          expect(blocks).to.have.lengthOf(1);
+          expect(blocks[0].type).to.equal("limitation");
+          expect(blocks[0].body).to.be.a("string").and.not.empty;
+        });

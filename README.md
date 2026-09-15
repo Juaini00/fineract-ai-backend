@@ -4,7 +4,7 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: implementasi berjalan.** Fondasi (`core`), autentikasi, session dan penerimaan job (T1) sudah berjalan dan terverifikasi terhadap PostgreSQL nyata. Engine, klarifikasi, dataset, SSE dan response document belum ada. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: implementasi berjalan.** Fondasi (`core`), autentikasi, session, penerimaan job (T1), validator katalog, serta siklus hidup job — klaim/lease/fencing (T2), recovery (T11), dan commit response (T7) — sudah berjalan dan terverifikasi terhadap PostgreSQL nyata. Planner, eksekusi node, klarifikasi, dataset dan SSE belum ada; setiap job karena itu diselesaikan sebagai `Unsupported` dengan response `kind='limitation'` yang menyatakan sebabnya. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
 
 ## Dokumen
 
@@ -54,16 +54,24 @@ berjalan dan PostgreSQL yang benar-benar dimigrasi.
 
 ```bash
 npm install -g @usebruno/cli     # sekali saja
-./scripts/integration-test.sh    # build, nyalakan, tunggu /health, bru run, matikan
-./scripts/integration-test.sh auth          # satu folder saja
-PORT=3210 ./scripts/integration-test.sh     # port lain bila 3107 dipakai
+./scripts/integration-test.sh    # katalog, lalu dua tahap Bruno
+./scripts/integration-test.sh auth            # satu folder saja
+./scripts/integration-test.sh engine          # tahap engine saja
+PORT=3210 ./scripts/integration-test.sh       # port lain bila 3107 dipakai
 KEEP_RUNNING=1 ./scripts/integration-test.sh  # biarkan app hidup untuk debug
 ```
 
 Koleksi ada di `fineract-assistant-api/` (format OpenCollection 1.0):
-`health/`, `auth/`, `chat/`. Request di dalam satu folder **berurutan dan saling
-bergantung** — rotasi refresh token hanya dapat diuji setelah login, dan deteksi
-pemakaian ulang hanya setelah rotasi.
+`health/`, `auth/`, `chat/`, `engine/`. Request di dalam satu folder
+**berurutan dan saling bergantung** — rotasi refresh token hanya dapat diuji
+setelah login, dan deteksi pemakaian ulang hanya setelah rotasi.
+
+Runner menjalankannya dalam **dua tahap**. `health`/`auth`/`chat` berjalan
+dengan `WORKER_ENABLED=false` karena folder `chat` menguji semantik penerimaan
+(job tetap `Queued`, satu job nonterminal per session); dengan worker menyala,
+job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
+perilaku yang diuji. `engine` berjalan dengan worker menyala untuk membuktikan
+job bergerak sampai terminal tanpa campur tangan klien.
 
 Runner menunggu `/health` benar-benar `200`, bukan sekadar port terbuka: port
 yang sudah menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan

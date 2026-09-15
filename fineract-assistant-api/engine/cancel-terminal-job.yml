@@ -1,0 +1,21 @@
+info:
+  name: cancel job yang sudah terminal
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{engineJobId}}/cancel"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("job terminal tidak pernah dibuka kembali", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.lifecycle).to.equal("Completed");
+          expect(res.getBody().data.last_event_sequence).to.equal(3);
+        });

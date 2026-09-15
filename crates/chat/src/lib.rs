@@ -9,6 +9,7 @@
 
 pub mod audit;
 pub mod catalog;
+pub mod engine;
 pub mod job;
 pub mod session;
 pub mod settings;

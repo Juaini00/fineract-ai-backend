@@ -32,6 +32,7 @@ pub fn router() -> Router<Foundation> {
     Router::new()
         .route("/chat/jobs", post(create))
         .route("/chat/jobs/{job_id}", get(read))
+        .route("/chat/jobs/{job_id}/response", get(response))
         .route("/chat/jobs/{job_id}/cancel", post(cancel))
 }
 
@@ -98,6 +99,15 @@ async fn read(
 ) -> Result<Json<Envelope<Job>>, ApiError> {
     let job = service::owned(&foundation, job_id, user.user_id).await?;
     Ok(Json(Envelope::ok(job)))
+}
+
+async fn response(
+    State(foundation): State<Foundation>,
+    user: AuthUser,
+    Path(job_id): Path<Uuid>,
+) -> Result<Json<Envelope<crate::engine::repository::ResponseDocument>>, ApiError> {
+    let document = service::response(&foundation, job_id, user.user_id).await?;
+    Ok(Json(Envelope::ok(document)))
 }
 
 async fn cancel(
