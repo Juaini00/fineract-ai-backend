@@ -300,13 +300,32 @@ fn check_query(
         }
     }
 
-    if query.timeout_ms.is_none() {
-        findings.push(Finding::warning(
+    match query.timeout_ms {
+        None => findings.push(Finding::warning(
             &subject,
             "timeout_declared",
             "timeout_ms tidak dinyatakan; kelas timeout probe vs analytical tidak dapat ditentukan",
-        ));
+        )),
+        Some(ms) if !is_timeout_class(ms) => findings.push(Finding::error(
+            &subject,
+            "timeout_class",
+            format!(
+                "timeout_ms {ms} bukan kelas PROBE ({PROBE_QUERY_TIMEOUT_MS}) atau ANALYTICAL ({ANALYTICAL_QUERY_TIMEOUT_MS}); operations/runtime.md hanya mengenal dua kelas — satu angka untuk dua kelas query adalah kesalahan yang bisa diprediksi"
+            ),
+        )),
+        Some(_) => {}
     }
+}
+
+/// Dua kelas timeout query yang diizinkan katalog (`operations/runtime.md`):
+/// probe cepat & selektif vs query beragregasi/window/LATERAL. Tidak ada nilai
+/// ketiga — 3 detik tidak cukup untuk agregasi produksi, dan satu angka untuk
+/// dua kelas adalah kesalahan yang bisa diprediksi sekarang.
+pub const PROBE_QUERY_TIMEOUT_MS: u64 = 3_000;
+pub const ANALYTICAL_QUERY_TIMEOUT_MS: u64 = 15_000;
+
+fn is_timeout_class(ms: u64) -> bool {
+    ms == PROBE_QUERY_TIMEOUT_MS || ms == ANALYTICAL_QUERY_TIMEOUT_MS
 }
 
 /// Integritas tautan resolver — I6: koneksi yang hanya hidup sebagai prosa
@@ -739,5 +758,14 @@ mod tests {
     fn semicolon_inside_literal_does_not_count_as_second_statement() {
         let stripped = strip_literals_and_comments("SELECT 'a;b' FROM t;");
         assert!(!stripped.trim_end().trim_end_matches(';').contains(';'));
+    }
+
+    #[test]
+    fn timeout_must_be_one_of_two_classes() {
+        assert!(is_timeout_class(PROBE_QUERY_TIMEOUT_MS));
+        assert!(is_timeout_class(ANALYTICAL_QUERY_TIMEOUT_MS));
+        // Nilai warisan yang tidak memetakan ke kelas mana pun ditolak.
+        assert!(!is_timeout_class(5_000));
+        assert!(!is_timeout_class(8_000));
     }
 }

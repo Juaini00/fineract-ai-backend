@@ -73,7 +73,7 @@ guards:
   single_statement: true
   require_office_filter: true
   bounded_per_partition: true
-timeout_ms: 8000
+timeout_ms: 15000
 checks:
   - id: sql_file_exists
     rule: sql_file must exist under queries/.
