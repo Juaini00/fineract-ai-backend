@@ -33,6 +33,7 @@ output_fields:
   - name: activation_count
     type: bigint
     sensitivity: public_business
+grain: [office_id]
 guards:
   select_only: true
   single_statement: true

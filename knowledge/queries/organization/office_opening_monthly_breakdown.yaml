@@ -25,6 +25,7 @@ output_fields:
   - name: opened_office_count
     type: bigint
     sensitivity: public_business
+grain: [month_start]
 guards:
   select_only: true
   single_statement: true

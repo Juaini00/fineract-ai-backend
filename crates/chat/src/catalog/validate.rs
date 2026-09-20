@@ -300,6 +300,34 @@ fn check_query(
         }
     }
 
+    // grain (#11): setiap manifest harus menyatakan grain hasilnya, dan tiap
+    // kolom grain wajib benar-benar salah satu output_fields. Grain yang kosong
+    // membiarkan penggandaan baris tak terdeklarasi; grain yang menyebut kolom
+    // yang tidak diterbitkan tidak dapat dibuktikan terhadap hasil.
+    let output_names: BTreeSet<&str> = query
+        .output_fields
+        .iter()
+        .map(|field| field.name.as_str())
+        .collect();
+
+    if query.grain.is_empty() {
+        findings.push(Finding::error(
+            &subject,
+            "grain_declared",
+            "grain kosong: berbutir apa satu baris hasil tidak dinyatakan (#11)",
+        ));
+    } else if !grain_is_subset(&query.grain, &output_names) {
+        for column in &query.grain {
+            if !output_names.contains(column.as_str()) {
+                findings.push(Finding::error(
+                    &subject,
+                    "grain_subset_of_output",
+                    format!("kolom grain '{column}' bukan salah satu output_fields"),
+                ));
+            }
+        }
+    }
+
     match query.timeout_ms {
         None => findings.push(Finding::warning(
             &subject,
@@ -326,6 +354,14 @@ pub const ANALYTICAL_QUERY_TIMEOUT_MS: u64 = 15_000;
 
 fn is_timeout_class(ms: u64) -> bool {
     ms == PROBE_QUERY_TIMEOUT_MS || ms == ANALYTICAL_QUERY_TIMEOUT_MS
+}
+
+/// Setiap kolom grain harus benar-benar salah satu output_fields manifest —
+/// grain yang menyebut kolom yang tidak diterbitkan tidak dapat dibuktikan.
+fn grain_is_subset(grain: &[String], output_names: &BTreeSet<&str>) -> bool {
+    grain
+        .iter()
+        .all(|column| output_names.contains(column.as_str()))
 }
 
 /// Integritas tautan resolver — I6: koneksi yang hanya hidup sebagai prosa
@@ -638,7 +674,7 @@ fn check_capability(
 pub fn coverage() -> &'static [&'static str] {
     &[
         "capabilities/**: query_id, parameter, PII output, office scope, prosa",
-        "queries/**: sql_file, SELECT-only, single statement, token terlarang, placeholder, office binding, output_fields",
+        "queries/**: sql_file, SELECT-only, single statement, token terlarang, placeholder, office binding, output_fields, grain dinyatakan + subset output_fields",
         "queries/**/*.sql (non-dataset): keterhubungan ke manifest",
         "resolver: resolves: -> dataset/shape ada, satu manifest per shape, parameter hanya authorized_scope, entity dideklarasikan",
         "capabilities/**: probe: -> resolver ada dan output_slot benar-benar kolom hasilnya",
@@ -758,6 +794,20 @@ mod tests {
     fn semicolon_inside_literal_does_not_count_as_second_statement() {
         let stripped = strip_literals_and_comments("SELECT 'a;b' FROM t;");
         assert!(!stripped.trim_end().trim_end_matches(';').contains(';'));
+    }
+
+    #[test]
+    fn grain_must_be_subset_of_output_fields() {
+        let output_names: BTreeSet<&str> =
+            ["client_id", "savings_account_id", "currency_code"].into_iter().collect();
+
+        // Grain yang seluruh kolomnya diterbitkan diterima.
+        let valid = vec!["client_id".to_string(), "savings_account_id".to_string()];
+        assert!(grain_is_subset(&valid, &output_names));
+
+        // Satu kolom yang tidak ada di output_fields menolak seluruh grain.
+        let unknown = vec!["client_id".to_string(), "office_id".to_string()];
+        assert!(!grain_is_subset(&unknown, &output_names));
     }
 
     #[test]

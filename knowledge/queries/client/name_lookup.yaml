@@ -30,6 +30,7 @@ output_fields:
   - name: status_label
     type: string
     sensitivity: public_business
+grain: [client_id]
 guards:
   select_only: true
   single_statement: true

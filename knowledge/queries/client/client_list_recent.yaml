@@ -40,6 +40,7 @@ output_fields:
   - name: activation_date
     type: date
     sensitivity: public_business
+grain: [client_id]
 guards:
   select_only: true
   single_statement: true
