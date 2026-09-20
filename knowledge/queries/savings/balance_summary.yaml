@@ -39,7 +39,7 @@ guards:
   single_statement: true
   require_office_filter: true
   snapshot_only: true
-timeout_ms: 5000
+timeout_ms: 15000
 checks:
   - id: sql_file_exists
     rule: sql_file must exist under queries/.
