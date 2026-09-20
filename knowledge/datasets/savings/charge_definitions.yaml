@@ -35,7 +35,6 @@ shapes:
       - { name: charge_name, type: string, sensitivity: public_business, core: true }
       - { name: currency_code, type: string, sensitivity: public_business, core: true }
       - { name: is_penalty, type: boolean, sensitivity: public_business, core: true }
-      - { name: charge_timing_enum, type: bigint, sensitivity: public_business }
     parameters:
       - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 timeout_ms: 3000

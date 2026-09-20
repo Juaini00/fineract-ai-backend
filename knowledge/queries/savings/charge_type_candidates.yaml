@@ -19,6 +19,5 @@ output_fields:
   - { name: charge_name, type: string, sensitivity: public_business }
   - { name: currency_code, type: string, sensitivity: public_business }
   - { name: is_penalty, type: boolean, sensitivity: public_business }
-  - { name: charge_timing_enum, type: integer, sensitivity: public_business }
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000

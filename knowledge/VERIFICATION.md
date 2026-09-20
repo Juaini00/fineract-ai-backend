@@ -56,7 +56,7 @@ langsung yang ditulis terpisah.
 | `savings_withdrawal_monthly_breakdown` | mencampur mata uang (#14) |
 | `client_name_lookup` | `LIMIT 20` keras, memotong hasil diam-diam |
 | `savings_client_activity` | `LIMIT 100` keras, memotong hasil diam-diam |
-| `savings_charge_type_identity_resolve` | grain resolver ganda untuk entity yang sama |
+| `savings_charge_type_identity_resolve` | grain resolver ganda untuk entity yang sama — **diperbaiki L1.3 (24 = 24)** |
 
 `organization_office_summary` **gagal saat diukur pertama kali** (fan-out
 `m_staff`: 27 kantor untuk 8 kantor nyata) dan kini `lulus` setelah SQL-nya
@@ -546,30 +546,33 @@ pun nama charge yang menjangkau lebih dari satu mata uang —
 `GROUP BY ch.name HAVING count(DISTINCT sa.currency_code)>1` mengembalikan 0
 baris — jadi pencampuran tidak terjadi di sini. Ia tidak dicegah oleh apa pun.
 
-### savings_charge_type_identity_resolve — **gagal**
+### savings_charge_type_identity_resolve — **lulus (diperbaiki L1.3 / FIN-34)**
 
-- Kapabilitas: **26 baris**
+- Kapabilitas: **24 baris**
 - SQL langsung: **24** definisi charge yang berbeda
 
 ```sql
-SELECT count(DISTINCT id) FROM (
-  SELECT DISTINCT ch.id, ch.name, ch.currency_code, ch.is_penalty, sac.charge_time_enum
+-- setelah perbaikan: charge_time_enum dikeluarkan dari SELECT DISTINCT
+SELECT count(*), count(DISTINCT charge_definition_id) FROM (
+  SELECT DISTINCT ch.id AS charge_definition_id, ch.name, ch.currency_code, ch.is_penalty
   FROM m_savings_account_charge sac
   JOIN m_savings_account sa ON sa.id=sac.savings_account_id
   JOIN m_client c ON c.id=sa.client_id
   JOIN m_charge ch ON ch.id=sac.charge_id
   WHERE c.office_id = ANY(ARRAY[1,2,3,4,5,6,8,9])
-    AND ch.is_active AND NOT ch.is_deleted) x;                 -- 24 id, 26 baris
+    AND ch.is_active AND NOT ch.is_deleted) x;                 -- 24 baris, 24 id
 ```
 
-`SELECT DISTINCT` menyertakan `sac.charge_time_enum`, yang berasal dari
+`SELECT DISTINCT` dulu menyertakan `sac.charge_time_enum`, yang berasal dari
 *penerapan* charge, bukan dari definisinya. Definisi 20 dan 22 dipasang dengan
 dua `charge_time_enum` berbeda, sehingga resolver menampilkan **dua kandidat
 dengan label identik untuk entity yang sama**. Pada resolver identitas ini fatal:
 pengguna dihadapkan pada dua pilihan yang tidak dapat dibedakan, dan
 `resolver_unique` tidak akan pernah terpicu untuk kedua charge itu.
-Perbaikannya (mengeluarkan `charge_time_enum` dari resolver) mengubah
-`output_fields` dan proyeksi dataset — kontrak; tidak dikerjakan di sini.
+Perbaikan (L1.3): `charge_time_enum` dikeluarkan dari source SQL, fragment, dan
+`output_fields` shape/query. Grain resolver = grain definisi; 24 baris = 24 id
+(sebelumnya 26). Perubahan `output_fields`/proyeksi dataset dilakukan sebagai
+commit owner (Rule 3).
 
 ### savings_pending_charges_clients — lulus
 
@@ -662,7 +665,7 @@ Diperiksa dengan membandingkan cacah baris hasil terhadap cacah entitas:
 | Temuan | Status |
 | --- | --- |
 | `organization.office_summary` — `LEFT JOIN m_staff` menggandakan kantor (27 vs 8) | **ditemukan dan diperbaiki** |
-| `savings.charge_definitions.source` — 26 baris untuk 24 definisi | **ditemukan, gagal** |
+| `savings.charge_definitions.source` — 26 baris untuk 24 definisi | **ditemukan, diperbaiki (L1.3): 24 = 24** |
 | `client.savings_overview` — tiga `LEFT JOIN LATERAL` agregat | aman |
 | `savings.account_charges_recent`, `charges_by_type`, `pending/overdue` — `LATERAL … LIMIT 1` untuk simbol mata uang | aman |
 | `savings.activity_list` / `*_top_n` — join many-to-one ke produk/kantor/klien | aman (8819 = 8819) |
