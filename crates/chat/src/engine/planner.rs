@@ -66,8 +66,16 @@ pub struct Plan {
 /// alasan yang dinyatakan pada response — tidak ada kegagalan senyap (I5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Unplannable {
-    /// Tidak ada capability yang cukup dekat dengan permintaan.
-    NoCapabilityMatched,
+    /// Tidak ada kandidat capability sama sekali untuk permintaan ini.
+    /// Provisional (build-order §6.5 / FIN-30): pada L0 retrieval masih leksikal
+    /// saja, jadi "tidak ada kandidat" DAPAT berarti retrieval kita yang gagal,
+    /// bukan permintaan yang benar-benar di luar cakupan. Split tetap dibuat;
+    /// L2 (FIN-42, retrieval semantik) yang mereklasifikasi bila kapabilitasnya
+    /// ternyata ada.
+    OutOfScope,
+    /// Ada kandidat/indeks tetapi tidak terpakai (mis. indeks menunjuk entri yang
+    /// tidak ada di katalog termuat) — kegagalan sisi kita, bukan di luar cakupan.
+    RetrievalMiss,
     /// Capability terpilih merujuk query yang tidak ada di katalog.
     QueryMissing(String),
     /// Parameter wajib tidak dapat diisi tanpa bertanya lebih dulu.
@@ -123,7 +131,8 @@ impl Unplannable {
     /// Alasan pendek yang aman ditulis ke `completeness_reason`.
     pub fn reason(&self) -> String {
         match self {
-            Self::NoCapabilityMatched => "no_capability_matched".to_string(),
+            Self::OutOfScope => "out_of_scope".to_string(),
+            Self::RetrievalMiss => "retrieval_miss".to_string(),
             Self::QueryMissing(_) => "capability_query_missing".to_string(),
             Self::NeedsClarification { missing, .. } if missing.iter().any(Missing::unanswerable) => {
                 "identity_slot_without_resolver".to_string()
@@ -136,8 +145,12 @@ impl Unplannable {
     /// Kalimat untuk blok `limitation`. Bahasa Inggris: teks produk publik.
     pub fn explain(&self) -> String {
         match self {
-            Self::NoCapabilityMatched => {
+            Self::OutOfScope => {
                 "No approved capability covers this request, so Jarvis will not answer it."
+                    .to_string()
+            }
+            Self::RetrievalMiss => {
+                "Jarvis could not retrieve a matching capability for this request."
                     .to_string()
             }
             Self::QueryMissing(query_id) => format!(
@@ -186,7 +199,11 @@ pub async fn plan(
 ) -> sqlx::Result<Result<Plan, Unplannable>> {
     let Some((capability_id, score)) = best_capability(pool, catalog_version_id, request_text).await?
     else {
-        return Ok(Err(Unplannable::NoCapabilityMatched));
+        // ponytail: lexical-only retrieval over-reports out_of_scope — an
+        // Indonesian query whose capability exists still yields 0 matches today
+        // (build-order §6.5, the "portfolio" example). L2 semantic retrieval
+        // (FIN-42) must reclassify a genuine miss here as RetrievalMiss.
+        return Ok(Err(Unplannable::OutOfScope));
     };
 
     let Some(capability) = catalog
@@ -196,8 +213,9 @@ pub async fn plan(
         .find(|capability| capability.id == capability_id)
     else {
         // Indeks menunjuk entri yang tidak ada di katalog yang dimuat: versi
-        // indeks dan versi disk berbeda.
-        return Ok(Err(Unplannable::NoCapabilityMatched));
+        // indeks dan versi disk berbeda. Ini kegagalan sisi kita (retrieval),
+        // bukan permintaan di luar cakupan.
+        return Ok(Err(Unplannable::RetrievalMiss));
     };
 
     let Some(query_id) = capability.query_id.clone() else {
@@ -656,6 +674,20 @@ mod tests {
         assert_eq!(missing.len(), 1);
         assert_eq!(missing[0].name, "account_number");
         assert_eq!(problem.reason(), "parameter_needs_clarification");
+    }
+
+    #[test]
+    fn unplannable_reason_splits_out_of_scope_from_retrieval_miss() {
+        // §6.5 (FIN-30): `no_capability_matched` was split. out_of_scope = no
+        // lexical candidate at all; retrieval_miss = candidate/index skew (our
+        // failure). The two must be distinguishable in both the machine reason
+        // and the public explanation (I5: no silent conflation).
+        assert_eq!(Unplannable::OutOfScope.reason(), "out_of_scope");
+        assert_eq!(Unplannable::RetrievalMiss.reason(), "retrieval_miss");
+        assert_ne!(
+            Unplannable::OutOfScope.explain(),
+            Unplannable::RetrievalMiss.explain()
+        );
     }
 
     #[test]

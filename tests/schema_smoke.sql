@@ -247,6 +247,19 @@ BEGIN
     IF n <> 2 THEN RAISE EXCEPTION 'T11 GAGAL: koreksi harus menjadi baris baru, ada %', n; END IF;
 END $$;
 
+-- ============================================================
+-- T12. §6.4 — outcome CHECK admits Cancelled/Expired (FIN-29)
+-- ============================================================
+DO $$
+DECLARE d TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(oid) INTO d FROM pg_constraint
+    WHERE conrelid = 'chat_jobs'::regclass AND conname = 'chat_jobs_outcome_check';
+    IF d IS NULL OR d NOT LIKE '%Cancelled%' OR d NOT LIKE '%Expired%' THEN
+        RAISE EXCEPTION 'T12 GAGAL: chat_jobs_outcome_check harus mengizinkan Cancelled/Expired (§6.4), def=%', d;
+    END IF;
+END $$;
+
 ROLLBACK;
 
 \echo '=== SEMUA SMOKE TEST LULUS ==='

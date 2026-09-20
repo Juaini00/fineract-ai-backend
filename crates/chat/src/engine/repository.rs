@@ -541,7 +541,7 @@ pub async fn settle_cancelled(
     let updated = sqlx::query(
         "UPDATE chat_jobs
          SET lifecycle = 'Cancelled',
-             outcome = 'OperationalFailure',
+             outcome = 'Cancelled',
              completeness = 'Unknown',
              completeness_reason = 'cancelled_by_user',
              terminal_at = now(),
@@ -574,7 +574,7 @@ pub async fn settle_cancelled(
             stage: "settle",
             action: "job.cancelled",
             result: "ok",
-            job_outcome: Some("OperationalFailure"),
+            job_outcome: Some("Cancelled"),
             job_completeness: Some("Unknown"),
             ..Default::default()
         },
@@ -624,7 +624,7 @@ async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
     let jobs = sqlx::query_as::<_, (Uuid, Uuid)>(
         "UPDATE chat_jobs
          SET lifecycle = 'Expired',
-             outcome = 'OperationalFailure',
+             outcome = 'Expired',
              completeness = 'Unknown',
              completeness_reason = 'job_ttl_exceeded',
              terminal_at = now(),
@@ -657,7 +657,7 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
     let jobs = sqlx::query_as::<_, (Uuid, Uuid)>(
         "UPDATE chat_jobs
          SET lifecycle = 'Cancelled',
-             outcome = 'OperationalFailure',
+             outcome = 'Cancelled',
              completeness = 'Unknown',
              completeness_reason = 'cancelled_by_user',
              terminal_at = now(),
