@@ -84,6 +84,7 @@ Ini **bukan** daftar yang boleh dilupakan — ia persis kelas masalah yang membu
 | D3 | Kelengkapan evidence lineage | ✅ **DITUTUP** oleh responses.md §4: numeral pada narasi wajib cocok dengan blok ber-evidence atau dengan entri `derivation`; selain itu ditolak | selesai |
 | D4 | Kesegaran katalog saat eksekusi | `catalog_version_id` direkam saat verifikasi; belum ada pemeriksaan katalog tidak berubah antara verifikasi dan eksekusi | `architecture/engine.md` |
 | D5 | Penegakan office scope di SQL | ✅ DITUTUP (design) oleh analytical-contracts.md §6 — compiler/validator tetap pekerjaan implementasi | `data/analytical-contracts.md` |
+| D6 | `guards.snapshot_only` ditegakkan mekanisme | 24 kapabilitas snapshot mendeklarasikan `guards.snapshot_only: true` (knowledge/VERIFICATION.md §8.3) tetapi **tidak ada validator/guard yang menolak atau menganotasi** permintaan yang memperlakukannya sebagai as-of (§7). Deklarasi tanpa penegakan = persis drift yang I6 larang. **Keputusan owner (L1.8/FIN-39):** dicatat sebagai utang di sini, ditegakkan saat mekanisme as-of hadir — penegakan butuh layer eksekusi (bandingkan `as_of` yang diminta vs kapabilitas snapshot), di luar scope L1 katalog. | layer eksekusi (as-of), setelah `architecture/engine.md` |
 
 ---
 
