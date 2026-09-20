@@ -29,5 +29,6 @@ output_fields:
   - { name: is_mandatory, type: boolean, sensitivity: public_business }
   - { name: total_overdue_amount, type: decimal, sensitivity: public_business }
   - { name: no_of_overdue_installments, type: integer, sensitivity: public_business }
+grain: [savings_account_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000

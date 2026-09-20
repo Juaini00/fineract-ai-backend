@@ -676,8 +676,35 @@ Diperiksa dengan membandingkan cacah baris hasil terhadap cacah entitas:
 | `client.top_n_by_deposit_volume`, `top_n_by_savings_balance`, `organization.office_savings_summary` | berbutir × mata uang; prosanya **tidak** menyatakannya → diperbaiki |
 | `group.groups.source` — `LEFT JOIN m_group_client` + `GROUP BY` | aman |
 
-`datasets.grain_json` (#11) sendiri **belum** diisi untuk satu dataset pun; ini
-mencatat grain nyatanya, bukan mendeklarasikannya di tempat yang diminta #11.
+**FIN-36 (L1.5): grain kini dideklarasikan eksplisit (#11).** Tiap manifest di
+`knowledge/queries/**/*.yaml` menyatakan `grain: [kolom, …]` — himpunan minimal
+kolom `output_fields` yang mengidentifikasi satu baris hasil — dan validator
+katalog menegakkan dua hal: grain tidak boleh kosong (`grain_declared`) dan tiap
+kolom grain wajib salah satu `output_fields` (`grain_subset_of_output`).
+
+Untuk tujuh query yang §5.2 tandai rawan fanout/×mata uang, grain yang
+dideklarasikan diverifikasi ke database: query dijalankan atas scope
+`ARRAY[1,2,3,4,5,6,8,9]` (himpunan P: from/to 2025-01-01/2026-12-31, client_id
+65, search 'a', limit 1000; `activity_list` limit 100000) dan `row_count`
+dibandingkan dengan `COUNT(DISTINCT <kolom grain>)` — keduanya harus sama:
+
+| Query | grain dideklarasikan | row_count = COUNT(DISTINCT grain) |
+| --- | --- | --- |
+| `client.relationship_lookup` | `[client_id, savings_account_id]` | 210 = 210 |
+| `client.relationship_by_id` | `[client_id, savings_account_id]` | 46 = 46 |
+| `client.top_n_by_deposit_volume` | `[client_id, currency_code]` | 41 = 41 |
+| `client.top_n_by_savings_balance` | `[client_id, currency_code]` | 39 = 39 |
+| `organization.office_savings_summary` | `[office_id, currency_code]` | 20 = 20 |
+| `savings.activity_list` | `[transaction_id]` | 8819 = 8819 |
+| `organization.office_activity_ranking` | `[office_id, currency_code]` | 20 = 20 |
+
+Angka kiri = kanan pada ketujuhnya: grain klien×rekening dan ×mata uang yang
+sengaja itu terbukti benar-benar unik per baris, bukan fanout tak terdeklarasi.
+
+Catatan cakupan: validator membuktikan grain **dinyatakan** dan **subset**
+`output_fields`, bukan bahwa grain itu benar-benar grain hasil sebenarnya untuk
+tiap query (itu dibuktikan dengan menjalankan query, seperti tabel di atas untuk
+tujuh yang rawan).
 
 ### 5.3 Penamaan kolom terhadap aturan validasi response
 

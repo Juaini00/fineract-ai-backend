@@ -78,6 +78,11 @@ pub struct QueryManifest {
     pub parameters: Vec<QueryParameter>,
     #[serde(default)]
     pub output_fields: Vec<OutputField>,
+    /// Grain hasil: himpunan minimal kolom `output_fields` yang mengidentifikasi
+    /// satu baris hasil secara unik (#11). Query dengan join yang menggandakan
+    /// baris harus menyatakan grainnya di sini, bukan membiarkannya tersirat.
+    #[serde(default)]
+    pub grain: Vec<String>,
     #[serde(default)]
     pub guards: QueryGuards,
     #[serde(default)]

@@ -90,6 +90,7 @@ output_fields:
   - name: due_date
     type: date
     sensitivity: public_business
+grain: [savings_account_charge_id]
 guards:
   select_only: true
   single_statement: true

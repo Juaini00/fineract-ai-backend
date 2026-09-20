@@ -23,5 +23,6 @@ output_fields:
   - { name: parent_group_id, type: bigint, sensitivity: public_business }
   - { name: hierarchy, type: string, sensitivity: public_business }
   - { name: member_count, type: bigint, sensitivity: public_business }
+grain: [group_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000

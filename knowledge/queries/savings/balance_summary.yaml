@@ -37,6 +37,7 @@ output_fields:
   - name: max_balance
     type: decimal
     sensitivity: public_business
+grain: [currency_code]
 guards:
   select_only: true
   single_statement: true

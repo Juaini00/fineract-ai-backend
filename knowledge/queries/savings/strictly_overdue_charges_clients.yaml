@@ -106,6 +106,7 @@ output_fields:
     type: integer
     sensitivity: public_business
     description: as_of_date minus due_date; every returned row is strictly overdue.
+grain: [savings_account_charge_id]
 guards:
   select_only: true
   single_statement: true

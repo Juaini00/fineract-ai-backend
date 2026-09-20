@@ -50,6 +50,7 @@ output_fields:
   - name: total_deposit
     type: decimal
     sensitivity: public_business
+grain: [client_id, currency_code]
 guards:
   select_only: true
   single_statement: true

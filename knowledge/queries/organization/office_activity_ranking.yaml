@@ -43,6 +43,7 @@ output_fields:
   - name: withdrawal_total
     type: decimal
     sensitivity: public_business
+grain: [office_id, currency_code]
 guards:
   select_only: true
   single_statement: true

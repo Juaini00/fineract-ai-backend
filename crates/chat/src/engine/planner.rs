@@ -590,6 +590,7 @@ mod tests {
             sql_file: None,
             parameters,
             output_fields: Vec::new(),
+            grain: Vec::new(),
             guards: Default::default(),
             timeout_ms: None,
             resolves: None,

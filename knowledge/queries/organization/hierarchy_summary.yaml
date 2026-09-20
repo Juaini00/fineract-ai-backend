@@ -25,6 +25,7 @@ output_fields:
   - name: max_hierarchy_depth
     type: bigint
     sensitivity: public_business
+grain: [total_office_count]
 guards:
   select_only: true
   single_statement: true

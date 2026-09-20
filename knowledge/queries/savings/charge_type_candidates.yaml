@@ -19,5 +19,6 @@ output_fields:
   - { name: charge_name, type: string, sensitivity: public_business }
   - { name: currency_code, type: string, sensitivity: public_business }
   - { name: is_penalty, type: boolean, sensitivity: public_business }
+grain: [charge_definition_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000

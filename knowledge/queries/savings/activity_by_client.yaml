@@ -21,5 +21,6 @@ output_fields:
   - { name: transaction_date, type: date, sensitivity: public_business }
   - { name: amount, type: decimal, sensitivity: public_business }
   - { name: running_balance, type: decimal, sensitivity: public_business }
+grain: [savings_transaction_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000

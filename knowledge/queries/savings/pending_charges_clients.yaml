@@ -113,6 +113,7 @@ output_fields:
     type: integer
     sensitivity: public_business
     description: as_of_date minus due_date, clamped at zero, NULL when due_date is NULL.
+grain: [savings_account_charge_id]
 guards:
   select_only: true
   single_statement: true

@@ -78,6 +78,7 @@ output_fields:
   - name: client_display_name
     type: string
     sensitivity: pii
+grain: [transaction_id]
 guards:
   select_only: true
   single_statement: true
