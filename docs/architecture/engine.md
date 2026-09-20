@@ -28,7 +28,7 @@ Missing information suspends the same job through [clarification](../contracts/c
 | Dimension | Proposed agreed vocabulary |
 | --- | --- |
 | Job lifecycle | `Queued`, `Running`, `WaitingForUser`, `Cancelling`, `Completed`, `Failed`, `Cancelled`, `Expired` |
-| Outcome | `Answered`, `Empty`, `NotFound`, `Unsupported`, `BlockedByPolicy`, `Invalid`, `OperationalFailure` |
+| Outcome | `Answered`, `Empty`, `NotFound`, `Unsupported`, `BlockedByPolicy`, `Invalid`, `OperationalFailure`, `Cancelled`, `Expired` |
 | Analysis completeness | `Complete`, `Partial`, `Unknown` |
 
 WaitingForUser is suspended, not terminal. Completed means a validated response is durable; it says nothing about delivery to the browser or analytical completeness. The complete allowed status/outcome combinations and cancellation/expiry race precedence remain open.
@@ -100,10 +100,10 @@ Skip adalah **trigger action**, bukan penghentian seketika: engine tetap menghas
 | `Completed` | `Unsupported`, `BlockedByPolicy`, `Invalid` | `Unknown` | Tidak ada klaim kelengkapan analitis atas data sumber. |
 | `Completed` | `SkippedByUser` | `Partial`, `Unknown` | Wajib memakai response `kind='skipped'`; tidak boleh `Complete`. |
 | `Failed` | `OperationalFailure` | `Partial`, `Unknown` | Tidak ada response sukses; `Partial` hanya merangkum output durable yang sah sebelum gagal. |
-| `Cancelled` | `OperationalFailure` * | `Unknown` | Tanpa response/memory promotion. *Nilai sementara — lihat Keputusan terbuka di bawah. |
-| `Expired` | `OperationalFailure` * | `Partial`, `Unknown` | Tanpa response/memory promotion. *Nilai sementara — lihat Keputusan terbuka di bawah. |
+| `Cancelled` | `Cancelled` | `Unknown` | Tanpa response/memory promotion. Cancel adalah abort (K3), bukan kegagalan operasional. |
+| `Expired` | `Expired` | `Partial`, `Unknown` | Tanpa response/memory promotion. Expiry adalah stop TTL, bukan kegagalan operasional. |
 
-Kombinasi lain dilarang, khususnya: lifecycle nonterminal dengan `outcome`/`completeness` terisi; `Completed` dengan `OperationalFailure`; `Failed` dengan outcome selain `OperationalFailure`; `Cancelled`/`Expired` dengan outcome semantik (`Answered`, `NotFound`, `SkippedByUser`); `Empty`/`NotFound` dengan `Partial`; `SkippedByUser` dengan `Complete`.
+Kombinasi lain dilarang, khususnya: lifecycle nonterminal dengan `outcome`/`completeness` terisi; `Completed` dengan `OperationalFailure`; `Failed` dengan outcome selain `OperationalFailure`; `Cancelled` dengan outcome selain `Cancelled`; `Expired` dengan outcome selain `Expired`; `Empty`/`NotFound` dengan `Partial`; `SkippedByUser` dengan `Complete`.
 
 ### Transisi lifecycle legal dan precedence race
 
@@ -190,5 +190,5 @@ Perubahan binding, scope, contract, atau freshness membuat output **tidak eligib
 
 ## Keputusan terbuka
 
-- **Enum `outcome` belum punya nilai `Cancelled`/`Expired`.** CHECK `chat_jobs_terminal_has_outcome` mewajibkan semua lifecycle terminal ber-`outcome`, tetapi `Cancelled` (user) dan `Expired` (TTL) bukan kegagalan operasional maupun hasil analisis. Sampai schema memutuskan, matriks memakai `OperationalFailure` sebagai penanda teknis sementara. Dua arah perbaikan: (a) tambah `Cancelled`/`Expired` ke enum `outcome`, atau (b) relaksasi CHECK menjadi hanya `Completed`/`Failed` yang wajib ber-`outcome` (membiarkan `Cancelled`/`Expired` `NULL`). Ini perubahan schema, bukan dokumen.
+- **Diselesaikan 2026-09-20 (FIN-29, §6.4).** Diambil arah (a): `outcome` kini punya nilai `Cancelled`/`Expired`. Migration `20260920000001_outcome_cancel_expire.sql` melebarkan CHECK `chat_jobs_outcome_check` dan mem-backfill baris lama (`outcome = lifecycle` untuk `Cancelled`/`Expired`). CHECK `chat_jobs_terminal_has_outcome` tidak berubah: semua lifecycle terminal tetap wajib ber-`outcome` non-null, dan kini terpenuhi tanpa memakai `OperationalFailure` sebagai penanda palsu.
 - Precedence lengkap cancel-vs-expiry dan penyelesaian node aktif saat reaper vs worker masih perlu matriks final di dokumen ini bila ditemukan kasus yang belum tertutup.
