@@ -80,6 +80,17 @@ pub struct Config {
     pub auth_bootstrap_admin_password: Option<String>,
     #[serde(default)]
     pub auth_bootstrap_admin_email: Option<String>,
+    /// Principal KEDUA khusus `local`, untuk membuktikan isolasi kepemilikan
+    /// lintas user (API-6, DS-8.4 §6.6). Di-seed idempoten (ON CONFLICT DO
+    /// NOTHING) hanya bila password ini di-set dan `may_bootstrap_admin()` (=
+    /// local + enabled). BUKAN jalur pembuatan user produksi; tidak pernah
+    /// aktif di luar local.
+    #[serde(default = "default_second_username")]
+    pub auth_bootstrap_second_username: String,
+    #[serde(default)]
+    pub auth_bootstrap_second_password: Option<String>,
+    #[serde(default)]
+    pub auth_bootstrap_second_email: Option<String>,
 
     // ---- Katalog pengetahuan ----
     #[serde(default = "default_catalog_path")]
@@ -386,6 +397,9 @@ fn default_idempotency_key_max_length() -> usize {
 }
 fn default_bootstrap_username() -> String {
     "admin".to_string()
+}
+fn default_second_username() -> String {
+    "auditor".to_string()
 }
 fn default_refresh_cookie_name() -> String {
     "refresh_token".to_string()

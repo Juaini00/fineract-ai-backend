@@ -205,26 +205,44 @@ pub async fn bootstrap_admin(foundation: &Foundation) -> anyhow::Result<()> {
     let config = foundation.config();
     let pool = foundation.app_db().pool();
 
-    if repository::count_users(pool).await? > 0 {
-        return Ok(());
+    // Admin pertama: hanya saat tabel `users` masih kosong.
+    if repository::count_users(pool).await? == 0 {
+        let Some(raw_password) = config.auth_bootstrap_admin_password.as_deref() else {
+            anyhow::bail!("AUTH_BOOTSTRAP_ADMIN_ENABLED=true tetapi AUTH_BOOTSTRAP_ADMIN_PASSWORD kosong");
+        };
+
+        let hash = password::hash(raw_password)?;
+        let created = repository::insert_admin(
+            pool,
+            &config.auth_bootstrap_admin_username,
+            config.auth_bootstrap_admin_email.as_deref(),
+            &hash,
+        )
+        .await?;
+
+        match created {
+            Some(user_id) => info!(%user_id, username = %config.auth_bootstrap_admin_username, "admin bootstrap dibuat"),
+            None => info!("admin bootstrap dilewati: username sudah dipakai"),
+        }
     }
 
-    let Some(raw_password) = config.auth_bootstrap_admin_password.as_deref() else {
-        anyhow::bail!("AUTH_BOOTSTRAP_ADMIN_ENABLED=true tetapi AUTH_BOOTSTRAP_ADMIN_PASSWORD kosong");
-    };
+    // Principal kedua (local-only, idempoten): membuktikan isolasi kepemilikan
+    // lintas user — API-6 (job orang lain → 404) dan DS-8.4 (NotOwner). Berjalan
+    // terlepas dari jumlah user karena `insert_admin` ON CONFLICT DO NOTHING.
+    // Hanya aktif bila password-nya di-set; caller sudah menjamin `local`.
+    if let Some(raw_second) = config.auth_bootstrap_second_password.as_deref() {
+        let hash = password::hash(raw_second)?;
+        let created = repository::insert_admin(
+            pool,
+            &config.auth_bootstrap_second_username,
+            config.auth_bootstrap_second_email.as_deref(),
+            &hash,
+        )
+        .await?;
 
-    let hash = password::hash(raw_password)?;
-    let created = repository::insert_admin(
-        pool,
-        &config.auth_bootstrap_admin_username,
-        config.auth_bootstrap_admin_email.as_deref(),
-        &hash,
-    )
-    .await?;
-
-    match created {
-        Some(user_id) => info!(%user_id, username = %config.auth_bootstrap_admin_username, "admin bootstrap dibuat"),
-        None => info!("admin bootstrap dilewati: username sudah dipakai"),
+        if let Some(user_id) = created {
+            info!(%user_id, username = %config.auth_bootstrap_second_username, "principal kedua (local) dibuat");
+        }
     }
 
     Ok(())
