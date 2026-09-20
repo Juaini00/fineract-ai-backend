@@ -1,6 +1,7 @@
 SELECT
     $1::date AS from_date,
     $2::date AS to_date,
+    sa.currency_code,
     COALESCE(SUM(t.amount), 0) AS total_withdrawal_amount,
     COUNT(t.id) AS withdrawal_count
 FROM m_savings_account_transaction t
@@ -11,4 +12,6 @@ WHERE t.transaction_type_enum = 2
   AND t.transaction_date BETWEEN $1::date AND $2::date
   AND t.office_id = ANY($3::bigint[])
   AND ($4::text IS NULL OR sa.currency_code = $4::text)
-  AND ($5::bigint[] IS NULL OR sa.product_id = ANY($5::bigint[]));
+  AND ($5::bigint[] IS NULL OR sa.product_id = ANY($5::bigint[]))
+GROUP BY sa.currency_code
+ORDER BY sa.currency_code;

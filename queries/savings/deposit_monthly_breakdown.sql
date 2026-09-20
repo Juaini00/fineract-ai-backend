@@ -1,5 +1,6 @@
 SELECT
     date_trunc('month', t.transaction_date)::date AS month_start,
+    sa.currency_code,
     COALESCE(SUM(t.amount), 0) AS total_deposit_amount,
     COUNT(t.id) AS deposit_count
 FROM m_savings_account_transaction t
@@ -11,5 +12,5 @@ WHERE t.transaction_type_enum = 1
   AND t.office_id = ANY($3::bigint[])
   AND ($4::text IS NULL OR sa.currency_code = $4::text)
   AND ($5::bigint[] IS NULL OR sa.product_id = ANY($5::bigint[]))
-GROUP BY date_trunc('month', t.transaction_date)
-ORDER BY month_start ASC;
+GROUP BY date_trunc('month', t.transaction_date), sa.currency_code
+ORDER BY month_start ASC, sa.currency_code ASC;

@@ -48,12 +48,12 @@ langsung yang ditulis terpisah.
 
 | Kapabilitas | Sebab |
 | --- | --- |
-| `organization_office_activity_ranking` | mencampur mata uang (#14) |
-| `savings_deposit_total` | mencampur mata uang (#14) |
-| `savings_withdrawal_total` | mencampur mata uang (#14) |
-| `savings_balance_summary` | mencampur mata uang (#14) |
-| `savings_deposit_monthly_breakdown` | mencampur mata uang (#14) |
-| `savings_withdrawal_monthly_breakdown` | mencampur mata uang (#14) |
+| `organization_office_activity_ranking` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
+| `savings_deposit_total` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
+| `savings_withdrawal_total` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
+| `savings_balance_summary` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
+| `savings_deposit_monthly_breakdown` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
+| `savings_withdrawal_monthly_breakdown` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
 | `client_name_lookup` | `LIMIT 20` keras, memotong hasil diam-diam |
 | `savings_client_activity` | `LIMIT 100` keras, memotong hasil diam-diam |
 | `savings_charge_type_identity_resolve` | grain resolver ganda untuk entity yang sama — **diperbaiki L1.3 (24 = 24)** |
@@ -160,11 +160,14 @@ WHERE NOT is_reversed AND transaction_date BETWEEN '2025-01-01' AND '2026-12-31'
 GROUP BY 1;   -- 3,4,5,2,6,8,1 → kantor 9 tidak muncul
 ```
 
-### organization_office_activity_ranking — **gagal**
+### organization_office_activity_ranking — **lulus (diperbaiki L1.1)**
 
-- Kapabilitas `transaction_count`: `3→5475, 4→2106, 5→466, 2→420, 6→169, 8→127, 1→56`
+- Kapabilitas `transaction_count` (total lintas mata uang): `3→5475, 4→2106, 5→466, 2→420, 6→169, 8→127, 1→56`
 - SQL langsung: **identik**
-- Kapabilitas `deposit_total` kantor 3: `276174.00` · SQL langsung: `276174.00`
+- **Perbaikan L1.1**: output kini dipecah per mata uang (`GROUP BY … sa.currency_code`
+  setelah JOIN `m_savings_account`). Kantor 3: AED 5135 · EUR 32 · USD 308 = 5475 —
+  JOIN tidak menggandakan hitungan. Tidak ada lagi `deposit_total`/`withdrawal_total`
+  yang menjumlahkan AED+EUR+USD jadi satu angka.
 
 ```sql
 SELECT office_id, count(*),
@@ -701,15 +704,26 @@ Karena itu pertanyaan ini dapat diuji, bukan diteorikan.
 
 | Kapabilitas | Perilaku |
 | --- | --- |
-| `savings_deposit_total`, `savings_withdrawal_total`, `savings_balance_summary`, `savings_deposit_monthly_breakdown`, `savings_withdrawal_monthly_breakdown` | menjumlahkan lintas mata uang bila `currency_code = NULL` → **gagal** (#14) |
-| `organization_office_activity_ranking` | menjumlahkan lintas mata uang dan **tidak punya parameter `currency_code`** → **gagal**, paling berat |
+| `savings_deposit_total`, `savings_withdrawal_total`, `savings_balance_summary`, `savings_deposit_monthly_breakdown`, `savings_withdrawal_monthly_breakdown` | dulu menjumlahkan lintas mata uang bila `currency_code = NULL` → **diperbaiki L1.1**: `GROUP BY … currency_code`, hasil dipecah per mata uang, tak ada penjumlahan lintas mata uang |
+| `organization_office_activity_ranking` | dulu menjumlahkan lintas mata uang tanpa parameter `currency_code` → **diperbaiki L1.1**: JOIN `m_savings_account` + `GROUP BY … currency_code`, output dipecah per mata uang |
 | `savings_charge_count_by_type` | tidak punya penjaga mata uang; pada data ini tidak ada charge lintas mata uang, jadi tidak terbukti salah |
 | `client_top_n_by_deposit_volume`, `client_top_n_by_savings_balance`, `organization_office_savings_summary` | `GROUP BY … currency_code` → aman |
 | `savings_deposit_top_n`, `savings_withdrawal_top_n`, `*_monthly_top_n`, `savings_activity_list` | per transaksi, `currency_code` sebagai kolom → aman |
 
+**Angka per mata uang (L1.1, scope 8 kantor, 2025-01-01…2026-12-31, kapabilitas = SQL langsung):**
+
+| Kapabilitas | AED | EUR | USD |
+| --- | --- | --- | --- |
+| `savings_deposit_total` | 421.410,00 (353) | 78.224,45 (33) | 228.892,00 (213) |
+| `savings_withdrawal_total` | 143.472,10 (402) | 4.490,96 (13) | 81.454,79 (431) |
+| `savings_balance_summary` (total, akun aktif) | 280.299,77 (112) | 57.573,84 (19) | 148.831,58 (38) |
+| `organization_office_activity_ranking` (kantor 3, txn) | 5.135 | 32 | 308 = **5.475** total |
+
 Tidak satu pun query memakai `exchange_rates` atau merekam `exchange_rate_id`,
-dan tidak satu pun menanam kurs di dalam SQL. Larangan kedua dipatuhi;
-kewajiban pertama belum dipenuhi oleh enam kapabilitas di atas.
+dan tidak satu pun menanam kurs di dalam SQL. Larangan kedua tetap dipatuhi;
+kewajiban pertama kini dipenuhi dengan **pemisahan per mata uang** (bukan
+konsolidasi kurs — sumber kurs masih "Terbuka" per D03). Konsolidasi kurs
+tertelusur adalah pekerjaan terpisah saat provider kurs tersedia.
 
 ---
 
