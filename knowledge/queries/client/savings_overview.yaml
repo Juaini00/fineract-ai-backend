@@ -37,7 +37,7 @@ output_fields:
   - name: client_id
     type: bigint
     sensitivity: public_business
-  - name: display_name
+  - name: client_display_name
     type: string
     sensitivity: pii
   - name: office_id
@@ -87,6 +87,6 @@ checks:
   - id: output_columns_match_contract
     rule: Prepared SQL output columns must equal output_fields order.
   - id: pii_columns_labelled
-    rule: client_id and display_name output fields must be sensitivity=pii.
+    rule: client_id and client_display_name output fields must be sensitivity=pii.
   - id: no_raw_identifiers
     rule: Query must not output account_no, external_id, mobile_no, or email_address.

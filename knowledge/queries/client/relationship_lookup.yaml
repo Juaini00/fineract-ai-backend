@@ -9,7 +9,7 @@ parameters:
   - { name: search, type: string, required: true }
 output_fields:
   - { name: client_id, type: bigint, sensitivity: public_business }
-  - { name: display_name, type: string, sensitivity: pii }
+  - { name: client_display_name, type: string, sensitivity: pii }
   - { name: office_id, type: bigint, sensitivity: public_business }
   - { name: office_name, type: string, sensitivity: public_business }
   - { name: active_savings_account_count, type: bigint, sensitivity: public_business }
