@@ -273,18 +273,21 @@ Update after commits `fd425a8` (L1) and `d3a1535` (L3, L5, L6):
   its gate is the four `CARRY-OVER.md` rules, and 9 entries fail rule 1 (mixed
   currency, silent `LIMIT` truncation, double resolver grain). They are recorded,
   not yet fixed — fixing them changes capability contracts and waits on the owner.
-- **L5 ❌ → 🔨 and L6 ❌ → 🔨.** The §6.2 and §6.3 deviations are fixed. 8 of the
-  10 RESP scenarios carry a test; 8.7 (chart→table downgrade) and 8.9 (expired
-  dataset table) do not yet. Cannot rise above 🔨 while not every scenario passes
-  and prerequisites are unfinished.
+- **L5 ❌ → 🔨 and L6 ❌ → 🔨.** The §6.2 and §6.3 deviations are fixed. All 10
+  RESP scenarios now carry a test: 8.7 (chart→table downgrade) and 8.9 (expired
+  dataset table) were the last two, proven by pure-logic unit tests in
+  `compose.rs` (`chart_or_table`, `expired_dataset_table`). Both are composition
+  logic not yet wired into the served response — no live path emits a `chart_spec`
+  or a dataset-backed `table` today — so L5/L6 **cannot rise above 🔨**: not every
+  scenario is proven to *conform*, and prerequisites remain unfinished.
 - **L3 ⬜ → 🔨.** `datasets`/`dataset_chunks` are now written and read; all 6 DS
   scenarios are referenced by **unit** tests. It is **not** 🧪: DS-8.2 and DS-8.4
   are HTTP-surface behaviours and have no Bruno test yet, and the repo's own
   thesis is that a passing unit test is not proof of the acceptance scenario.
 
-Coverage moved from 0/59 to **14/59** (see §5.1). No layer reaches 🧪 or ✅: the
-ceiling is capped by unfinished prerequisites and by scenarios that still lack a
-test.
+Coverage moved from 0/59 to **16/59** (see §5.1) — the two RESP scenarios added
+this cycle. No layer reaches 🧪 or ✅: the ceiling is capped by unfinished
+prerequisites and by scenarios that still lack a test.
 
 ### 5.1 Scenario coverage
 
@@ -294,7 +297,7 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run (after `d3a1535`) — **14 of 59 scenarios have a test**:
+Latest run — **16 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
@@ -302,15 +305,18 @@ Latest run (after `d3a1535`) — **14 of 59 scenarios have a test**:
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 0 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 0 | L4 |
-| `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 8 | L5, L6 |
+| `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **14** | |
+| | **Total** | **59** | **16** | |
 
-The DS tests are unit-level (`crates/chat/src/engine/dataset/`), and RESP is
-missing 8.7 and 8.9. "Has a test" is a coverage figure, not a conformance one —
-`acceptance-check.sh` cannot tell whether the test actually proves its scenario.
+The DS tests are unit-level (`crates/chat/src/engine/dataset/`) — DS-8.2 and
+DS-8.4 are HTTP-surface behaviours that still lack a Bruno test (blocked; see
+§6.6). RESP is now complete at the unit level, but "has a test" is a coverage
+figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
+test actually proves its scenario, and RESP-8.7/8.9 in particular prove
+composition logic that no live path emits yet.
 
 **The count is 59, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).**
 One ID was given per scenario as the document actually writes it — one bullet or
@@ -388,6 +394,32 @@ failure. A dashboard colouring by `outcome` will show 32 false errors.
 
 "Out of scope" and "we failed to find a capability we actually have" look
 identical in the data and in the UI. They must be separated.
+
+### 6.6 DS-8.2 / DS-8.4 cannot be proven at the HTTP surface yet — blocked
+
+DS-8.2 (a `purged` dataset still reads as purged) and DS-8.4 (a re-read by
+another user / a narrower scope is refused) are acceptance scenarios about the
+**HTTP surface**, and per the repo's own thesis their unit tests are not proof.
+Adding Bruno tests for them is blocked by three mechanisms that do not exist and
+must **not** be invented (Rules 3 and 4):
+
+1. **No `dataset_id` is discoverable over HTTP.** The response lineage hardcodes
+   `evidence_json.lineage[].dataset_id = null` (`compose::evidence`, and
+   [api-reference.md](contracts/api-reference.md) §5). A client has no path to
+   learn a valid handle id, so it cannot call `GET /chat/datasets/{id}` at all.
+2. **DS-8.2 needs a `purged` handle.** Purge happens only via the reaper (T11) on
+   a ≥24h TTL (`dataset::ttl_secs`, floor `DATASET_TTL_SECS = 86400`, not
+   env-configurable); there is no manual purge/expire endpoint. A test run cannot
+   produce a purged dataset.
+3. **DS-8.4 needs a second principal.** There is one seeded admin and no
+   user-creation route, and the admin's authorized offices cannot be narrowed
+   per request — so neither the `NotOwner` (404) nor the `ScopeNarrowed` (403)
+   branch is reachable.
+
+Unblocking requires an owner decision: expose `dataset_id` in the response
+lineage (a Lane-C change to `compose.rs` + `worker.rs`, travelling with
+api-reference.md), plus a test-only seam for purge and a second principal. Until
+then DS stays 6/6 at the unit level and L3 stays 🔨.
 
 ---
 

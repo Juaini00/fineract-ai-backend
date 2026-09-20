@@ -86,6 +86,112 @@ pub fn from_node(node_run_id: Uuid) -> Value {
     json!({ "node_run_id": node_run_id })
 }
 
+/// Rujukan `derived_from` ke satu dataset handle (§1). Ruang kunci yang sama
+/// dengan `from_node`: validator menghitung `completeness` keduanya lewat
+/// `contributor_key`.
+pub fn from_dataset(dataset_id: Uuid) -> Value {
+    json!({ "dataset_id": dataset_id })
+}
+
+/// §7 — sebuah chart mendeklarasikan bentuk data yang dibutuhkannya (time series
+/// memerlukan dimensi waktu **terurut**). Bila data rujukan tidak memenuhi
+/// bentuk itu, chart **tidak** dirender: ia turun menjadi `table` + `note`. Bukan
+/// kegagalan — angkanya tetap utuh — dan bukan chart yang menyesatkan.
+///
+/// ponytail: hanya bentuk `time_series` yang dikenal hari ini. Satu bentuk cukup
+/// menegakkan aturan §7; kategori chart lain ditambahkan saat benar-benar
+/// diminta (YAGNI). Kompatibel → satu blok `chart_spec`; tidak → tabel + catatan.
+pub fn chart_or_table(
+    block_id: &str,
+    time_dimension: &str,
+    columns: &[String],
+    rows: &[Map<String, Value>],
+    derived_from: &[Value],
+) -> Vec<Value> {
+    if let Some(reason) = time_series_incompatibility(time_dimension, columns, rows) {
+        return vec![
+            table_block(columns, &[], rows, derived_from),
+            block(
+                &format!("{block_id}:downgraded"),
+                "note",
+                &[],
+                json!({
+                    "title": "Chart downgraded to a table",
+                    "body": format!(
+                        "The requested time-series chart was not rendered because {reason}. \
+                         The same numbers are shown as a table instead."
+                    ),
+                    "downgraded_from": "chart_spec",
+                    "reason": reason,
+                }),
+            ),
+        ];
+    }
+
+    vec![block(
+        block_id,
+        "chart_spec",
+        derived_from,
+        json!({ "chart_type": "time_series", "time_dimension": time_dimension }),
+    )]
+}
+
+/// `None` = kompatibel. `Some(reason)` menyebut kenapa chart tidak boleh
+/// dirender: kolom waktu hilang, atau nilainya tidak terurut naik.
+fn time_series_incompatibility(
+    time_dimension: &str,
+    columns: &[String],
+    rows: &[Map<String, Value>],
+) -> Option<&'static str> {
+    if !columns.iter().any(|column| column == time_dimension) {
+        return Some("the required time dimension column is absent");
+    }
+
+    // ponytail: perbandingan string cukup untuk periode/tanggal ISO yang
+    // terurut leksikografis ("2026-01" < "2026-02"). Kalau kelak ada sumbu
+    // waktu numerik non-ISO, bandingkan sebagai angka di sini.
+    let ordered = rows.windows(2).all(|pair| {
+        cell(&pair[0], time_dimension) <= cell(&pair[1], time_dimension)
+    });
+
+    (!ordered).then_some("the time dimension is not ordered")
+}
+
+fn cell(row: &Map<String, Value>, key: &str) -> String {
+    row.get(key).map(Value::to_string).unwrap_or_default()
+}
+
+/// §7 / dataset-lifecycle §7 — blok `table` yang dataset-nya `expired`/`purged`
+/// menyatakan "detail data sudah kedaluwarsa". Ia **tidak** tampil sebagai nol
+/// baris (I5) dan bukan kegagalan: handle bertahan setelah purge (hanya chunk
+/// yang hilang), jadi angka ringkas yang sudah dihitung tetap valid pada titik
+/// `as_of`. Pertanyaan lanjutan menjadi retrieval baru — tidak ada auto-reuse
+/// handle mati (K13). Angka ringkas itu sendiri hidup sebagai blok `metric` yang
+/// sudah inline pada response; fungsi ini hanya membentuk blok tabelnya.
+pub fn expired_dataset_table(
+    block_id: &str,
+    dataset_id: Uuid,
+    handle_state: &str,
+    as_of: &Value,
+) -> Value {
+    block(
+        block_id,
+        "table",
+        &[from_dataset(dataset_id)],
+        json!({
+            // `null`, bukan `[]`: `[]` tampak seperti "datanya nol". Detail
+            // dinyatakan hilang, tidak didiamkan (I5).
+            "rows": Value::Null,
+            "columns": Value::Null,
+            "detail_available": false,
+            "handle_state": handle_state,
+            "as_of": as_of,
+            "body": "Row-level detail for this dataset is no longer available; \
+                     the summary figures remain valid as of the stated date.",
+        }),
+    )
+}
+
 /// Susun response dari baris hasil.
 ///
 /// Satu baris → satu blok `metric` **per kolom** (§2: satu nilai bernama).
@@ -574,5 +680,94 @@ mod tests {
             !response.blocks.to_string().contains("provenance"),
             "lineage masih bocor ke dalam blok"
         );
+    }
+
+    fn time_row(period: &str, value: i64) -> Map<String, Value> {
+        let mut row = Map::new();
+        row.insert("period".into(), Value::String(period.into()));
+        row.insert("total".into(), Value::from(value));
+        row
+    }
+
+    /// RESP-8.7 — chart yang tidak kompatibel turun menjadi tabel, bukan gagal
+    /// dan bukan menyesatkan. "Bukan gagal" dibuktikan dengan melewatkan hasil
+    /// downgrade lewat validator: statusnya `passed`.
+    #[test]
+    fn resp_8_7_an_incompatible_chart_downgrades_to_a_table_not_a_failure() {
+        use crate::engine::validate::{self, Ledger};
+        use std::collections::BTreeMap;
+
+        let columns = vec!["period".to_string(), "total".to_string()];
+        let derived_from = [from_node(node())];
+
+        // Terurut naik → chart_spec dipertahankan.
+        let ordered = [time_row("2026-01", 1), time_row("2026-02", 2)];
+        let compatible = chart_or_table("trend", "period", &columns, &ordered, &derived_from);
+        assert_eq!(compatible.len(), 1);
+        assert_eq!(compatible[0]["type"], "chart_spec");
+
+        // Tidak terurut → turun menjadi tabel + catatan, tanpa chart.
+        let unordered = [time_row("2026-02", 2), time_row("2026-01", 1)];
+        let downgraded = chart_or_table("trend", "period", &columns, &unordered, &derived_from);
+        let blocks: Vec<&str> = downgraded.iter().map(|b| b["type"].as_str().unwrap()).collect();
+        assert_eq!(blocks, vec!["table", "note"]);
+        assert!(
+            !downgraded.iter().any(|b| b["type"] == "chart_spec"),
+            "chart yang menyesatkan tidak boleh dirender"
+        );
+        let note = &downgraded[1];
+        assert_eq!(note["downgraded_from"], "chart_spec");
+        assert_eq!(note["reason"], "the time dimension is not ordered");
+
+        // Kolom waktu hilang juga menurunkan.
+        let no_time = chart_or_table("trend", "period", &["total".to_string()], &ordered, &derived_from);
+        assert_eq!(no_time[1]["reason"], "the required time dimension column is absent");
+
+        // Bukan kegagalan: dokumen hasil downgrade lolos validator apa adanya.
+        let response = SettledResponse {
+            kind: "analysis",
+            outcome: "Answered",
+            completeness: "Complete",
+            completeness_reason: "curated_query:x".into(),
+            response_hash: "h".into(),
+            evidence: json!({ "lineage": [], "derivations": [] }),
+            blocks: Value::Array(downgraded),
+        };
+        let ledger = Ledger {
+            contributors: BTreeMap::from([(node().to_string(), "Complete".to_string())]),
+            ..Ledger::default()
+        };
+        assert_eq!(validate::apply(response, &ledger).status(), "passed");
+    }
+
+    /// RESP-8.9 — dataset kedaluwarsa: tabel menyatakan detail tidak lagi
+    /// tersedia (bukan nol baris), angka ringkas tetap terbaca dengan `as_of`.
+    #[test]
+    fn resp_8_9_an_expired_dataset_states_expiry_while_summary_numbers_survive() {
+        let dataset_id = Uuid::from_u128(42);
+        let as_of = json!("2026-09-15");
+        let table = expired_dataset_table("result", dataset_id, "purged", &as_of);
+
+        assert_eq!(table["type"], "table");
+        assert_eq!(table["detail_available"], false);
+        assert_eq!(table["handle_state"], "purged");
+        assert_eq!(table["as_of"], as_of);
+        // Detail dinyatakan hilang, TIDAK didiamkan sebagai nol baris (I5).
+        assert!(table["rows"].is_null(), "detail kedaluwarsa tidak boleh tampil sebagai []");
+        assert!(table["body"].as_str().unwrap().contains("no longer available"));
+        // Handle bertahan setelah purge, jadi ia sah menjadi kontributor lineage.
+        assert_eq!(table["derived_from"][0]["dataset_id"], dataset_id.to_string());
+        assert_shape(&json!([table.clone()]));
+
+        // Angka ringkas — sudah dihitung sebelum purge — tetap terbaca dengan
+        // `as_of`, hidup sebagai blok `metric` yang inline pada response.
+        let summary = block(
+            "metric:total_balance",
+            "metric",
+            &[from_dataset(dataset_id)],
+            json!({ "key": "total_balance", "value": "1500.00", "unit": Value::Null, "period": as_of }),
+        );
+        assert_eq!(summary["value"], "1500.00");
+        assert_eq!(summary["period"], as_of);
     }
 }
