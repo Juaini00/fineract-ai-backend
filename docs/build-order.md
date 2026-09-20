@@ -285,9 +285,25 @@ Update after commits `fd425a8` (L1) and `d3a1535` (L3, L5, L6):
   are HTTP-surface behaviours and have no Bruno test yet, and the repo's own
   thesis is that a passing unit test is not proof of the acceptance scenario.
 
+Update after L1.1–L1.8 (PR #2–#8, merged):
+
+- **L1 🔨 → 🧪.** All nine rule-1 failures are fixed and merged, so the four
+  `CARRY-OVER.md` rules now hold for all 48 capabilities and
+  `knowledge/VERIFICATION.md` records **48 lulus / 0 gagal** with two adjacent
+  numbers per fixed capability: currency-mixing split per currency (L1.1),
+  silent `LIMIT` removed/bound with disclosure (L1.2), double resolver grain
+  fixed 24 = 24 (L1.3); plus the two timeout classes enforced (L1.7), canonical
+  `client_display_name` (L1.6), `snapshot_only` recorded as a §2.2 debt (L1.8),
+  and result grain declared per query and enforced (L1.5). `cargo run -p app --
+  catalog` → **0 error**; the validator now mechanically enforces grain,
+  timeout class, column naming and output shape (constraint, not prose — I6). L1
+  is marked **🧪** (mechanism + evidence complete, gate green). ✅ is defensible
+  since L1 owns no separate acceptance scenario — its gate *is* these four rules
+  — but the ✅ stamp is left to the owner at review.
+
 Coverage moved from 0/59 to **16/59** (see §5.1) — the two RESP scenarios added
-this cycle. No layer reaches 🧪 or ✅: the ceiling is capped by unfinished
-prerequisites and by scenarios that still lack a test.
+this cycle. Besides L1 (🧪), no other layer reaches 🧪 or ✅: the ceiling is
+capped by unfinished prerequisites and by scenarios that still lack a test.
 
 ### 5.1 Scenario coverage
 
