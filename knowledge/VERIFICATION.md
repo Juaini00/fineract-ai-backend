@@ -38,13 +38,17 @@ langsung yang ditulis terpisah.
 
 | Verdict | Jumlah |
 | --- | --- |
-| lulus | 39 |
-| gagal | 9 |
+| lulus | 48 |
+| gagal | 0 |
 | belum diperiksa | 0 |
 
 48 dari 48 kapabilitas dijalankan ujung ke ujung dan diadu dengan SQL langsung.
+Sembilan yang semula gagal kini **semua diperbaiki** (L1.1–L1.3, ditutup gerbang
+L1.4/FIN-35): keempat aturan CARRY-OVER berlaku untuk 48 kapabilitas dan validator
+katalog menegakkan grain, kelas timeout, penamaan kolom, dan bentuk output secara
+mekanis (`cargo run -p app -- catalog` → 0 error).
 
-**Sembilan yang gagal**, dengan sebabnya:
+**Sembilan yang semula gagal** (kini diperbaiki), dengan sebabnya:
 
 | Kapabilitas | Sebab |
 | --- | --- |
