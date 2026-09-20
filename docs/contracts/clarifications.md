@@ -1,6 +1,18 @@
 # Clarification contract
 
-Status: agreed interaction design, recorded 2026-09-08. Wire examples are illustrative; exhaustive JSON Schema, payload limits and resolver API are still required before implementation. Lifecycle is owned by [Engine](../architecture/engine.md), transport by [API](api.md) and [SSE](sse.md).
+Status: agreed interaction design, recorded 2026-09-08. Wire examples are
+illustrative; exhaustive JSON Schema is still required. Lifecycle is owned by
+[Engine](../architecture/engine.md), transport by [API](api.md) and
+[SSE](sse.md).
+
+> **Status implementasi (2026-09-15).** Sudah berjalan: form bertipe dengan
+> revision dan stale-answer, `answer_kind` `typed_value` dan `option_id`,
+> endpoint opsi resolver berpaginasi, auto-bind `resolver_unique` (K5), dan
+> skip (T8). **Belum**: `refine_search` dan `change_intent`, klarifikasi
+> bertahap (form kedua), conditional fields, dan suggestions. Bentuk form dan
+> opsi yang benar-benar dikirim ada di
+> [api-reference.md §6](api-reference.md#6-klarifikasi); status lengkap di
+> [build-order.md](../build-order.md).
 
 ## Ownership and purpose
 
@@ -72,14 +84,14 @@ Audit records form/plan revision, unresolved slot, resolver and option-set refer
 
 ## Acceptance scenarios
 
-- Radio and searchable select yield identical single-choice semantics; checkbox false is not missing.
-- Conditional required fields validate correctly; changing a parent invalidates dependent choices.
-- Two data-dependent stages continue one job and retain completed outputs.
-- Double submit/network retry is idempotent; stale revisions do not resume.
-- Foreign, expired or out-of-scope choices are rejected.
-- Long option lists are paginated; all-matches never means visible-page-only.
-- Suggestions do not auto-submit and no-match can refine search.
-- Budget exhaustion and expiry terminate waiting predictably without fabricated bindings.
+- `CLR-1` — Radio and searchable select yield identical single-choice semantics; checkbox false is not missing.
+- `CLR-2` — Conditional required fields validate correctly; changing a parent invalidates dependent choices.
+- `CLR-3` — Two data-dependent stages continue one job and retain completed outputs.
+- `CLR-4` — Double submit/network retry is idempotent; stale revisions do not resume.
+- `CLR-5` — Foreign, expired or out-of-scope choices are rejected.
+- `CLR-6` — Long option lists are paginated; all-matches never means visible-page-only.
+- `CLR-7` — Suggestions do not auto-submit and no-match can refine search.
+- `CLR-8` — Budget exhaustion and expiry terminate waiting predictably without fabricated bindings.
 
 ## Manual input dan skip (disepakati 2026-09-12)
 

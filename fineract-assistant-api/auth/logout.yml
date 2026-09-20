@@ -1,0 +1,27 @@
+info:
+  name: logout
+  type: http
+  seq: 12
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/logout"
+  headers:
+    - name: cookie
+      value: "refresh_token={{logoutRefreshToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan envelope sukses", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+        });
+
+        test("cookie dihapus pada klien", function () {
+          const header = res.getHeader("set-cookie");
+          const list = Array.isArray(header) ? header : [header];
+          const raw = list.find((c) => c && c.indexOf("refresh_token=") === 0);
+          expect(raw.toLowerCase()).to.include("max-age=0");
+        });

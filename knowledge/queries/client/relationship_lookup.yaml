@@ -8,7 +8,7 @@ parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
   - { name: search, type: string, required: true }
 output_fields:
-  - { name: client_id, type: bigint, sensitivity: pii }
+  - { name: client_id, type: bigint, sensitivity: public_business }
   - { name: display_name, type: string, sensitivity: pii }
   - { name: office_id, type: bigint, sensitivity: public_business }
   - { name: office_name, type: string, sensitivity: public_business }

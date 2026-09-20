@@ -1,0 +1,53 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "{{username}}",
+        "password": "{{password}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dengan access token dan profil", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.token_type).to.equal("Bearer");
+          expect(data.expires_in).to.be.a("number");
+          expect(data.user.username).to.equal(bru.getEnvVar("username"));
+        });
+
+        test("password hash tidak pernah ikut di profil", function () {
+          expect(res.getBody().data.user).to.not.have.property("password_hash");
+        });
+
+        test("refresh token dikirim sebagai cookie HttpOnly, bukan di body", function () {
+          expect(res.getBody().data).to.not.have.property("refresh_token");
+          const cookie = readRefreshCookie(res);
+          expect(cookie.raw.toLowerCase()).to.include("httponly");
+        });
+
+        bru.setVar("accessToken", res.getBody().data.access_token);
+        bru.setVar("refreshToken", readRefreshCookie(res).value);
+
+        function readRefreshCookie(res) {
+          const header = res.getHeader("set-cookie");
+          const list = Array.isArray(header) ? header : [header];
+          const raw = list.find((c) => c && c.indexOf("refresh_token=") === 0);
+          if (!raw) {
+            throw new Error("Set-Cookie refresh_token tidak ditemukan");
+          }
+          return { raw: raw, value: raw.split(";")[0].split("=")[1] };
+        }

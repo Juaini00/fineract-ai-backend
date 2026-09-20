@@ -1,0 +1,21 @@
+info:
+  name: refresh - token hasil rotasi setelah reuse terdeteksi
+  type: http
+  seq: 10
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/refresh"
+  headers:
+    - name: cookie
+      value: "refresh_token={{rotatedRefreshToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401: reuse mencabut SELURUH session, bukan hanya token lama", function () {
+          // Pengguna sah dan penyerang memegang rantai yang sama dan tidak
+          // dapat dibedakan, jadi keduanya kehilangan session.
+          expect(res.getStatus()).to.equal(401);
+        });

@@ -1,0 +1,26 @@
+info:
+  name: sesi untuk skip
+  type: http
+  seq: 12
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno skip run" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () {
+          expect(res.getStatus()).to.equal(201);
+        });
+        bru.setVar("skipSessionId", res.getBody().data.id);

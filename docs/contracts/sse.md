@@ -1,6 +1,16 @@
 # Job progress and SSE contract
 
-Status: agreed protocol behavior, recorded 2026-09-08. Exhaustive event payload schemas, replay retention, heartbeat/timeout values and deployment verification remain open. SSE is a product experience surface, not the internal audit stream.
+Status: agreed protocol behavior, recorded 2026-09-08. SSE is a product
+experience surface, not the internal audit stream.
+
+> **Status implementasi (2026-09-15).** `GET /chat/jobs/{id}/events` berjalan:
+> replay dari cursor, cursor tidak sah gagal eksplisit, duplikat aman,
+> disconnect bukan cancel, terminal menutup stream, fallback polling dibuktikan
+> dengan notifikasi dimatikan. **Belum**: retensi replay/purge riwayat, auth
+> expiry di tengah stream, dan verifikasi melalui proxy deployment nyata.
+> Bentuk frame dan kosakata event yang benar-benar dipancarkan ada di
+> [api-reference.md §7](api-reference.md#7-sse--get-chatjobsjob_idevents);
+> status lengkap di [build-order.md](../build-order.md).
 
 ## Transport and durability
 
@@ -79,14 +89,14 @@ On `WaitingForUser`, the frontend may close the stream after receiving the form.
 
 ## Acceptance scenarios
 
-- Fast completion before subscription still yields the final response.
-- Snapshot/subscribe and replay/live boundaries do not lose events.
-- Network loss, duplicate delivery and reconnect preserve correct UI state.
-- Expired cursor causes explicit snapshot recovery.
-- Waiting/submit/reconnect and multi-stage clarification continue one job.
-- Parallel nodes and re-plan display correct plan version and node counts.
-- Heartbeats cannot mask a dead worker; Redis outage can recover from durable events.
-- Slow clients, auth expiry and proxy buffering are tested without unbounded buffers or data leaks.
+- `SSE-1` — Fast completion before subscription still yields the final response.
+- `SSE-2` — Snapshot/subscribe and replay/live boundaries do not lose events.
+- `SSE-3` — Network loss, duplicate delivery and reconnect preserve correct UI state.
+- `SSE-4` — Expired cursor causes explicit snapshot recovery.
+- `SSE-5` — Waiting/submit/reconnect and multi-stage clarification continue one job.
+- `SSE-6` — Parallel nodes and re-plan display correct plan version and node counts.
+- `SSE-7` — Heartbeats cannot mask a dead worker; Redis outage can recover from durable events.
+- `SSE-8` — Slow clients, auth expiry and proxy buffering are tested without unbounded buffers or data leaks.
 
 ## References
 

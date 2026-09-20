@@ -1,6 +1,8 @@
 id: savings_withdrawal_total
 status: approved_mvp
 domain: savings
+display_name: Savings Withdrawal Total
+description: Answer total savings withdrawals for a date range within the caller's authorized office scope.
 data_areas:
 - organization_foundation
 - client_foundation

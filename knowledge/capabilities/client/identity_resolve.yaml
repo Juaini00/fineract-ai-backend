@@ -24,6 +24,7 @@ supported_intents:
   - resolve a client entity within authorized office scope
 guards:
   require_office_scope: true
+  snapshot_only: true
   pii: { returns_pii: true, never_return: [account_no, external_id, mobile_no, email] }
 dataset_recipe:
   dataset_id: client.identity

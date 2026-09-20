@@ -1,0 +1,31 @@
+info:
+  name: nol kandidat menjadi NotFound, bukan form kosong
+  type: http
+  seq: 19
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{emptyJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+
+        test("NotFound + Complete: pencariannya selesai, bukan terpotong", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.outcome).to.equal("NotFound");
+          // engine.md melarang NotFound + Partial.
+          expect(document.completeness).to.equal("Complete");
+          expect(document.completeness_reason).to.equal("resolver_no_candidates");
+        });
+
+        test("alasannya menyebut resolver yang dipakai", function () {
+          const block = document.blocks_json[0];
+          expect(block.block_id).to.equal("resolver_no_candidates");
+          expect(block.body).to.contain("client.identity_resolve");
+        });

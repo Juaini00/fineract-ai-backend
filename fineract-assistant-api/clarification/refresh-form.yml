@@ -1,0 +1,34 @@
+info:
+  name: refresh - form aktif dipulihkan identik
+  type: http
+  seq: 7.1
+  description: |
+    API-4 (paruh WaitingForUser) + API-5. Dijalankan SESUDAH submit field-asing
+    (422) dan submit revisi-basi (409). Refresh (GET ulang) harus mengembalikan
+    form aktif yang IDENTIK byte-per-byte dengan pemuatan pertama — bukan form
+    yang hilang atau diregenerasi — membuktikan sekaligus bahwa dua submit yang
+    ditolak tadi tidak memutasi form/revisinya. Refresh adalah pembacaan: tidak
+    ada panggilan LLM.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-4 — refresh mengembalikan form aktif yang sama persis (byte-per-byte)", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(JSON.stringify(res.getBody().data)).to.equal(bru.getVar("clarifyFormBody"));
+        });
+
+        test("API-5 — form tetap open pada revisi 1 sesudah submit 422 dan 409", function () {
+          const form = res.getBody().data;
+          expect(form.state).to.equal("open");
+          expect(form.revision).to.equal(1);
+          expect(form.clarification_id).to.equal(bru.getVar("clarificationId"));
+        });

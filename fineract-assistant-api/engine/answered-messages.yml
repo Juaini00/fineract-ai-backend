@@ -1,0 +1,34 @@
+info:
+  name: riwayat pesan sesudah response di-commit
+  type: http
+  seq: 11
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions/{{answeredSessionId}}/messages?limit=10"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const messages = res.getBody().data.messages;
+
+        test("turn assistant tertulis pada commit T7", function () {
+          expect(res.getStatus()).to.equal(200);
+          const assistant = messages.find((m) => m.role === "assistant");
+          expect(assistant.job_id).to.equal(bru.getVar("answeredJobId"));
+          expect(assistant.response_version).to.equal(1);
+        });
+
+        test("urutan terbaru lebih dulu: assistant sebelum user", function () {
+          const roles = messages.map((m) => m.role);
+          expect(roles.indexOf("assistant")).to.be.below(roles.indexOf("user"));
+        });
+
+        test("indeks tetap tipis: teks jawaban tidak disalin ke riwayat", function () {
+          const assistant = messages.find((m) => m.role === "assistant");
+          expect(assistant.request_text).to.equal(null);
+        });

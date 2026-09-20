@@ -1,0 +1,35 @@
+info:
+  name: job yang akan di-skip
+  type: http
+  seq: 13
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{skipIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{skipSessionId}}",
+        "request_text": "Find clients whose display name matches a person name."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("skipIdemKey", "bruno-skip-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("skipJobId", res.getBody().data.job_id);

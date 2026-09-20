@@ -25,6 +25,7 @@ supported_intents:
   - resolve a group entity by name within authorized office scope
 guards:
   require_office_scope: true
+  snapshot_only: true
 dataset_recipe:
   dataset_id: group.groups
   shape_id: group_candidates

@@ -1,0 +1,27 @@
+info:
+  name: list sessions
+  type: http
+  seq: 3
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions?limit=10"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 dan session yang baru dibuat ada di halaman pertama", function () {
+          expect(res.getStatus()).to.equal(200);
+          const ids = res.getBody().data.sessions.map((s) => s.id);
+          expect(ids).to.include(bru.getVar("sessionId"));
+        });
+
+        test("cursor keyset dikembalikan sebagai pasangan, bukan offset", function () {
+          const data = res.getBody().data;
+          expect(data.next_before_updated_at).to.be.a("string");
+          expect(data.next_before_id).to.be.a("string");
+        });

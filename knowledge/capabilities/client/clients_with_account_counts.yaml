@@ -28,6 +28,7 @@ defaults:
   authorized_scope_only: true
 guards:
   require_office_scope: true
+  snapshot_only: true
   pii:
     returns_pii: true
     never_return:

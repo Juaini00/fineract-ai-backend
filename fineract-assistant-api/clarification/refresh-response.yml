@@ -1,0 +1,28 @@
+info:
+  name: refresh - baca dokumen hasil terminal
+  type: http
+  seq: 9.1
+  description: |
+    API-4 (paruh terminal). Job klarifikasi kini Completed. Pembacaan pertama
+    dokumen hasil durable; body-nya disimpan untuk dibandingkan byte-per-byte
+    dengan pembacaan ulang (refresh) pada request berikutnya.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-4 — hasil terminal tersimpan durable dan terbaca (200, hash 64 char)", function () {
+          const doc = res.getBody().data;
+          expect(res.getStatus()).to.equal(200);
+          expect(doc.response_version).to.be.a("number");
+          expect(doc.response_hash).to.have.lengthOf(64);
+        });
+
+        bru.setVar("clarifyResponseBody", JSON.stringify(res.getBody().data));

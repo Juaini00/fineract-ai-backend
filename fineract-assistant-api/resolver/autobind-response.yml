@@ -1,0 +1,39 @@
+info:
+  name: auto-bind diungkap, bukan diam-diam
+  type: http
+  seq: 16
+  description: |
+    K5 / I5 — `resolver_unique` dibedakan dari `user_confirmed`. "Kebetulan
+    hanya ada satu nasabah di office ini" adalah klaim yang berbeda secara
+    material dari "pengguna mengonfirmasi nasabah ini", dan response wajib
+    mengatakannya.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{autobindJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const auto = document.blocks_json.find(function (block) {
+          return block.block_id === "slots_auto_bound";
+        });
+
+        test("job selesai tanpa pernah menanyakan apa pun", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.outcome).to.equal("Answered");
+        });
+
+        test("slot yang di-auto-bind dinyatakan dengan provenance resolver_unique", function () {
+          expect(auto).to.not.equal(undefined);
+          // §6.2 — auto-bind pindah dari `limitation` ke blok `note`.
+          expect(auto.type).to.equal("note");
+          expect(auto.auto_bound_slots).to.have.lengthOf(1);
+          expect(auto.auto_bound_slots[0].field_id).to.equal("client_id");
+          expect(auto.auto_bound_slots[0].provenance).to.equal("resolver_unique");
+        });

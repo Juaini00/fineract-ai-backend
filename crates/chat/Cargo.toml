@@ -8,4 +8,22 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+# Lihat crates/app/Cargo.toml: nama `core` pada extern prelude menutupi std `core`.
+foundation = { path = "../core", package = "core" }
+
+anyhow.workspace = true
+axum.workspace = true
+chrono.workspace = true
+futures.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+rust_decimal.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+validator.workspace = true

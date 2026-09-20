@@ -1,0 +1,34 @@
+info:
+  name: create job - kunci sama, payload berbeda
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "pertanyaan yang berbeda"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-2 — kunci sama + payload berbeda ditolak 409, bukan mereplay ack lain", function () {
+          // API-2: kunci yang dipakai ulang dengan payload berbeda TIDAK boleh diam-diam
+          // mengembalikan ack lama maupun membuat job baru — ia konflik.
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.code).to.equal("CONFLICT");
+          expect(res.getBody().data).to.equal(null);
+        });

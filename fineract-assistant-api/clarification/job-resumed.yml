@@ -1,0 +1,28 @@
+info:
+  name: job yang sama melanjutkan dan menjawab
+  type: http
+  seq: 9
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("dilanjutkan sampai terminal, bukan job baru", function () {
+          expect(job.id).to.equal(bru.getVar("clarifyJobId"));
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.plan_version).to.equal(1);
+        });
+
+        test("jawaban dipakai: hasilnya Answered, bukan Empty", function () {
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness).to.equal("Complete");
+        });

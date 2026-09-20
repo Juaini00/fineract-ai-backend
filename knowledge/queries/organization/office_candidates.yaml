@@ -8,6 +8,10 @@ sql_file: queries/datasets/organization/offices.source.sql
 data_areas: [organization_foundation]
 tables: [m_office]
 metrics: [organization.office_count]
+# Tautan ke shape dataset yang dibungkus manifest ini. Sebelumnya tautan itu
+# hanya hidup sebagai komentar di atas, dan koneksi yang hanya berupa prosa
+# adalah persis yang invarian I6 larang.
+resolves: { dataset_id: organization.offices, shape_id: office_candidates }
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 output_fields:

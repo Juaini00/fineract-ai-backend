@@ -1,0 +1,28 @@
+info:
+  name: session untuk pertanyaan tercakup
+  type: http
+  seq: 7.5
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      {
+        "title": "bruno answered run"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () {
+          expect(res.getStatus()).to.equal(201);
+        });
+        bru.setVar("answeredSessionId", res.getBody().data.id);

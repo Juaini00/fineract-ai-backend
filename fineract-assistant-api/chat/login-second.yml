@@ -1,0 +1,28 @@
+info:
+  name: login - principal kedua (auditor)
+  type: http
+  seq: 19
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "{{username2}}",
+        "password": "{{password2}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 — principal kedua (auditor) dapat login", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.access_token).to.be.a("string").and.not.empty;
+        });
+        bru.setVar("chatToken2", res.getBody().data.access_token);

@@ -1,0 +1,52 @@
+info:
+  name: create job
+  type: http
+  seq: 5
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "berapa total portfolio aktif bulan ini?"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        // Kunci unik per run: kunci yang sama pada run berikutnya akan
+        // di-replay dan menutupi kegagalan pembuatan job yang sebenarnya.
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("idemKey", "bruno-" + unique);
+    - type: tests
+      code: |
+        test("API-1 — 202 hanya sesudah intake tx commit durable, bukan 'analisis berhasil'", function () {
+          // API-1: acknowledgement diterbitkan HANYA setelah penerimaan durable.
+          // Worker mati di tahap ini, jadi 202 + Queued membuktikan ack mencerminkan
+          // commit intake (T1), bukan eksekusi.
+          expect(res.getStatus()).to.equal(202);
+          const body = res.getBody();
+          expect(body.success).to.equal(true);
+          expect(body.error).to.equal(null);
+          const data = body.data;
+          expect(data.lifecycle).to.equal("Queued");
+          expect(data.session_id).to.equal(bru.getVar("sessionId"));
+          expect(data.job_id).to.be.a("string").and.not.empty;
+        });
+
+        test("API-1 — acknowledgement membawa cursor event pertama untuk berlangganan", function () {
+          expect(res.getBody().data.event_cursor).to.equal(1);
+        });
+
+        bru.setVar("jobId", res.getBody().data.job_id);

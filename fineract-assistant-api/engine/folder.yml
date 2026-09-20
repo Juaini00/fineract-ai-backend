@@ -1,0 +1,12 @@
+info:
+  name: engine
+  seq: 4
+  description: |
+    Siklus hidup job dengan worker menyala: klaim, penyelesaian, dan response
+    durable.
+
+    Dijalankan terpisah dari folder `chat` oleh scripts/integration-test.sh.
+    Folder `chat` menguji semantik penerimaan (job tetap Queued) dan karena itu
+    berjalan dengan WORKER_ENABLED=false — kalau tidak, worker akan
+    menyelesaikan job di tengah rangkaian dan membuat hasilnya bergantung pada
+    balapan, bukan pada perilaku yang diuji.

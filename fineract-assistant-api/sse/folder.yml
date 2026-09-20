@@ -1,0 +1,13 @@
+info:
+  name: sse
+  seq: 7
+  description: |
+    Stream progres publik. Yang dibuktikan di sini bukan "endpointnya balas
+    200", melainkan empat janji kontrak: replay dari cursor tidak kehilangan
+    satu pun sequence, duplikat aman, cursor yang tidak sah gagal eksplisit
+    (bukan diam-diam mulai dari nol), dan membaca stream tidak pernah mengubah
+    state job.
+
+    Folder ini dijalankan DUA KALI oleh runner: sekali dengan notifikasi
+    menyala, sekali dengan `SSE_NOTIFICATIONS_ENABLED=false`. Assertion-nya
+    identik — itulah buktinya bahwa notifikasi bukan sumber kebenaran.

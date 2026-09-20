@@ -1,0 +1,35 @@
+info:
+  name: create job - job kedua pada session yang sama
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+    - name: Idempotency-Key
+      value: "{{idemKey}}-kedua"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{sessionId}}",
+        "request_text": "pertanyaan kedua"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-2 — kunci BERBEDA tidak diabaikan: mencapai logika pembuatan, lalu 409 satu-job-per-session (#13)", function () {
+          // API-2 (guard "kunci diabaikan"): dengan Idempotency-Key berbeda, request
+          // TIDAK direplay sebagai job pertama — ia diproses sebagai job baru dan
+          // menabrak invarian satu job nonterminal per session. Kunci yang diabaikan
+          // akan malah mengembalikan 202 job pertama.
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.message).to.include("Another job");
+        });

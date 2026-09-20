@@ -1,0 +1,39 @@
+info:
+  name: pertanyaan yang tercakup capability
+  type: http
+  seq: 8
+  description: |
+    Membuktikan jalur lengkap: plan (T3) → eksekusi query yang disetujui (T4) →
+    komposisi deterministik → commit (T7). Angkanya berasal dari Fineract, bukan
+    dari model.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{answeredIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{answeredSessionId}}",
+        "request_text": "Show the savings portfolio summary."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const unique = String(Date.now()) + Math.random().toString(36).slice(2, 10);
+        bru.setVar("answeredIdemKey", "bruno-answered-" + unique);
+    - type: tests
+      code: |
+        test("202", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("answeredJobId", res.getBody().data.job_id);

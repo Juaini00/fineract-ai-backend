@@ -8,5 +8,17 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-core = { path = "../core" }
+# Crate `core` diimpor sebagai `foundation`. Nama crate tetap `core` (AGENTS.md),
+# tetapi membiarkannya bernama `core` di sini menaruhnya pada extern prelude dan
+# menutupi std `core` — `#[tokio::main]` dan macro lain yang memancarkan
+# `::core::...` lalu gagal kompilasi. Alias hanya berlaku di manifest ini.
+foundation = { path = "../core", package = "core" }
 chat = { path = "../chat" }
+
+anyhow.workspace = true
+axum.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower-http = { workspace = true }
+tracing.workspace = true

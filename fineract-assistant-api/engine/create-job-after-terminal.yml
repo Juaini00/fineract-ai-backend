@@ -1,0 +1,30 @@
+info:
+  name: job berikutnya pada session yang sama
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{engineIdemKey}}-lanjutan"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{engineSessionId}}",
+        "request_text": "pertanyaan lanjutan"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("202: constraint satu job nonterminal per session melepas setelah job terminal", function () {
+          expect(res.getStatus()).to.equal(202);
+        });

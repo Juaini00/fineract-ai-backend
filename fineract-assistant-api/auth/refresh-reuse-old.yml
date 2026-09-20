@@ -1,0 +1,19 @@
+info:
+  name: refresh - token lama dipakai ulang
+  type: http
+  seq: 9
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/refresh"
+  headers:
+    - name: cookie
+      value: "refresh_token={{refreshToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401 saat token yang sudah dirotasi dipakai lagi", function () {
+          expect(res.getStatus()).to.equal(401);
+        });

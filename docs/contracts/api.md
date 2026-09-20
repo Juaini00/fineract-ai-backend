@@ -1,6 +1,14 @@
 # Job HTTP contract
 
-Status: agreed endpoint responsibilities, recorded 2026-09-08. Full OpenAPI/JSON Schema, exact authentication integration, pagination limits and error-code registry are pending. This document does not claim a complete API specification.
+Status: agreed endpoint responsibilities, recorded 2026-09-08. Full
+OpenAPI/JSON Schema is pending. This document does not claim a complete API
+specification.
+
+> **Untuk integrasi frontend, pakai [api-reference.md](api-reference.md), bukan
+> dokumen ini.** Dokumen ini mencatat tanggung jawab endpoint yang *disepakati*,
+> termasuk yang belum dibangun. `api-reference.md` mencatat permukaan yang
+> *benar-benar ada*, dengan payload yang disalin dari aplikasi berjalan, matriks
+> error, dan alur integrasi.
 
 ## Endpoints
 
@@ -9,7 +17,9 @@ Status: agreed endpoint responsibilities, recorded 2026-09-08. Full OpenAPI/JSON
 | `POST /chat/jobs` | Accept a new question in a session; return 202 after durable creation |
 | `GET /chat/jobs/{job_id}` | Read a consistent state snapshot, active clarification or final response reference, and event cursor |
 | `GET /chat/jobs/{job_id}/events` | Authorized SSE replay and live events |
-| `POST /chat/jobs/{job_id}/responses` | Accept a versioned clarification answer on the same job; return 202 after commit |
+| `GET /chat/jobs/{job_id}/clarification` | Read the open form for this job |
+| `GET /chat/jobs/{job_id}/clarification/options` | Issue one page of resolver options for a `single_choice` field; only the page actually sent is persisted |
+| `POST /chat/jobs/{job_id}/responses` | Accept a versioned clarification answer on the same job (202 after commit), or `action: "skip"` which settles the job as `SkippedByUser` and returns 200 |
 | `POST /chat/jobs/{job_id}/cancel` | Request cancellation explicitly; disconnecting is not cancellation |
 
 Clarification option search, session/message pagination, response retrieval and dataset pagination need endpoint schemas in subsequent design work. This inventory is deliberately limited to the agreed job interaction.
@@ -44,9 +54,9 @@ Accepted state transitions, required audit records and corresponding public even
 
 ## Acceptance scenarios
 
-- Job/answer acknowledged only after durable acceptance.
-- Retry after a lost HTTP acknowledgement does not create/resume twice.
-- Snapshot followed by subscription has no missing transition.
-- Refresh restores the same active clarification or persisted result.
-- Invalid fields and stale forms do not mutate job state.
-- Unauthorized users cannot inspect jobs, choices, cursors or stored acknowledgements.
+- `API-1` — Job/answer acknowledged only after durable acceptance.
+- `API-2` — Retry after a lost HTTP acknowledgement does not create/resume twice.
+- `API-3` — Snapshot followed by subscription has no missing transition.
+- `API-4` — Refresh restores the same active clarification or persisted result.
+- `API-5` — Invalid fields and stale forms do not mutate job state.
+- `API-6` — Unauthorized users cannot inspect jobs, choices, cursors or stored acknowledgements.

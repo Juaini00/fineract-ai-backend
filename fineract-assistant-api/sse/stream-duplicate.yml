@@ -1,0 +1,43 @@
+info:
+  name: pengiriman ulang aman
+  type: http
+  seq: 7
+  description: |
+    sse.md: "Deliver duplicates safely; do not promise exactly-once delivery."
+    Berlangganan ulang dari nol wajib menghasilkan riwayat yang sama persis —
+    bukan riwayat yang bergeser karena sudah pernah dibaca.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events?cursor=0"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const ids = function (text) {
+          return (text.match(/^id: (\d+)$/gm) || []).join(",");
+        };
+
+        test("id yang sama persis seperti pembacaan pertama", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(ids(body)).to.equal(ids(bru.getVar("sseFullBody")));
+        });
+
+        test("SSE-3 — reconnect + pengiriman ulang tidak mengubah state yang direkonstruksi", function () {
+          // SSE-3: ini adalah reconnect kedua (dari cursor=0, mensimulasikan
+          // koneksi yang putus lalu tersambung lagi). Kontrak tidak menjanjikan
+          // exactly-once — ia menjanjikan duplikat AMAN: sequence yang sama tiba
+          // lagi, tetapi karena tiap sequence idempoten, state hasil rekonstruksi
+          // (kumpulan id unik) tidak berubah. Tidak ada transisi hilang, tidak ada
+          // duplikat yang menggeser hasil.
+          const first = ids(bru.getVar("sseFullBody")).split(",");
+          const again = ids(body).split(",");
+          expect(again).to.deep.equal(first);           // pengiriman ulang identik
+          const uniq = again.filter(function (v, i) { return again.indexOf(v) === i; });
+          expect(uniq).to.have.lengthOf(again.length);  // idempoten: tak ada dup dalam satu pembacaan
+        });

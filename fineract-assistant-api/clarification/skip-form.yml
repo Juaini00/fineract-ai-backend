@@ -1,0 +1,21 @@
+info:
+  name: form terbuka sebelum skip
+  type: http
+  seq: 14
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{skipJobId}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("WaitingForUser dengan form terbuka", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.state).to.equal("open");
+        });
+        bru.setVar("skipClarificationId", res.getBody().data.clarification_id);

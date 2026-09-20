@@ -1,0 +1,45 @@
+info:
+  name: job sudah terminal sebelum stream dibaca
+  type: http
+  seq: 4
+  description: |
+    sse.md: penyelesaian cepat sebelum klien berlangganan tetap menghasilkan
+    response akhir. Stream berikutnya adalah replay murni.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("API-3 — snapshot memberi cursor durable (last_event_sequence) untuk berlangganan", function () {
+          // API-3 (paruh snapshot): GET job mengembalikan satu snapshot konsisten dan
+          // cursor durable-nya. stream-from-cursor lalu menyambung dari cursor ini dan
+          // membuktikan tidak ada transisi yang hilang di seam snapshot→subscribe.
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.last_event_sequence).to.be.above(1);
+        });
+
+        test("SSE-1 — penyelesaian cepat sebelum berlangganan tetap memberi response akhir", function () {
+          // SSE-1: worker menjalankan job sampai terminal SEBELUM /events pernah
+          // dibuka. Snapshot durable tetap membawa response akhir — bukan stream
+          // kosong. `final_response_version` menunjuk dokumen hasil yang siap
+          // diambil, membuktikan hasil hidup di state durable, bukan di koneksi.
+          // Assertion identik di stage-2 (notifikasi menyala) dan stage-3
+          // (SSE_NOTIFICATIONS_ENABLED=false): notifikasi adalah latensi, bukan
+          // sumber kebenaran.
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.final_response_version).to.be.a("number");
+          expect(job.final_response_version).to.be.at.least(1);
+        });
+
+        bru.setVar("sseLastSequence", String(job.last_event_sequence));

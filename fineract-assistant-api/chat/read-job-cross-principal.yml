@@ -1,0 +1,27 @@
+info:
+  name: read job - lintas principal (bukan owner)
+  type: http
+  seq: 20
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{jobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken2}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-6 — job milik user lain (principal kedua) → 404 non-disclosing", function () {
+          // API-6 (cabang cross-principal ASLI, FIN-45): `jobId` dibuat & dimiliki
+          // `admin`. Dibaca dengan bearer `auditor` — user kedua yang benar-benar
+          // ter-seed — harus 404 NOT_FOUND, persis seperti job yang tidak ada, tanpa
+          // membocorkan keberadaan/kepemilikan/isi. Otorisasi tidak dibaca dari state
+          // turunan (I7); requests tidak dapat melebarkan wewenang.
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().error.code).to.equal("NOT_FOUND");
+          expect(res.getBody().data).to.equal(null);
+          expect(JSON.stringify(res.getBody())).to.not.match(/Queued|Cancelled|scope_json|event_cursor|owner_user_id/);
+        });

@@ -3,7 +3,8 @@ status: approved_mvp
 domain: client
 display_name: Top Clients by Savings Balance
 description: Return clients with the highest total savings balance across their active savings holdings
-  within the caller's authorized office scope.
+  within the caller's authorized office scope. Grain is one row per client and currency — balances of
+  different currencies are never consolidated, so one client may appear once per currency held.
 data_areas:
 - client_foundation
 - organization_foundation
@@ -33,6 +34,7 @@ defaults:
   authorized_scope_only: true
 guards:
   require_office_scope: true
+  snapshot_only: true
   max_limit: 100
 checks:
 - id: query_exists

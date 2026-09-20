@@ -32,6 +32,7 @@ defaults:
   default_limit: 50
 guards:
   require_office_scope: true
+  snapshot_only: true
   max_limit: 200
   pii:
     returns_pii: true

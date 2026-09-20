@@ -1,0 +1,48 @@
+info:
+  name: response lolos validator D1-D3, bukan sekadar tersimpan
+  type: http
+  seq: 10.5
+  description: |
+    D1 — `completeness` tidak dipilih composer, melainkan dihitung ulang dari
+    ledger (`job_node_runs`) lalu dibandingkan. Dokumen yang lolos disajikan
+    sebagai versi 1 dengan `validation_status='passed'`.
+
+    Munculnya versi 2 di sini berarti validator menolak dokumen yang seharusnya
+    benar: satu node `Completed`/`Complete` menghasilkan tepat `Complete`, dan
+    komposisi hari ini tidak memuat narasi ber-angka maupun slot auto-bind.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answeredJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+
+        test("dokumen lolos validasi dan disajikan apa adanya", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.validation_status).to.equal("passed");
+        });
+
+        test("tidak ada fallback: versi yang disajikan adalah versi pertama", function () {
+          // Versi 2 hanya lahir saat versi 1 ditolak. Kalau angka ini berubah,
+          // yang rusak adalah composer atau validator — bukan test ini.
+          expect(document.response_version).to.equal(1);
+        });
+
+        test("completeness sama dengan hitungan ledger, bukan klaim bebas", function () {
+          expect(document.completeness).to.equal("Complete");
+          expect(document.completeness_reason).to.be.a("string");
+        });
+
+        test("tidak ada blok penolakan pada dokumen yang lolos", function () {
+          const rejected = document.blocks_json.filter(function (block) {
+            return block.block_id === "validation_rejected";
+          });
+          expect(rejected).to.have.lengthOf(0);
+        });

@@ -1,0 +1,29 @@
+info:
+  name: refresh - job tetap WaitingForUser sesudah submit ditolak
+  type: http
+  seq: 7.2
+  description: |
+    API-5. Setelah submit field-asing (422) dan revisi-basi (409), snapshot job
+    harus tidak berubah: masih WaitingForUser, tanpa outcome/completeness. Submit
+    yang ditolak tidak boleh memajukan atau melanjutkan job.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-5 — job tetap WaitingForUser (tidak maju/resume) sesudah submit 422+409", function () {
+          const job = res.getBody().data;
+          expect(res.getStatus()).to.equal(200);
+          expect(job.id).to.equal(bru.getVar("clarifyJobId"));
+          expect(job.lifecycle).to.equal("WaitingForUser");
+          expect(job.outcome).to.equal(null);
+          expect(job.completeness).to.equal(null);
+          expect(job.terminal_at).to.equal(null);
+        });

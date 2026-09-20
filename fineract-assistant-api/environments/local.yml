@@ -1,0 +1,19 @@
+name: local
+
+variables:
+  # Port default 3007 bentrok dengan backend repo lama pada mesin dev; runner
+  # menimpanya lewat --env-var baseUrl=... sesuai APP_PORT yang dipakai.
+  - name: baseUrl
+    value: http://127.0.0.1:3007
+  # Kredensial seed bootstrap admin (AUTH_BOOTSTRAP_ADMIN_*), hanya berlaku di
+  # APP_ENV=local. Bukan rahasia produksi.
+  - name: username
+    value: admin
+  - name: password
+    value: password123
+  # Principal kedua (AUTH_BOOTSTRAP_SECOND_*), untuk uji isolasi kepemilikan
+  # lintas user (API-6). Hanya berlaku di APP_ENV=local.
+  - name: username2
+    value: auditor
+  - name: password2
+    value: password123

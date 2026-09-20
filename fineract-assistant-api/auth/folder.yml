@@ -1,0 +1,9 @@
+info:
+  name: auth
+  seq: 2
+  description: |
+    Login, rotasi refresh token, deteksi pemakaian ulang, dan logout.
+
+    Urutan request di folder ini bergantung satu sama lain: rotasi hanya dapat
+    diuji setelah login, dan reuse-detection hanya setelah rotasi. Jalankan
+    berurutan (`bru run auth -r`), bukan satu-satu.

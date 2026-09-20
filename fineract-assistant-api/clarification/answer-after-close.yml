@@ -1,0 +1,31 @@
+info:
+  name: menjawab lagi setelah job terminal
+  type: http
+  seq: 10
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{clarifyIdemKey}}-again"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{clarificationId}}",
+        "revision": 1,
+        "answers": { "search": "Grace Dao" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("409: job terminal tidak menerima jawaban lagi", function () {
+          expect(res.getStatus()).to.equal(409);
+        });

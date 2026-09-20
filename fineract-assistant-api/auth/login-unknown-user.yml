@@ -1,0 +1,32 @@
+info:
+  name: login - user tidak dikenal
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "user-yang-tidak-ada",
+        "password": "password-apa-saja"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401", function () {
+          expect(res.getStatus()).to.equal(401);
+        });
+
+        test("API-6 — body user-tak-dikenal identik byte-per-byte dengan password-salah (anti enumerasi akun)", function () {
+          // API-6: identitas ditegakkan lewat bearer; kredensial salah vs user tak ada
+          // tidak boleh menjadi oracle enumerasi. Body dibandingkan byte-per-byte.
+          expect(JSON.stringify(res.getBody())).to.equal(bru.getVar("wrongPasswordBody"));
+        });

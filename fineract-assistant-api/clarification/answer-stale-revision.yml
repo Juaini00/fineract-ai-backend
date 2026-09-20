@@ -1,0 +1,35 @@
+info:
+  name: jawaban dengan revision basi
+  type: http
+  seq: 7
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{clarifyIdemKey}}-stale"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{clarificationId}}",
+        "revision": 99,
+        "answers": { "search": "Grace" }
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-5 — submit terhadap revisi basi ditolak 409 dan tidak melanjutkan job", function () {
+          // API-5: pengiriman terhadap revisi form yang sudah usang ditolak — job tidak
+          // maju/resume. (Bukti job tetap WaitingForUser di refresh-form.yml berikutnya.)
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.code).to.equal("CONFLICT");
+          expect(res.getBody().data).to.equal(null);
+        });

@@ -1,0 +1,49 @@
+info:
+  name: pengungkapan auto-bind cocok dengan ledger (D2)
+  type: http
+  seq: 16.5
+  description: |
+    D2 — validator membandingkan himpunan slot auto-bind pada
+    `job_node_runs.input_binding_json` dengan himpunan yang diungkap response.
+    Tidak sama → dokumen ditolak dan yang disajikan adalah fallback (versi 2).
+
+    Yang diuji di sini bukan "blok itu ada" — itu sudah diuji autobind-response.
+    Yang diuji adalah bahwa blok itu **bertahan terhadap perbandingan dengan
+    binding yang benar-benar dikonsumsi node**. Auto-bind yang diam adalah cara
+    menghasilkan jawaban salah dengan meyakinkan, jadi pemeriksaannya mekanis.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{autobindJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const auto = document.blocks_json.find(function (block) {
+          return block.block_id === "slots_auto_bound";
+        });
+
+        test("dokumen dengan slot auto-bind tetap lolos validasi", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.validation_status).to.equal("passed");
+          expect(document.response_version).to.equal(1);
+        });
+
+        test("himpunan yang diungkap sama persis dengan yang diikat node", function () {
+          const disclosed = auto.auto_bound_slots.map(function (slot) {
+            return slot.field_id;
+          });
+          expect(disclosed).to.eql(["client_id"]);
+        });
+
+        test("dokumen yang lolos tidak membawa blok penolakan", function () {
+          const rejected = document.blocks_json.filter(function (block) {
+            return block.block_id === "validation_rejected";
+          });
+          expect(rejected).to.have.lengthOf(0);
+        });

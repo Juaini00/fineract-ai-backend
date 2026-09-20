@@ -1,0 +1,7 @@
+info:
+  name: health
+  seq: 1
+  description: |
+    Kesehatan proses dan dependency. Dijalankan pertama supaya kegagalan
+    infrastruktur terlihat sebagai kegagalan infrastruktur, bukan sebagai
+    kegagalan endpoint yang diuji sesudahnya.

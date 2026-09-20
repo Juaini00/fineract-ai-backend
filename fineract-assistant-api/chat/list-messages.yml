@@ -1,0 +1,39 @@
+info:
+  name: riwayat pesan session
+  type: http
+  seq: 16
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/sessions/{{sessionId}}/messages?limit=10"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const data = res.getBody().data;
+
+        test("200 dan turn user dari job yang diterima ada di riwayat", function () {
+          expect(res.getStatus()).to.equal(200);
+          const user = data.messages.filter((m) => m.role === "user");
+          expect(user.length).to.be.at.least(1);
+          expect(user[0].job_id).to.be.a("string");
+        });
+
+        test("teks pertanyaan dibaca dari chat_jobs, bukan disalin ke indeks", function () {
+          const user = data.messages.find((m) => m.role === "user");
+          expect(user.request_text).to.be.a("string");
+          expect(user.response_version).to.equal(null);
+        });
+
+        test("tanpa worker belum ada turn assistant", function () {
+          expect(data.messages.some((m) => m.role === "assistant")).to.equal(false);
+        });
+
+        test("cursor keyset dikembalikan sebagai pasangan", function () {
+          expect(data.next_before_created_at).to.be.a("string");
+          expect(data.next_before_id).to.be.a("string");
+        });

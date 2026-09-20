@@ -1,0 +1,62 @@
+info:
+  name: replay dari cursor melanjutkan, bukan mengulang
+  type: http
+  seq: 6
+  description: |
+    `Last-Event-ID` adalah cara klien melanjutkan setelah koneksi putus.
+    Ia BUKAN kredensial: kepemilikan job diperiksa terpisah, dan cursor hanya
+    menentukan titik mulai.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{sseJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{sseToken}}"
+    - name: Last-Event-ID
+      value: "2"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const ids = (String(res.getBody()).match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+
+        test("API-3 — berlangganan dari cursor snapshot mulai tepat sesudahnya, tanpa duplikat di seam", function () {
+          // API-3: snapshot (job-settled) memberi cursor = last_event_sequence; di sini
+          // kita menyambung dari cursor 2 dan replay HARUS mulai di 3 — tidak mengulang
+          // 1/2 (tanpa duplikat di batas snapshot→subscribe).
+          expect(res.getStatus()).to.equal(200);
+          expect(ids[0]).to.equal(3);
+          expect(ids).to.not.include(1);
+          expect(ids).to.not.include(2);
+        });
+
+        test("API-3 — tiap transisi sesudah cursor hadir sekali dan kontigu sampai state snapshot", function () {
+          // Union (snapshot + replay) merekonstruksi state persis: sequence 3..N
+          // kontigu tanpa lubang, berakhir di N = last_event_sequence snapshot.
+          const last = Number(bru.getVar("sseLastSequence"));
+          expect(ids[ids.length - 1]).to.equal(last);
+          expect(ids).to.have.lengthOf(last - 2);
+          ids.forEach(function (id, index) {
+            expect(id).to.equal(index + 3); // kontigu: 3,4,5,...,N tanpa gap/dup
+          });
+        });
+
+        test("SSE-2 — batas snapshot->subscribe tidak kehilangan maupun mengulang satu event", function () {
+          // SSE-2: klien mengambil snapshot pada cursor 2 lalu berlangganan dari
+          // sana. Sequence yang direplay HARUS kontigu dari 3 sampai
+          // last_event_sequence — tanpa lubang (tidak ada event hilang) dan tanpa
+          // pengulangan (2 tidak dikirim lagi). Rekonstruksi (snapshot 1..2 +
+          // replay 3..N) menyamai pembacaan terminal langsung: gabungannya justru
+          // 1..N kontigu.
+          const last = Number(bru.getVar("sseLastSequence"));
+          expect(ids[0]).to.equal(3);                       // mulai TEPAT sesudah cursor
+          expect(ids).to.not.include(2);                    // tanpa repeat di seam
+          expect(ids[ids.length - 1]).to.equal(last);       // sampai state terminal
+          expect(ids).to.have.lengthOf(last - 2);           // tidak ada gap
+          const unique = ids.filter(function (id, i) { return ids.indexOf(id) === i; });
+          expect(unique).to.have.lengthOf(ids.length);      // tidak ada duplikat
+        });

@@ -1,0 +1,31 @@
+info:
+  name: create session
+  type: http
+  seq: 2
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+  body:
+    type: json
+    data: |
+      {
+        "title": "bruno integration run"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201 dan session aktif milik pemanggil", function () {
+          expect(res.getStatus()).to.equal(201);
+          const data = res.getBody().data;
+          expect(data.status).to.equal("active");
+          expect(data.title).to.equal("bruno integration run");
+        });
+        bru.setVar("sessionId", res.getBody().data.id);

@@ -1,14 +1,17 @@
-WITH scoped_offices AS (
-    SELECT id AS office_id
-    FROM m_office
-    WHERE id = ANY($1::bigint[])
-)
+-- Jumlah staf aktif diambil lewat subquery berkorelasi, BUKAN LEFT JOIN m_staff.
+-- LEFT JOIN menggandakan baris kantor sebanyak jumlah stafnya sehingga
+-- COUNT(o.id) menghitung pasangan (kantor, staf), bukan kantor.
+-- Diverifikasi 2026-09-15: bentuk lama mengembalikan office_count = 27 untuk 8 kantor.
 SELECT
     COUNT(o.id)::bigint AS office_count,
     COUNT(o.id) FILTER (WHERE o.parent_id IS NULL)::bigint AS root_office_count,
     MIN(o.opening_date) AS oldest_opening_date,
-    COUNT(s.id) FILTER (WHERE s.is_active = true)::bigint AS active_staff_count
-FROM scoped_offices scope
-JOIN m_office o ON o.id = scope.office_id
-LEFT JOIN m_staff s ON s.office_id = o.id
+    COALESCE(SUM((
+        SELECT COUNT(*)
+        FROM m_staff s
+        WHERE s.office_id = o.id
+          AND s.is_active = true
+    )), 0)::bigint AS active_staff_count
+FROM m_office o
+WHERE o.id = ANY($1::bigint[])
 ;

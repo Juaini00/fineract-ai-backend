@@ -1,0 +1,27 @@
+info:
+  name: read job - id tidak dikenal
+  type: http
+  seq: 12
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/00000000-0000-0000-0000-000000000000"
+  headers:
+    - name: authorization
+      value: "Bearer {{chatToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-6 — job tak dikenal (atau milik orang lain) → 404 identik, tanpa kebocoran", function () {
+          // API-6: job milik pengguna lain sengaja tampak identik dengan job yang tidak
+          // ada — 404 NOT_FOUND, tanpa membocorkan keberadaan/kepemilikan atau data job.
+          // Catatan: cabang "job pengguna lain" penuh butuh principal kedua yang belum
+          // di-seed (owner-decision, dilacak FIN-45); yang dibuktikan di sini adalah
+          // bahwa id yang tak terotorisasi ke bearer ini menghasilkan 404 non-disclosing.
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().error.code).to.equal("NOT_FOUND");
+          expect(res.getBody().data).to.equal(null);
+          expect(JSON.stringify(res.getBody())).to.not.match(/Queued|scope_json|event_cursor|owner_user_id/);
+        });

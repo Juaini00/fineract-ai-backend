@@ -1,0 +1,37 @@
+info:
+  name: halaman opsi kedua tidak kehilangan kandidat
+  type: http
+  seq: 6
+  description: |
+    Manifest resolver tidak mendeklarasikan ORDER BY. Tanpa urutan yang
+    dipaksakan server, halaman kedua dapat memuat ulang baris halaman pertama
+    sementara kandidat lain tidak pernah terlihat — kehilangan yang tidak
+    muncul sebagai kesalahan apa pun.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{resolverJobId}}/clarification/options?field_id=client_id&cursor=25"
+  headers:
+    - name: authorization
+      value: "Bearer {{resolverToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        const first = bru.getVar("resolverFirstPageIds").split(",");
+
+        test("18 sisanya, dan cursor berakhir", function () {
+          expect(page.options).to.have.lengthOf(18);
+          expect(page.cursor).to.equal(25);
+          expect(page.next_cursor).to.equal(null);
+        });
+
+        test("25 + 18 = 43 = seluruh klien, tanpa tumpang tindih", function () {
+          const second = page.options.map(function (o) { return o.option_id; });
+          expect(first.length + second.length).to.equal(page.matched_total);
+          second.forEach(function (id) {
+            expect(first).to.not.include(id);
+          });
+        });

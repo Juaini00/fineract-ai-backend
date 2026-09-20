@@ -8,6 +8,10 @@ sql_file: queries/datasets/group/groups.source.sql
 data_areas: [group_center_foundation, organization_foundation]
 tables: [m_group, m_group_client]
 metrics: []
+# Tautan ke shape dataset yang dibungkus manifest ini. Sebelumnya tautan itu
+# hanya hidup sebagai komentar di atas, dan koneksi yang hanya berupa prosa
+# adalah persis yang invarian I6 larang.
+resolves: { dataset_id: group.groups, shape_id: group_candidates }
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 output_fields:

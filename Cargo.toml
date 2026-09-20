@@ -36,7 +36,7 @@ jsonwebtoken = "9.3.1"
 petgraph = "0.8.3"
 pgvector = { version = "0.4.2", features = ["sqlx"] }
 rand = "0.8.6"
-redis = { version = "1.2.3", features = ["tokio-comp"] }
+redis = { version = "1.2.3", features = ["tokio-comp", "connection-manager"] }
 reqwest = { version = "0.13.4", features = ["json", "rustls"] }
 rig-core = "0.40.0"
 rust_decimal = { version = "1.42.1", features = ["serde"] }

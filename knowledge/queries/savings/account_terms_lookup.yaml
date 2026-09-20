@@ -16,4 +16,9 @@ output_fields:
   - { name: product_allow_overdraft, type: boolean, sensitivity: public_business }
   - { name: account_overdraft_limit, type: decimal, sensitivity: public_business }
   - { name: product_overdraft_limit, type: decimal, sensitivity: public_business }
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
 timeout_ms: 3000

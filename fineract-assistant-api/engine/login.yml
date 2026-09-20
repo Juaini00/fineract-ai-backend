@@ -1,0 +1,27 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "{{username}}",
+        "password": "{{password}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+        bru.setVar("engineToken", res.getBody().data.access_token);

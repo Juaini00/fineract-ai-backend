@@ -16,16 +16,23 @@ BEGIN;
 DO $$
 DECLARE n INT;
 BEGIN
+    -- `_sqlx_migrations` adalah pembukuan migrator (README memakai
+    -- `sqlx migrate run`), bukan tabel desain — ia tidak ikut dihitung.
     SELECT count(*) INTO n FROM information_schema.tables
-    WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name <> '_sqlx_migrations';
     IF n <> 23 THEN
         RAISE EXCEPTION 'T1 GAGAL: ada % tabel, seharusnya 23', n;
     END IF;
 END $$;
 
 -- Data dasar
+-- Username sengaja BUKAN 'admin': bootstrap local menyeed user bernama itu,
+-- dan tabrakan unique membuat smoke test gagal pada database yang aplikasinya
+-- pernah dijalankan — yaitu persis database yang AGENTS.md minta diuji.
 INSERT INTO users (id, username, password_hash, role)
-VALUES ('11111111-1111-1111-1111-111111111111', 'admin', 'x', 'admin');
+VALUES ('11111111-1111-1111-1111-111111111111', 'schema-smoke-admin', 'x', 'admin');
 
 INSERT INTO chat_sessions (id, owner_user_id)
 VALUES ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111');
@@ -181,19 +188,22 @@ VALUES ('user', 'commit', 'response.committed', 'ok',
 -- ============================================================
 DELETE FROM chat_sessions WHERE id = '22222222-2222-2222-2222-222222222222';
 
+-- Hitungan DIBATASI pada baris yang di-seed test ini, bukan pada seluruh tabel:
+-- `count(*) FROM chat_jobs` hanya benar pada database kosong, dan AGENTS.md
+-- justru meminta smoke test dijalankan terhadap database yang dipakai aplikasi.
 DO $$
 DECLARE n INT;
 BEGIN
-    SELECT count(*) INTO n FROM chat_jobs;
+    SELECT count(*) INTO n FROM chat_jobs WHERE session_id = '22222222-2222-2222-2222-222222222222';
     IF n <> 0 THEN RAISE EXCEPTION 'T9 GAGAL: job seharusnya ikut CASCADE'; END IF;
-    SELECT count(*) INTO n FROM session_memory;
+    SELECT count(*) INTO n FROM session_memory WHERE session_id = '22222222-2222-2222-2222-222222222222';
     IF n <> 0 THEN RAISE EXCEPTION 'T9 GAGAL: memori seharusnya ikut CASCADE'; END IF;
-    SELECT count(*) INTO n FROM clarification_forms;
+    SELECT count(*) INTO n FROM clarification_forms WHERE job_id = '33333333-3333-3333-3333-333333333333';
     IF n <> 0 THEN RAISE EXCEPTION 'T9 GAGAL: form seharusnya ikut CASCADE'; END IF;
-    SELECT count(*) INTO n FROM job_responses;
+    SELECT count(*) INTO n FROM job_responses WHERE job_id = '33333333-3333-3333-3333-333333333333';
     IF n <> 0 THEN RAISE EXCEPTION 'T9 GAGAL: response seharusnya ikut CASCADE'; END IF;
     -- Audit TIDAK ikut terhapus (invarian I8). job_id menggantung adalah NORMAL.
-    SELECT count(*) INTO n FROM audit_events;
+    SELECT count(*) INTO n FROM audit_events WHERE job_id = '33333333-3333-3333-3333-333333333333';
     IF n <> 1 THEN RAISE EXCEPTION 'T9 GAGAL: audit tidak boleh ikut terhapus, ada % baris', n; END IF;
 END $$;
 
@@ -235,6 +245,19 @@ BEGIN
     WHERE from_currency_code = 'USD' AND to_currency_code = 'IDR'
       AND rate_type = 'closing' AND effective_date = DATE '2026-09-01';
     IF n <> 2 THEN RAISE EXCEPTION 'T11 GAGAL: koreksi harus menjadi baris baru, ada %', n; END IF;
+END $$;
+
+-- ============================================================
+-- T12. §6.4 — outcome CHECK admits Cancelled/Expired (FIN-29)
+-- ============================================================
+DO $$
+DECLARE d TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(oid) INTO d FROM pg_constraint
+    WHERE conrelid = 'chat_jobs'::regclass AND conname = 'chat_jobs_outcome_check';
+    IF d IS NULL OR d NOT LIKE '%Cancelled%' OR d NOT LIKE '%Expired%' THEN
+        RAISE EXCEPTION 'T12 GAGAL: chat_jobs_outcome_check harus mengizinkan Cancelled/Expired (§6.4), def=%', d;
+    END IF;
 END $$;
 
 ROLLBACK;

@@ -2,8 +2,9 @@ id: organization_office_savings_summary
 status: approved_mvp
 domain: organization
 display_name: Office Savings Summary
-description: Return per-office savings account counts and total balance within the caller's authorized
-  scope, ranked by total balance.
+description: Return savings account counts and total balance per office and currency within the caller's
+  authorized scope, ranked by total balance. Grain is one row per office and currency — balances of
+  different currencies are never consolidated. Offices without any savings account are omitted.
 data_areas:
 - organization_foundation
 - client_foundation
@@ -32,6 +33,7 @@ defaults:
   authorized_scope_only: true
 guards:
   require_office_scope: true
+  snapshot_only: true
   max_limit: 100
 checks:
 - id: query_exists

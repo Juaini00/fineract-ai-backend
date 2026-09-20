@@ -1,0 +1,40 @@
+info:
+  name: dokumen skip menyatakan gap-nya
+  type: http
+  seq: 16
+  description: |
+    engine.md: `SkippedByUser` hanya sah dengan `Partial` atau `Unknown`;
+    `Complete` DILARANG. Tidak ada output node yang durable di sini, jadi
+    hasilnya TIDAK DIKETAHUI — bukan "sebagian" yang menyiratkan ada sesuatu
+    untuk dilihat.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{skipJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const gap = document.blocks_json.find(function (block) {
+          return block.block_id === "skipped_inputs";
+        });
+
+        test("kind='skipped' dengan completeness yang sah", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("skipped");
+          expect(document.outcome).to.equal("SkippedByUser");
+          expect(document.completeness).to.equal("Unknown");
+          expect(document.completeness).to.not.equal("Complete");
+          expect(document.completeness_reason).to.equal("skipped_by_user");
+        });
+
+        test("input yang tidak pernah diisi disebut namanya (I5)", function () {
+          expect(gap).to.not.equal(undefined);
+          expect(gap.unanswered_fields).to.include("search");
+          expect(gap.completed_nodes).to.equal(0);
+        });

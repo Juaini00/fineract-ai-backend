@@ -1,0 +1,19 @@
+info:
+  name: refresh - setelah logout
+  type: http
+  seq: 13
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/refresh"
+  headers:
+    - name: cookie
+      value: "refresh_token={{logoutRefreshToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401: session yang dicabut tidak dapat diperpanjang", function () {
+          expect(res.getStatus()).to.equal(401);
+        });

@@ -1,0 +1,42 @@
+info:
+  name: skip menutup job sebagai SkippedByUser
+  type: http
+  seq: 15
+  description: |
+    Skip BUKAN cancel. Ia memakai endpoint yang sama dengan jawaban, berakhir
+    `Completed`/`SkippedByUser`, dan WAJIB menghasilkan response document —
+    cancel berakhir `Cancelled` tanpa kewajiban dokumen. Menggabungkan keduanya
+    akan membuat "pengguna berhenti bertanya" tidak dapat dibedakan dari
+    "pekerjaan dibatalkan" pada laporan mana pun.
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{skipJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Idempotency-Key
+      value: "{{skipIdemKey}}-skip"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{skipClarificationId}}",
+        "revision": 1,
+        "action": "skip"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = res.getBody().data;
+
+        test("200, bukan 202: skip sudah terminal saat handler membalas", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(body.lifecycle).to.equal("Completed");
+          expect(body.outcome).to.equal("SkippedByUser");
+          expect(body.job_id).to.equal(bru.getVar("skipJobId"));
+        });

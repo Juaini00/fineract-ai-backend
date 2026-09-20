@@ -12,6 +12,17 @@ Berpasangan dengan [knowledge/CARRY-OVER.md](../knowledge/CARRY-OVER.md); baca k
 - **Kontrak kolom output** belum dicocokkan dengan aturan validasi response ([responses.md](../docs/contracts/responses.md)), khususnya penamaan kolom yang menjadi `metric` dan `table`.
 - **Semantik mata uang.** Query yang mengonsolidasi lebih dari satu mata uang wajib memakai `exchange_rates` dan merekam `exchange_rate_id` (#14). Tidak boleh ada konversi dengan kurs yang ditanam di dalam query.
 
+## Sudah ditegakkan mekanis (sejak 2026-09-13)
+
+`cargo run -p app -- catalog` menyiapkan setiap SQL di sini pada schema Fineract
+sungguhan (tanpa menjalankannya) dan membandingkan nama serta urutan kolom
+hasilnya dengan `output_fields` manifesnya. Penegakan office scope diperiksa
+lewat **posisi parameter** bersumber `authorized_scope`: ia wajib muncul sebagai
+`ANY($n...)` dan tidak boleh dapat dilewati dengan NULL.
+
+Yang **masih** belum diperiksa siapa pun: dua kelas timeout, grain/anti-fanout,
+kecocokan kolom dengan aturan validasi response, dan semantik mata uang.
+
 ## Aturan
 
 `PREPARE` yang berhasil hanya membuktikan sintaks dan keberadaan kolom. Ia **tidak** membuktikan angkanya benar, grainnya benar, atau scope-nya ditegakkan. Jalankan contohnya ujung ke ujung dan periksa hasilnya sebelum sebuah query dianggap approved.

@@ -9,6 +9,8 @@ rules:
   - Do not fetch fields that will be omitted.
 sensitivity_classes:
   - public_business
+  # Turunan bertopeng; lihat schema/fineract/columns/sensitivity.yaml.
+  - masked_output
   - sensitive_business_identifier
   - pii
   - security_sensitive

@@ -1,0 +1,70 @@
+info:
+  name: job.resumed lahir saat worker melanjutkan, bukan saat jawaban diterima
+  type: http
+  seq: 11
+  description: |
+    Jawaban yang diterima hanya mengembalikan job ke antrean. Di antara itu dan
+    pengerjaan berikutnya job masih dapat menunggu, kedaluwarsa, atau
+    dibatalkan. Memancarkan `job.resumed` pada penerimaan jawaban berarti
+    memberi tahu pengguna bahwa pekerjaan dilanjutkan pada saat belum ada satu
+    pun worker yang menyentuhnya.
+
+    Urutan inilah buktinya: `clarification.accepted` -> `job.resumed` ->
+    fase -> node -> penyelesaian.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const names = (body.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        const ids = (body.match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+
+        test("job.resumed ada, tepat satu kali", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names.filter(function (n) { return n === "job.resumed"; })).to.have.lengthOf(1);
+        });
+
+        test("ia datang SESUDAH jawaban diterima, bukan bersamaan", function () {
+          expect(names.indexOf("job.resumed")).to.be.above(names.indexOf("clarification.accepted"));
+        });
+
+        test("dan SEBELUM pekerjaan lanjutannya terlihat", function () {
+          expect(names.indexOf("job.resumed")).to.be.below(names.indexOf("node.status_changed"));
+          expect(names.indexOf("job.resumed")).to.be.below(names.lastIndexOf("job.completed"));
+        });
+
+        test("SSE-5 — waiting/submit/reconnect melanjutkan SATU job dengan cursor kontigu", function () {
+          // SSE-5: alur suspend (clarification.required) -> submit (answer.yml)
+          // -> reconnect (GET /events di sini) TIDAK boleh memecah menjadi job
+          // baru. Bukti kontrak: (a) job_id tak berubah lintas suspend/submit/
+          // reconnect, dan (b) SELURUH lifecycle membentuk satu deret cursor
+          // kontigu 1..N tanpa lubang — bukan dua deret terpisah yang di-reset saat
+          // dilanjutkan.
+          //
+          // CATATAN cakupan: klarifikasi tahap-kedua (data-dependent) belum
+          // terbangun (satu putaran klarifikasi hari ini); paruh 'multi-stage' dari
+          // SSE-5 menyusul bersama fitur itu. Yang dibuktikan di sini adalah
+          // kontinuitas satu-job lintas suspend/submit/reconnect.
+          expect(res.getStatus()).to.equal(200);
+          expect(ids.length).to.be.above(0);
+          expect(ids[0]).to.equal(1);                       // deret dimulai di penerimaan job
+          ids.forEach(function (id, index) {
+            expect(id).to.equal(index + 1);                 // kontigu 1..N, tanpa reset saat resume
+          });
+          // clarification & penyelesaian hidup di deret yang SAMA -> satu job.
+          expect(names).to.include("clarification.required");
+          expect(names).to.include("clarification.accepted");
+          expect(names[names.length - 1]).to.equal("job.completed");
+        });

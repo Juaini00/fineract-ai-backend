@@ -4,7 +4,17 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 **Read-only terhadap Fineract.** Jarvis tidak pernah menulis ke Fineract dan tidak menjalankan simulasi — itu urusan engine Fineract. State aplikasi sendiri tersimpan di database terpisah.
 
-> **Status: desain, belum implementasi.** Paket dokumen sudah lengkap untuk lapisan data; beberapa kontrak masih ditulis. Lihat [docs/checklist.md](docs/checklist.md) sebelum menganggap sebuah bagian selesai.
+> **Status: menjawab pertanyaan nyata, dengan progres yang dapat di-stream.**
+> Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus
+> hidup job (T2/T7/T11), planner deterministik (T3), eksekusi capability ke
+> Fineract (T4), klarifikasi bertipe (T5/T6), resolver opsi untuk slot identitas,
+> skip (T8), dan SSE dengan replay dari cursor sudah berjalan dan terverifikasi
+> terhadap data nyata. Dataset berchunk, memori session, dan integrasi LLM belum
+> ada.
+>
+> **Urutan pengerjaan dan gerbang kelulusan: [docs/build-order.md](docs/build-order.md).**
+> Untuk integrasi frontend: [docs/contracts/api-reference.md](docs/contracts/api-reference.md).
+> `docs/checklist.md` melacak kelengkapan *dokumentasi*, bukan status build.
 
 ## Dokumen
 
@@ -17,8 +27,10 @@ Baca berurutan:
 | [Database design](docs/data/database-design.md) | **Invarian, matriks koneksi, ERD, batas transaksi** |
 | [Carry-over](docs/migration/carry-over.md) | Keputusan #1–#15 dan alasannya |
 | [Runtime](docs/operations/runtime.md) | Parameter operasional + pemicu revisi |
-| [API](docs/contracts/api.md) · [SSE](docs/contracts/sse.md) · [Klarifikasi](docs/contracts/clarifications.md) · [Responses](docs/contracts/responses.md) | Kontrak antarmuka |
-| [Checklist](docs/checklist.md) | Apa yang sudah dan belum selesai |
+| [API](docs/contracts/api.md) · [SSE](docs/contracts/sse.md) · [Klarifikasi](docs/contracts/clarifications.md) · [Responses](docs/contracts/responses.md) | Kontrak antarmuka yang disepakati |
+| [**Status implementasi**](docs/build-order.md) | Tangga lapisan + gerbang kelulusan. Urutan pengerjaan yang mengikat |
+| [**Referensi API**](docs/contracts/api-reference.md) | Permukaan HTTP yang benar-benar ada — titik mulai frontend |
+| [Checklist](docs/checklist.md) | Kelengkapan **dokumentasi**; `[x]` berarti tertulis, bukan terbangun |
 
 Kalau hanya sempat membaca satu, baca **§1 Invarian** dan **§2 Matriks koneksi** pada `database-design.md`. Keduanya adalah aturan yang membuat bagian-bagian sistem ini tetap terhubung.
 
@@ -46,6 +58,42 @@ Menguji **perilaku**, bukan sekadar DDL berhasil di-parse. Ia gagal keras bila s
 
 Jalankan setiap kali migrasi berubah.
 
+## Integration test
+
+**Tanpa test integrasi di dalam Rust — ini keputusan, bukan kebetulan.**
+Permukaan HTTP diuji sebagai HTTP lewat [Bruno CLI](https://docs.usebruno.com)
+terhadap aplikasi yang benar-benar berjalan dan PostgreSQL yang benar-benar
+dimigrasi. `cargo test` hanya untuk logika murni (config, token, hashing,
+binding parameter, komposisi blok). Aturan lengkap beserta format berkasnya ada
+di [AGENTS.md](AGENTS.md#integration-test-bruno-cli-bukan-test-integrasi-di-dalam-rust).
+
+```bash
+npm install -g @usebruno/cli     # sekali saja
+./scripts/integration-test.sh    # katalog, lalu dua tahap Bruno
+./scripts/integration-test.sh auth            # satu folder saja
+./scripts/integration-test.sh engine          # tahap engine saja
+PORT=3210 ./scripts/integration-test.sh       # port lain bila 3107 dipakai
+KEEP_RUNNING=1 ./scripts/integration-test.sh  # biarkan app hidup untuk debug
+```
+
+Koleksi ada di `fineract-assistant-api/` (format OpenCollection 1.0):
+`health/`, `auth/`, `chat/`, `engine/`, `clarification/`. Request di dalam satu folder
+**berurutan dan saling bergantung** — rotasi refresh token hanya dapat diuji
+setelah login, dan deteksi pemakaian ulang hanya setelah rotasi.
+
+Runner menjalankannya dalam **dua tahap**. `health`/`auth`/`chat` berjalan
+dengan `WORKER_ENABLED=false` karena folder `chat` menguji semantik penerimaan
+(job tetap `Queued`, satu job nonterminal per session); dengan worker menyala,
+job selesai dalam milidetik dan hasil test bergantung pada balapan, bukan pada
+perilaku yang diuji. `engine`, `clarification`, `resolver` dan `sse` berjalan dengan worker
+menyala untuk membuktikan job bergerak sampai terminal tanpa campur tangan
+klien, dan bahwa job yang ditangguhkan melanjutkan setelah dijawab.
+
+Runner menunggu `/health` benar-benar `200`, bukan sekadar port terbuka: port
+yang sudah menerima koneksi sementara PostgreSQL belum terjangkau menghasilkan
+kegagalan test yang menyesatkan. Ia juga mematikan app dengan SIGTERM, sehingga
+jalur graceful shutdown ikut terlatih setiap run.
+
 ## Struktur
 
 ```
@@ -63,9 +111,12 @@ Tiga crate, dan jumlahnya tetap tiga. Nama singkat, tanpa awalan `ai_report_*`.
 
 ## Yang belum ada
 
-- `migrations/` — ditulis baru dari `database-design.md` §4–§7, **tidak** disalin dari repo lama. Schema-nya berbeda fundamental.
-- Kode aplikasi — crate masih kerangka kosong.
-- `docs/security/access-data-policy.md`, `docs/data/analytical-contracts.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
+- Resolver untuk `account_number`: slot itu bersumber `transient_sensitive_input` dan katalog belum punya shape kandidat rekening, jadi permintaan yang memerlukannya dijawab `Unsupported` dengan alasan `identity_slot_without_resolver` — bukan ditanyakan sebagai teks bebas (K1).
+- Klarifikasi bertahap: form kedua setelah sebuah slot terjawab.
+- Plan multi-node dan fan-in: planner menghasilkan tepat satu node `CuratedQuery`.
+- Analytical contract (Mode 2), dataset berchunk/handle, memori session.
+- Integrasi LLM/embedding (narasi additive), dataset berchunk, dan session memory.
+- `docs/security/access-data-policy.md`, `docs/operations/observability.md`, `docs/verification/acceptance.md`.
 
 ## Aturan yang tidak boleh dilanggar
 
