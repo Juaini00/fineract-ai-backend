@@ -11,6 +11,9 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("401", function () {
+        test("API-6 — tanpa bearer, job tidak dapat diinspeksi: 401, tanpa kebocoran data", function () {
+          // API-6: tanpa identitas bearer, job/cursor/snapshot tidak boleh terbaca.
           expect(res.getStatus()).to.equal(401);
+          expect(res.getBody().data).to.equal(null);
+          expect(JSON.stringify(res.getBody())).to.not.match(/Queued|scope_json|event_cursor|owner_user_id/);
         });

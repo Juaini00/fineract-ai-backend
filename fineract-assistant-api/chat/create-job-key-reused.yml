@@ -25,7 +25,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("409: fingerprint payload berbeda terdeteksi", function () {
+        test("API-2 — kunci sama + payload berbeda ditolak 409, bukan mereplay ack lain", function () {
+          // API-2: kunci yang dipakai ulang dengan payload berbeda TIDAK boleh diam-diam
+          // mengembalikan ack lama maupun membuat job baru — ia konflik.
           expect(res.getStatus()).to.equal(409);
           expect(res.getBody().error.code).to.equal("CONFLICT");
+          expect(res.getBody().data).to.equal(null);
         });

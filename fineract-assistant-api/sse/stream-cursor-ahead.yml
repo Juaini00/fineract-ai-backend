@@ -25,3 +25,18 @@ runtime:
           expect(message).to.contain(bru.getVar("sseLastSequence"));
           expect(message).to.contain("fresh job snapshot");
         });
+
+        test("SSE-4 — cursor tak sah menuntut snapshot baru eksplisit, bukan gap senyap", function () {
+          // SSE-4: cursor 999999 mendahului riwayat job (kasus 'cursor tak dapat
+          // direplay'). Kontrak (sse.md aturan 5, I5 tanpa penghilangan senyap)
+          // MEWAJIBKAN sinyal eksplisit 'ambil snapshot baru' — bukan diam-diam
+          // mulai dari nol (yang akan memutar mundur UI) dan bukan stream kosong
+          // yang menyembunyikan riwayat hilang. 409 menyebut sequence terakhir
+          // yang benar sehingga klien tahu persis dari mana men-snapshot ulang.
+          expect(res.getStatus()).to.equal(409);
+          const body = String(res.getBody());
+          expect(body).to.not.match(/^event: /m);  // tidak ada event yang bocor sebagai 'kemajuan'
+          const message = res.getBody().error.message;
+          expect(message).to.contain("fresh job snapshot");
+          expect(message).to.contain(bru.getVar("sseLastSequence"));
+        });

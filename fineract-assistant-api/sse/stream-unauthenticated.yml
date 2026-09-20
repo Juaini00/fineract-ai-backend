@@ -14,6 +14,9 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("401", function () {
+        test("API-6 — tanpa bearer, cursor/stream event tidak dapat diinspeksi: 401", function () {
+          // API-6: berlangganan cursor SSE menuntut identitas bearer dari header;
+          // tanpa itu tidak ada satu pun event yang bocor.
           expect(res.getStatus()).to.equal(401);
+          expect(String(res.getBody())).to.not.match(/^event: /m);
         });

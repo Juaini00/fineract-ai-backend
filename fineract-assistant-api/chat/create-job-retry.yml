@@ -25,7 +25,17 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("acknowledgement tersimpan dikembalikan: job_id sama, tanpa job kedua", function () {
+        test("API-2 — retry kunci+payload sama mengembalikan ack tersimpan: job_id sama, tanpa job kedua", function () {
+          // API-2: klien yang tak pernah melihat 202 pertama lalu mengulang dengan
+          // Idempotency-Key yang SAMA harus mencapai job yang sama, bukan duplikat.
           expect(res.getStatus()).to.equal(202);
           expect(res.getBody().data.job_id).to.equal(bru.getVar("jobId"));
+        });
+
+        test("API-2 — replay adalah ack tersimpan pada session yang sama, bukan job baru", function () {
+          // Ack tersimpan yang di-replay mengembalikan job_id yang sama pada session
+          // yang sama. Bukti "tepat satu baris job" di permukaan HTTP diberikan oleh
+          // create-job-second-active (kunci berbeda → 409 satu-job-per-session):
+          // seandainya retry ini membuat job kedua, invarian itu sudah dilanggar lebih dulu.
+          expect(res.getBody().data.session_id).to.equal(bru.getVar("sessionId"));
         });

@@ -25,6 +25,8 @@ runtime:
           expect(res.getStatus()).to.equal(401);
         });
 
-        test("tidak dapat dibedakan dari password salah (anti enumerasi akun)", function () {
+        test("API-6 — body user-tak-dikenal identik byte-per-byte dengan password-salah (anti enumerasi akun)", function () {
+          // API-6: identitas ditegakkan lewat bearer; kredensial salah vs user tak ada
+          // tidak boleh menjadi oracle enumerasi. Body dibandingkan byte-per-byte.
           expect(JSON.stringify(res.getBody())).to.equal(bru.getVar("wrongPasswordBody"));
         });

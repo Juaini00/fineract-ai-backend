@@ -14,7 +14,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("200 dengan snapshot state yang konsisten", function () {
+        test("API-1 — job_id langsung terbaca di request baru, tetap Queued (worker mati)", function () {
+          // API-1: job_id yang di-ack POST /chat/jobs harus segera terbaca lewat
+          // GET terpisah — bukti penerimaan durable, bukan state dalam memori. Worker
+          // mati di tahap ini, jadi masih Queued: ack != eksekusi.
           expect(res.getStatus()).to.equal(200);
           const data = res.getBody().data;
           expect(data.id).to.equal(bru.getVar("jobId"));

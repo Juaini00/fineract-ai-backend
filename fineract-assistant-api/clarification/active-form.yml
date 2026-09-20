@@ -29,5 +29,8 @@ runtime:
           expect(form.expires_at).to.be.a("string");
         });
 
+        // Simpan payload form apa adanya untuk perbandingan byte-per-byte pada
+        // refresh (API-4) dan pembuktian tak-bermutasi setelah submit invalid (API-5).
+        bru.setVar("clarifyFormBody", JSON.stringify(res.getBody().data));
         bru.setVar("clarificationId", form.clarification_id);
         bru.setVar("clarificationRevision", form.revision);

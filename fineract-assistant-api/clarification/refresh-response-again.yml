@@ -1,0 +1,24 @@
+info:
+  name: refresh - baca ulang hasil terminal identik
+  type: http
+  seq: 9.2
+  description: |
+    API-4 (paruh terminal). Refresh: baca ulang dokumen hasil. Harus identik
+    byte-per-byte dengan pembacaan pertama — dokumen yang sama disajikan, bukan
+    diregenerasi. Refresh adalah pembacaan: tidak ada panggilan LLM.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("API-4 — refresh mengembalikan dokumen hasil yang sama persis (byte-per-byte)", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(JSON.stringify(res.getBody().data)).to.equal(bru.getVar("clarifyResponseBody"));
+        });

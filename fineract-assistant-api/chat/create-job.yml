@@ -31,14 +31,21 @@ runtime:
         bru.setVar("idemKey", "bruno-" + unique);
     - type: tests
       code: |
-        test("202: diterima secara durable, bukan 'analisis berhasil'", function () {
+        test("API-1 — 202 hanya sesudah intake tx commit durable, bukan 'analisis berhasil'", function () {
+          // API-1: acknowledgement diterbitkan HANYA setelah penerimaan durable.
+          // Worker mati di tahap ini, jadi 202 + Queued membuktikan ack mencerminkan
+          // commit intake (T1), bukan eksekusi.
           expect(res.getStatus()).to.equal(202);
-          const data = res.getBody().data;
+          const body = res.getBody();
+          expect(body.success).to.equal(true);
+          expect(body.error).to.equal(null);
+          const data = body.data;
           expect(data.lifecycle).to.equal("Queued");
           expect(data.session_id).to.equal(bru.getVar("sessionId"));
+          expect(data.job_id).to.be.a("string").and.not.empty;
         });
 
-        test("acknowledgement membawa cursor event pertama", function () {
+        test("API-1 — acknowledgement membawa cursor event pertama untuk berlangganan", function () {
           expect(res.getBody().data.event_cursor).to.equal(1);
         });
 

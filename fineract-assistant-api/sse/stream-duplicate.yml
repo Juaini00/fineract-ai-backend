@@ -27,3 +27,17 @@ runtime:
           expect(res.getStatus()).to.equal(200);
           expect(ids(body)).to.equal(ids(bru.getVar("sseFullBody")));
         });
+
+        test("SSE-3 — reconnect + pengiriman ulang tidak mengubah state yang direkonstruksi", function () {
+          // SSE-3: ini adalah reconnect kedua (dari cursor=0, mensimulasikan
+          // koneksi yang putus lalu tersambung lagi). Kontrak tidak menjanjikan
+          // exactly-once — ia menjanjikan duplikat AMAN: sequence yang sama tiba
+          // lagi, tetapi karena tiap sequence idempoten, state hasil rekonstruksi
+          // (kumpulan id unik) tidak berubah. Tidak ada transisi hilang, tidak ada
+          // duplikat yang menggeser hasil.
+          const first = ids(bru.getVar("sseFullBody")).split(",");
+          const again = ids(body).split(",");
+          expect(again).to.deep.equal(first);           // pengiriman ulang identik
+          const uniq = again.filter(function (v, i) { return again.indexOf(v) === i; });
+          expect(uniq).to.have.lengthOf(again.length);  // idempoten: tak ada dup dalam satu pembacaan
+        });

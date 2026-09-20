@@ -25,3 +25,15 @@ runtime:
           expect(job.outcome).to.equal("Answered");
           expect(String(job.last_event_sequence)).to.equal(bru.getVar("sseLastSequence"));
         });
+
+        test("SSE-3 — memutus koneksi bukan cancel: job tetap seperti semula", function () {
+          // SSE-3 (paruh disconnect != cancel): stream dibuka lalu ditutup berkali
+          // -kali oleh test-test sebelumnya (replay penuh, replay dari cursor,
+          // pengiriman ulang). Kalau memutus koneksi diperlakukan sebagai cancel,
+          // lifecycle akan bergeser ke Cancelled/Cancelling dan cursor bertambah.
+          // Ia tetap Completed/Answered dengan last_event_sequence yang sama —
+          // membuktikan membaca/menutup stream adalah proyeksi baca murni.
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.lifecycle).to.not.be.oneOf(["Cancelled", "Cancelling"]);
+          expect(String(job.last_event_sequence)).to.equal(bru.getVar("sseLastSequence"));
+        });

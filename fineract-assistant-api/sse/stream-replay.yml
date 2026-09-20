@@ -84,4 +84,82 @@ runtime:
           expect(body).to.not.contain(".sql");
         });
 
+        // Objek event lengkap dipakai kembali oleh SSE-6/7/8.
+        const dataLines = body.split("\n").filter(function (line) { return line.startsWith("data: "); });
+        const events = dataLines.map(function (line) { return JSON.parse(line.slice(6)); });
+
+        test("SSE-6 — frame kemajuan membawa plan_version yang benar; hitungan node tidak melebihi yang diakui", function () {
+          // SSE-6: setiap frame yang memancarkan plan_version HARUS membawa versi
+          // plan yang berlaku (di sini plan_version 1 — belum ada re-plan). Node
+          // yang dilaporkan tidak boleh melampaui set node plan itu: node.status_
+          // changed hanya menyebut node yang benar-benar diakui ('main', attempt 1).
+          //
+          // CATATAN cakupan: node paralel dan re-plan (plan_version naik, hitungan
+          // node di-reset ke set baru) menyusul bersama tiket fan-in L8; yang
+          // dibuktikan di sini adalah PELAPORAN SSE-nya — plan_version dibawa per
+          // frame dan hitungan node tidak pernah mengarang node di luar plan.
+          events.forEach(function (ev) {
+            if (ev.plan_version !== null && ev.plan_version !== undefined) {
+              expect(ev.plan_version).to.equal(1);
+            }
+          });
+          const nodeEvents = events.filter(function (ev) { return ev.event === "node.status_changed"; });
+          expect(nodeEvents.length).to.be.above(0);
+          const nodeIds = nodeEvents.map(function (ev) { return ev.node_id; })
+            .filter(function (id, i, arr) { return arr.indexOf(id) === i; });
+          expect(nodeIds).to.deep.equal(["main"]);          // tak ada node di luar plan
+          nodeEvents.forEach(function (ev) {
+            expect(ev.plan_version).to.equal(1);
+            expect(ev.node_attempt).to.equal(1);
+          });
+        });
+
+        test("SSE-7 — heartbeat bukan kemajuan; state pulih dari deret durable PostgreSQL", function () {
+          // SSE-7 (paruh yang dapat dibuktikan Bruno): komentar keep-alive menjaga
+          // transport, tetapi TIDAK boleh muncul sebagai event durable maupun
+          // menggeser cursor — kalau tidak, heartbeat akan menyamar sebagai
+          // kemajuan dan menutupi worker mati. Dan seluruh state di-rekonstruksi
+          // dari deret sequence PostgreSQL 1..N, bukan dari notifikasi.
+          //
+          // Bukti recovery-tanpa-Redis: runner MENGULANG folder sse dengan
+          // SSE_NOTIFICATIONS_ENABLED=false (stage 3). Assertion ini identik di
+          // kedua pass — kalau lulus tanpa notifikasi, state memang bersumber dari
+          // durable events, bukan Redis.
+          //
+          // CATATAN cakupan: 'worker dibunuh -> lease kedaluwarsa -> job dapat
+          // diklaim ulang' butuh kendali proses yang tidak disediakan runner ->
+          // BLOCKED pada dukungan harness.
+          expect(body).to.not.match(/^event: *$/m);         // keep-alive tak jadi event kosong
+          const heartbeatAsEvent = events.filter(function (ev) {
+            return ev.event === "keep-alive" || ev.event === "heartbeat";
+          });
+          expect(heartbeatAsEvent).to.have.lengthOf(0);
+          // Setiap event durable membawa sequence integer -> cursor dari PG, bukan
+          // dari sinyal transport.
+          events.forEach(function (ev) { expect(ev.sequence).to.be.a("number"); });
+        });
+
+        test("SSE-8 — response akhir dibawa sebagai referensi berversi, bukan salinan hasil utuh", function () {
+          // SSE-8 (paruh yang dapat dibuktikan Bruno, PRD §6): frame job.completed
+          // membawa response_version (referensi ke dokumen hasil yang diambil lewat
+          // endpoint terpisah) dan flag payload_truncated — BUKAN menyalin baris
+          // hasil mentah ke dalam payload SSE. Ini yang menjaga buffer tetap
+          // terbatas dan mencegah kebocoran data besar lewat stream.
+          //
+          // CATATAN cakupan: klien lambat (buffer tak terbatas), auth expiry di
+          // tengah stream, dan proxy buffering menuntut kendali harness/proxy dan
+          // fitur auth-mid-stream yang belum terbangun -> BLOCKED.
+          const completed = events[events.length - 1];
+          expect(completed.event).to.equal("job.completed");
+          expect(completed.response_version).to.be.a("number"); // referensi berversi
+          expect(completed).to.have.property("payload_truncated");
+          expect(completed.payload_truncated).to.be.a("boolean");
+          // Payload tiap frame terbatas: tak ada frame yang membengkak jadi salinan
+          // hasil (batas longgar 8 KiB per frame — jauh di atas envelope wajar,
+          // jauh di bawah dump hasil).
+          dataLines.forEach(function (line) {
+            expect(line.length).to.be.below(8192);
+          });
+        });
+
         bru.setVar("sseFullBody", body);

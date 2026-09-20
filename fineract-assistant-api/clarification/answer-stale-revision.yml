@@ -26,6 +26,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("409: form basi tidak dapat menyunting riwayat yang diterima", function () {
+        test("API-5 — submit terhadap revisi basi ditolak 409 dan tidak melanjutkan job", function () {
+          // API-5: pengiriman terhadap revisi form yang sudah usang ditolak — job tidak
+          // maju/resume. (Bukti job tetap WaitingForUser di refresh-form.yml berikutnya.)
           expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().error.code).to.equal("CONFLICT");
+          expect(res.getBody().data).to.equal(null);
         });

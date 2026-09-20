@@ -11,3 +11,9 @@ variables:
     value: admin
   - name: password
     value: password123
+  # Principal kedua (AUTH_BOOTSTRAP_SECOND_*), untuk uji isolasi kepemilikan
+  # lintas user (API-6). Hanya berlaku di APP_ENV=local.
+  - name: username2
+    value: auditor
+  - name: password2
+    value: password123
