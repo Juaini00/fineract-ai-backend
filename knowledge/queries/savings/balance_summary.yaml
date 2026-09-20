@@ -22,6 +22,9 @@ parameters:
     type: array_bigint
     required: false
 output_fields:
+  - name: currency_code
+    type: string
+    sensitivity: public_business
   - name: account_count
     type: bigint
     sensitivity: public_business

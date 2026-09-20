@@ -7,6 +7,7 @@ data_areas:
 tables:
   - m_office
   - m_savings_account_transaction
+  - m_savings_account
 metrics:
   - savings.transaction_count
 parameters:
@@ -28,6 +29,9 @@ output_fields:
     type: bigint
     sensitivity: public_business
   - name: office_name
+    type: string
+    sensitivity: public_business
+  - name: currency_code
     type: string
     sensitivity: public_business
   - name: transaction_count
