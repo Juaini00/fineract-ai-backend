@@ -45,6 +45,9 @@ output_fields:
   - name: to_date
     type: date
     sensitivity: public_business
+  - name: currency_code
+    type: string
+    sensitivity: public_business
   - name: total_deposit_amount
     type: decimal
     sensitivity: public_business

@@ -34,6 +34,9 @@ output_fields:
   - name: month_start
     type: date
     sensitivity: public_business
+  - name: currency_code
+    type: string
+    sensitivity: public_business
   - name: total_deposit_amount
     type: decimal
     sensitivity: public_business
