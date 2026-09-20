@@ -1,6 +1,6 @@
 SELECT
     c.id AS client_id,
-    c.display_name,
+    c.display_name AS client_display_name,
     o.name AS office_name,
     CASE c.status_enum
         WHEN 100 THEN 'pending'

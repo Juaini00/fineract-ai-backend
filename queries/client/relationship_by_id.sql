@@ -1,6 +1,6 @@
 SELECT
     c.id AS client_id,
-    c.display_name,
+    c.display_name AS client_display_name,
     o.id AS office_id,
     o.name AS office_name,
     COUNT(sa.id) FILTER (WHERE sa.status_enum = 300) OVER (PARTITION BY c.id)::bigint AS active_savings_account_count,

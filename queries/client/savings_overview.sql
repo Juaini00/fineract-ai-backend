@@ -1,6 +1,6 @@
 SELECT
     c.id AS client_id,
-    c.display_name,
+    c.display_name AS client_display_name,
     o.id AS office_id,
     o.name AS office_name,
     accounts.savings_account_count,
