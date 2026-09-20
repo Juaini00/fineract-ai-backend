@@ -31,4 +31,4 @@ SELECT
     running_balance
 FROM base
 ORDER BY transaction_date DESC, savings_transaction_id DESC
-LIMIT 100
+LIMIT $3::int

@@ -12,5 +12,4 @@ FROM m_client c
 JOIN m_office o ON o.id = c.office_id
 WHERE c.office_id = ANY($1::bigint[])
   AND c.display_name ILIKE '%' || $2::text || '%'
-ORDER BY c.display_name ASC, c.id ASC
-LIMIT 20;
+ORDER BY c.display_name ASC, c.id ASC;

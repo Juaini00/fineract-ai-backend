@@ -54,8 +54,8 @@ langsung yang ditulis terpisah.
 | `savings_balance_summary` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
 | `savings_deposit_monthly_breakdown` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
 | `savings_withdrawal_monthly_breakdown` | mencampur mata uang (#14) — **diperbaiki L1.1 (pisah per mata uang)** |
-| `client_name_lookup` | `LIMIT 20` keras, memotong hasil diam-diam |
-| `savings_client_activity` | `LIMIT 100` keras, memotong hasil diam-diam |
+| `client_name_lookup` | `LIMIT 20` keras, memotong hasil diam-diam — **diperbaiki L1.2**: cap dibuang, populasi penuh (39 = 39) |
+| `savings_client_activity` | `LIMIT 100` keras, memotong hasil diam-diam — **diperbaiki L1.2**: `LIMIT` jadi parameter `limit` ber-`max_limit` (bound & dideklarasikan), total sebenarnya 4114 diungkap lewat limitation |
 | `savings_charge_type_identity_resolve` | grain resolver ganda untuk entity yang sama — **diperbaiki L1.3 (24 = 24)** |
 
 `organization_office_summary` **gagal saat diukur pertama kali** (fan-out

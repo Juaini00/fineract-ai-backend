@@ -11,6 +11,7 @@ metrics: [savings.transaction_count]
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
   - { name: client_id, type: integer, required: true }
+  - { name: limit, type: integer, required: true }
 output_fields:
   - { name: savings_transaction_id, type: bigint, sensitivity: public_business }
   - { name: savings_account_id, type: bigint, sensitivity: public_business }

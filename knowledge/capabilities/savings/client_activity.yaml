@@ -12,7 +12,7 @@ display_name: Savings Client Activity
 # current one-probe-per-capability limit while still answering 012 scenario
 # A1 (client -> account activity) since the account id is a returned column.
 continuation: true
-description: Non-reversed savings transactions for a client resolved by name, newest first, within the caller's authorized office scope. The result is capped at 100 rows inside the query and the cap is not a parameter, so an active client returns only the 100 newest transactions, not the full history.
+description: Non-reversed savings transactions for a client resolved by name, newest first, within the caller's authorized office scope. Row count is bound by an explicit, declared `limit` parameter (guards.max_limit) — never a silent hard cap; when a client's history exceeds the page the response discloses the true total via a limitation, so a subset is never presented as the full history.
 data_areas:
   - organization_foundation
   - client_foundation
@@ -39,6 +39,7 @@ defaults:
 guards:
   require_office_scope: true
   snapshot_only: true
+  max_limit: 100
   pii:
     returns_pii: true
     never_return:
@@ -55,6 +56,8 @@ checks:
     rule: client identity fields must be redacted when caller lacks can_view_pii.
   - id: dataset_recipe_valid
     rule: dataset recipe IDs, filters, and projection must resolve against the approved dataset.
+  - id: list_bounded
+    rule: max_limit must bound returned rows; the limit is a declared parameter, never a silent hard cap.
 parameters:
   office_ids:
     type: integer_array
@@ -69,6 +72,11 @@ parameters:
       dataset_id: client.identity
       shape_id: identity_candidates
       output_slot: client_id
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 100
 dataset_recipe:
   dataset_id: savings.transactions
   shape_id: activity_rows
