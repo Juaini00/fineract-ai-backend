@@ -1,0 +1,19 @@
+info:
+  name: assertion retrieval saldo nasabah Indonesia
+  type: http
+  seq: 23
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{indonesianClientBalanceJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-40: saldo nasabah Indonesia memilih capability terindeks", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.evidence_json.lineage[0].capability_id)
+            .to.equal("client_top_n_by_savings_balance");
+        });

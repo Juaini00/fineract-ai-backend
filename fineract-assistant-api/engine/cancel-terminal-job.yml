@@ -17,5 +17,7 @@ runtime:
         test("job terminal tidak pernah dibuka kembali", function () {
           expect(res.getStatus()).to.equal(200);
           expect(res.getBody().data.lifecycle).to.equal("Completed");
-          expect(res.getBody().data.last_event_sequence).to.equal(3);
+          // FIN-40 portfolio followed the documented answered sequence; a
+          // terminal cancel remains a no-op and must not append an event.
+          expect(res.getBody().data.last_event_sequence).to.equal(5);
         });

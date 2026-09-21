@@ -1,0 +1,20 @@
+info:
+  name: assertion retrieval aktivasi nasabah Indonesia
+  type: http
+  seq: 26
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{indonesianActivationJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-40: aktivasi nasabah Indonesia memilih capability terindeks", function () {
+          expect(res.getStatus()).to.equal(200);
+          const lineage = res.getBody().data.evidence_json.lineage[0];
+          expect(lineage.capability_id).to.equal("client_activation_monthly_breakdown");
+          expect(lineage.query_id).to.equal("client.activation_monthly_breakdown");
+        });

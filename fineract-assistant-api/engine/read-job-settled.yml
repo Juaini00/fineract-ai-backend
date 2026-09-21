@@ -22,13 +22,12 @@ runtime:
           expect(job.terminal_at).to.be.a("string");
         });
 
-        test("Completed + Unsupported wajib berpasangan dengan completeness Unknown", function () {
-          // engine.md: tidak ada klaim kelengkapan analitis atas data sumber.
-          expect(job.outcome).to.equal("Unsupported");
-          expect(job.completeness).to.equal("Unknown");
+        test("FIN-40: Completed + Answered adalah hasil retrieval portfolio", function () {
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness).to.equal("Complete");
+          expect(job.final_response_version).to.equal(1);
         });
 
-        test("cursor event maju: accepted, phase_changed, completed", function () {
-          expect(job.last_event_sequence).to.equal(3);
-          expect(job.final_response_version).to.equal(1);
+        test("cursor event mencatat accepted, planning, node, dan completed", function () {
+          expect(job.last_event_sequence).to.equal(5);
         });

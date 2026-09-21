@@ -1,0 +1,22 @@
+info:
+  name: session pertanyaan saldo kantor Indonesia
+  type: http
+  seq: 18
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno Indonesian office balance retrieval" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("indonesianOfficeBalanceSessionId", res.getBody().data.id);

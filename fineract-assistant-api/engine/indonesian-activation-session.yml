@@ -1,0 +1,22 @@
+info:
+  name: session pertanyaan aktivasi nasabah Indonesia
+  type: http
+  seq: 24
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno Indonesian activation retrieval" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("indonesianActivationSessionId", res.getBody().data.id);

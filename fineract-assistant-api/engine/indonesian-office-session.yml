@@ -1,0 +1,24 @@
+info:
+  name: session pertanyaan kantor Indonesia
+  type: http
+  seq: 15
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno Indonesian office retrieval" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("indonesianOfficeSessionId", res.getBody().data.id);

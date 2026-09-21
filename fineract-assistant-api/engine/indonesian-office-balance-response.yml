@@ -1,0 +1,19 @@
+info:
+  name: assertion retrieval saldo kantor Indonesia
+  type: http
+  seq: 20
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{indonesianOfficeBalanceJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-40: saldo kantor Indonesia memilih capability terindeks", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.evidence_json.lineage[0].capability_id)
+            .to.equal("organization_office_savings_summary");
+        });

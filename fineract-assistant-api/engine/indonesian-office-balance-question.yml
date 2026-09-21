@@ -1,0 +1,30 @@
+info:
+  name: pertanyaan saldo kantor Indonesia
+  type: http
+  seq: 19
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{indonesianOfficeBalanceIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{indonesianOfficeBalanceSessionId}}",
+        "request_text": "Kantor dengan saldo tabungan terbesar"
+      }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("indonesianOfficeBalanceIdemKey", "bruno-indonesian-office-balance-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("indonesianOfficeBalanceJobId", res.getBody().data.job_id);

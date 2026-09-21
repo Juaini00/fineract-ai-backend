@@ -1,0 +1,21 @@
+info:
+  name: assertion retrieval daftar kantor Indonesia
+  type: http
+  seq: 17
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{indonesianOfficeJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-40: daftar kantor Indonesia memilih capability terindeks", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.evidence_json.lineage[0].capability_id)
+            .to.equal("office_list_basic");
+        });
