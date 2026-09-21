@@ -1,0 +1,30 @@
+info:
+  name: pertanyaan saldo nasabah Indonesia
+  type: http
+  seq: 22
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{indonesianClientBalanceIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{indonesianClientBalanceSessionId}}",
+        "request_text": "Nasabah dengan saldo tabungan tertinggi"
+      }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("indonesianClientBalanceIdemKey", "bruno-indonesian-client-balance-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("indonesianClientBalanceJobId", res.getBody().data.job_id);

@@ -292,6 +292,23 @@ pub async fn plan(
     }))
 }
 
+/// Normalize a request into the lexical terms that retrieval can overlap.
+///
+/// Terms are unique and sorted, so the same words in a different order (or
+/// repeated by a user) produce the same query and deterministic ranking. This
+/// deliberately does not maintain a language-specific stopword list: catalog
+/// vocabulary, not a guessed Indonesian lexicon, remains the source of truth.
+fn lexical_terms(text: &str) -> Vec<String> {
+    let mut terms: Vec<String> = text
+        .split(|character: char| !character.is_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    terms.sort();
+    terms.dedup();
+    terms
+}
+
 /// Retrieval leksikal. Arm embedding belum ada; bila kelak ditambahkan, ia
 /// fail-closed ke arm ini saat model/dimensi tidak cocok (#7).
 async fn best_capability(
@@ -299,19 +316,35 @@ async fn best_capability(
     catalog_version_id: Uuid,
     request_text: &str,
 ) -> sqlx::Result<Option<(String, f32)>> {
+    let terms = lexical_terms(request_text);
+    if terms.is_empty() {
+        return Ok(None);
+    }
+
     sqlx::query_as::<_, (String, f32)>(
-        "SELECT source_id,
-                ts_rank(to_tsvector('simple', retrieval_text),
-                        plainto_tsquery('simple', $2)) AS score
-         FROM knowledge_index
-         WHERE catalog_version_id = $1
-           AND source_type = 'capability'
-           AND to_tsvector('simple', retrieval_text) @@ plainto_tsquery('simple', $2)
-         ORDER BY score DESC, source_id
+        "WITH query AS (
+             SELECT to_tsquery('simple', array_to_string($2::text[], ' | ')) AS terms
+         ), documents AS MATERIALIZED (
+             SELECT source_id, to_tsvector('simple', retrieval_text) AS document
+             FROM knowledge_index
+             WHERE catalog_version_id = $1
+               AND source_type = 'capability'
+         )
+         SELECT documents.source_id,
+                ts_rank_cd(documents.document, query.terms) AS score
+         FROM documents
+         CROSS JOIN query
+         CROSS JOIN LATERAL (
+             SELECT count(*) AS matched_terms
+             FROM unnest($2::text[]) AS term
+             WHERE documents.document @@ to_tsquery('simple', term)
+         ) AS overlap
+         WHERE documents.document @@ query.terms
+         ORDER BY overlap.matched_terms DESC, score DESC, documents.source_id ASC
          LIMIT 1",
     )
     .bind(catalog_version_id)
-    .bind(request_text)
+    .bind(terms)
     .fetch_optional(pool)
     .await
 }
@@ -604,6 +637,16 @@ mod tests {
             required,
             source: source.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn lexical_terms_are_normalized_unique_and_deterministically_sorted() {
+        // Ranking and OR-overlap are asserted on the served retrieval path.
+        // This pure-logic test only owns normalization invariants.
+        assert_eq!(
+            lexical_terms("Berapa total portfolio aktif bulan ini, portfolio?"),
+            vec!["aktif", "berapa", "bulan", "ini", "portfolio", "total"]
+        );
     }
 
     #[test]

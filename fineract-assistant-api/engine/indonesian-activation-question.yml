@@ -1,0 +1,30 @@
+info:
+  name: pertanyaan aktivasi nasabah Indonesia
+  type: http
+  seq: 25
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{indonesianActivationIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{indonesianActivationSessionId}}",
+        "request_text": "Aktivasi nasabah per bulan"
+      }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("indonesianActivationIdemKey", "bruno-indonesian-activation-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("indonesianActivationJobId", res.getBody().data.job_id);

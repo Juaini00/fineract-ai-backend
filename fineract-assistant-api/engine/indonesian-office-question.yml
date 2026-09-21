@@ -1,0 +1,32 @@
+info:
+  name: pertanyaan daftar kantor Indonesia
+  type: http
+  seq: 16
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{indonesianOfficeIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{indonesianOfficeSessionId}}",
+        "request_text": "Daftar kantor pada cakupan otorisasi saya"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("indonesianOfficeIdemKey", "bruno-indonesian-office-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("indonesianOfficeJobId", res.getBody().data.job_id);
