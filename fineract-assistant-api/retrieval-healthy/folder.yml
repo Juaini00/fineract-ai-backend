@@ -1,0 +1,8 @@
+info:
+  name: retrieval-healthy
+  seq: 9
+  description: |
+    FIN-42 healthy no-match classification. Run only after `app catalog` has
+    populated embeddings with the configured model and EMBEDDING_API_KEY is
+    present; an exact-vector no-match must be disclosed as
+    completeness_reason=out_of_scope.

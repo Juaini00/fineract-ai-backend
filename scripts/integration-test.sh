@@ -2,7 +2,7 @@
 #
 # Integration test lewat Bruno CLI.
 #
-# Dua tahap, dengan alasan yang mengikat:
+# Tahap utama ditambah dua tahap retrieval dengan alasan yang mengikat:
 #
 #   1. `health`, `auth`, `chat` dijalankan dengan WORKER_ENABLED=false. Folder
 #      `chat` menguji semantik PENERIMAAN — job tetap `Queued`, satu job
@@ -16,9 +16,12 @@
 #      identik dengan tahap 2, dan itulah buktinya: notifikasi bukan sumber
 #      kebenaran, jadi menghilangkannya tidak boleh mengubah satu pun hasil —
 #      hanya latensinya. Tanpa tahap ini, "fallback polling" hanya klaim.
+#   4. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
+#      `retrieval-healthy` hanya berjalan bila API key tersedia dan versi katalog
+#      sudah memiliki embedding lengkap dari `catalog --sync --embed`.
 #
 # Pakai:
-#   scripts/integration-test.sh                 # kedua tahap
+#   scripts/integration-test.sh                 # seluruh tahap
 #   scripts/integration-test.sh auth            # satu folder (tahap intake)
 #   scripts/integration-test.sh engine          # tahap engine saja
 #   PORT=3210 scripts/integration-test.sh       # port tertentu
@@ -34,11 +37,26 @@ PORT="${PORT:-3107}"
 BASE_URL="http://127.0.0.1:$PORT"
 LOG="${LOG:-/tmp/jarvis-integration.log}"
 
+# Muat `.env` ke runner agar gate retrieval-healthy melihat konfigurasi yang
+# sama dengan aplikasi, bukan hanya environment proses pemanggil.
+if [ -f "$ROOT/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$ROOT/.env"
+    set +a
+fi
+
 if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
+    RETRIEVAL_UNAVAILABLE_FOLDERS=()
+    RETRIEVAL_HEALTHY_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
+        if [ "$folder" = "retrieval-unavailable" ]; then
+            RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
+        elif [ "$folder" = "retrieval-healthy" ]; then
+            RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
+        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -47,6 +65,8 @@ if [ "$#" -gt 0 ]; then
 else
     INTAKE_FOLDERS=(health auth chat)
     ENGINE_FOLDERS=(engine clarification resolver sse)
+    RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
+    RETRIEVAL_HEALTHY_FOLDERS=(retrieval-healthy)
 fi
 
 command -v bru >/dev/null || {
@@ -160,4 +180,22 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
             run_folders 1500 sse
         fi
     done
+fi
+
+if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then
+    stop_app
+    start_app true EMBEDDING_API_KEY=
+    echo "==> bru run retrieval-unavailable (embedding sengaja dinonaktifkan)"
+    run_folders 1500 "${RETRIEVAL_UNAVAILABLE_FOLDERS[@]}"
+fi
+
+if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
+    stop_app
+    if [ -n "${EMBEDDING_API_KEY:-}" ]; then
+        start_app true
+        echo "==> bru run retrieval-healthy (embedding terkonfigurasi dan terindeks)"
+        run_folders 1500 "${RETRIEVAL_HEALTHY_FOLDERS[@]}"
+    else
+        echo "==> retrieval-healthy dilewati: EMBEDDING_API_KEY kosong; bukti out_of_scope tetap pending"
+    fi
 fi
