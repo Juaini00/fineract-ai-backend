@@ -1,0 +1,22 @@
+info:
+  name: unavailable retrieval is disclosed as retrieval miss
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{retrievalUnavailableJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalUnavailableToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        test("FIN-42: unavailable semantic arm is retrieval_miss", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("limitation");
+          expect(document.outcome).to.equal("Unsupported");
+          expect(document.completeness).to.equal("Unknown");
+          expect(document.completeness_reason).to.equal("retrieval_miss");
+        });

@@ -1,0 +1,22 @@
+info:
+  name: session for healthy retrieval
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalHealthyToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "healthy retrieval classification" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("retrievalHealthySession", res.getBody().data.id);

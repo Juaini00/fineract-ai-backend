@@ -1,0 +1,27 @@
+info:
+  name: unsupported text with healthy semantic retrieval
+  type: http
+  seq: 3
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalHealthyToken}}"
+    - name: Idempotency-Key
+      value: "{{retrievalHealthyKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{retrievalHealthySession}}", "request_text": "quasar nebula spectroscopy forecast" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("retrievalHealthyKey", "retrieval-healthy-" + Date.now());
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("retrievalHealthyJob", res.getBody().data.job_id);

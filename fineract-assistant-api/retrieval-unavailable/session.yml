@@ -1,0 +1,22 @@
+info:
+  name: session for unavailable retrieval
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalUnavailableToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "retrieval unavailable classification" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("retrievalUnavailableSession", res.getBody().data.id);

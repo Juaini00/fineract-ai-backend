@@ -1,0 +1,7 @@
+info:
+  name: retrieval-unavailable
+  seq: 8
+  description: |
+    FIN-42 failure-side classification. The integration runner starts the worker
+    with EMBEDDING_API_KEY empty, so a lexical miss must be disclosed as
+    completeness_reason=retrieval_miss.

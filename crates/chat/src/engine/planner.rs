@@ -97,6 +97,13 @@ pub enum Unplannable {
     },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum RetrievalOutcome {
+    Candidate(String, f32),
+    HealthyNoMatch,
+    RetrievalUnavailable,
+}
+
 /// Satu parameter yang harus ditanyakan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Missing {
@@ -226,15 +233,12 @@ pub async fn plan(
             request_text,
         )
     };
-    let candidate = lexical_first(lexical, semantic)
+    let retrieval = lexical_first(lexical, semantic)
         .await
         .map_err(|error| sqlx::Error::Protocol(error.to_string()))?;
-    let Some((capability_id, score)) = candidate else {
-        // ponytail: lexical-only retrieval over-reports out_of_scope — an
-        // Indonesian query whose capability exists still yields 0 matches today
-        // (build-order §6.5, the "portfolio" example). L2 semantic retrieval
-        // (FIN-42) must reclassify a genuine miss here as RetrievalMiss.
-        return Ok(Err(Unplannable::OutOfScope));
+    let (capability_id, score) = match retrieval_candidate(retrieval) {
+        Ok(candidate) => candidate,
+        Err(problem) => return Ok(Err(problem)),
     };
 
     let Some(capability) = catalog
@@ -402,14 +406,22 @@ async fn best_capability(
 async fn lexical_first<F, Fut>(
     lexical: Option<(String, f32)>,
     semantic: F,
-) -> anyhow::Result<Option<(String, f32)>>
+) -> anyhow::Result<RetrievalOutcome>
 where
     F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = anyhow::Result<Option<(String, f32)>>>,
+    Fut: std::future::Future<Output = anyhow::Result<RetrievalOutcome>>,
 {
     match lexical {
-        Some(candidate) => Ok(Some(candidate)),
+        Some((capability_id, score)) => Ok(RetrievalOutcome::Candidate(capability_id, score)),
         None => semantic().await,
+    }
+}
+
+fn retrieval_candidate(outcome: RetrievalOutcome) -> Result<(String, f32), Unplannable> {
+    match outcome {
+        RetrievalOutcome::Candidate(capability_id, score) => Ok((capability_id, score)),
+        RetrievalOutcome::HealthyNoMatch => Err(Unplannable::OutOfScope),
+        RetrievalOutcome::RetrievalUnavailable => Err(Unplannable::RetrievalMiss),
     }
 }
 
@@ -419,34 +431,66 @@ async fn semantic_capability(
     cutoff: f32,
     catalog_version_id: Uuid,
     request_text: &str,
-) -> anyhow::Result<Option<(String, f32)>> {
+) -> anyhow::Result<RetrievalOutcome> {
     if !embedding.available() {
-        return Ok(None);
+        return Ok(RetrievalOutcome::RetrievalUnavailable);
     }
     let Some(metadata) =
         crate::catalog::repository::embedding_metadata(pool, catalog_version_id).await?
     else {
-        return Ok(None);
+        return Ok(RetrievalOutcome::RetrievalUnavailable);
     };
-    if metadata.embedding_model.as_deref() != Some(embedding.model())
-        || metadata.embedding_dimensions != Some(embedding.dimensions() as i32)
-        || metadata.embedding_input_type.as_deref() != Some(embedding.document_input_type())
-    {
-        return Ok(None);
+    if !metadata_matches(
+        metadata.embedding_model.as_deref(),
+        metadata.embedding_dimensions,
+        metadata.embedding_input_type.as_deref(),
+        embedding.model(),
+        embedding.dimensions(),
+        embedding.document_input_type(),
+    ) {
+        return Ok(RetrievalOutcome::RetrievalUnavailable);
     }
-    let vectors = match embedding
-        .embed(&[request_text.to_string()], InputKind::Query)
-        .await
-    {
-        Ok(vectors) => vectors,
-        Err(_) => return Ok(None),
+    let vector = match provider_vector(
+        embedding
+            .embed(&[request_text.to_string()], InputKind::Query)
+            .await,
+    ) {
+        Ok(vector) => vector,
+        Err(outcome) => return Ok(outcome),
     };
-    let Some(vector) = vectors.into_iter().next() else {
-        return Ok(None);
-    };
-    crate::catalog::repository::best_vector_capability(pool, catalog_version_id, vector, cutoff)
-        .await
-        .map_err(Into::into)
+    Ok(
+        match crate::catalog::repository::best_vector_capability(
+            pool,
+            catalog_version_id,
+            vector,
+            cutoff,
+        )
+        .await?
+        {
+            Some((capability_id, score)) => RetrievalOutcome::Candidate(capability_id, score),
+            None => RetrievalOutcome::HealthyNoMatch,
+        },
+    )
+}
+
+fn metadata_matches(
+    model: Option<&str>,
+    dimensions: Option<i32>,
+    document_input_type: Option<&str>,
+    runtime_model: &str,
+    runtime_dimensions: usize,
+    runtime_document_input_type: &str,
+) -> bool {
+    model == Some(runtime_model)
+        && dimensions == Some(runtime_dimensions as i32)
+        && document_input_type == Some(runtime_document_input_type)
+}
+
+fn provider_vector(result: anyhow::Result<Vec<Vec<f32>>>) -> Result<Vec<f32>, RetrievalOutcome> {
+    result
+        .ok()
+        .and_then(|vectors| vectors.into_iter().next())
+        .ok_or(RetrievalOutcome::RetrievalUnavailable)
 }
 
 /// Ikat parameter query memakai default yang dideklarasikan capability.
@@ -676,26 +720,67 @@ mod tests {
         let marker = invoked.clone();
         let result = lexical_first(Some(("lexical".into(), 0.8)), move || async move {
             marker.store(true, Ordering::SeqCst);
-            Ok(Some(("vector".into(), 0.99)))
+            Ok(RetrievalOutcome::Candidate("vector".into(), 0.99))
         })
         .await
         .unwrap();
-        assert_eq!(result, Some(("lexical".into(), 0.8)));
+        assert_eq!(result, RetrievalOutcome::Candidate("lexical".into(), 0.8));
         assert!(!invoked.load(Ordering::SeqCst));
     }
 
     #[tokio::test]
-    async fn lexical_miss_invokes_vector_arm() {
+    async fn lexical_miss_preserves_semantic_candidate() {
         let invoked = Arc::new(AtomicBool::new(false));
         let marker = invoked.clone();
         let result = lexical_first(None, move || async move {
             marker.store(true, Ordering::SeqCst);
-            Ok(Some(("vector".into(), 0.7)))
+            Ok(RetrievalOutcome::Candidate("vector".into(), 0.7))
         })
         .await
         .unwrap();
-        assert_eq!(result, Some(("vector".into(), 0.7)));
+        assert_eq!(result, RetrievalOutcome::Candidate("vector".into(), 0.7));
         assert!(invoked.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn lexical_miss_preserves_healthy_semantic_no_match() {
+        let result = lexical_first(None, || async { Ok(RetrievalOutcome::HealthyNoMatch) })
+            .await
+            .unwrap();
+        assert_eq!(result, RetrievalOutcome::HealthyNoMatch);
+        assert_eq!(retrieval_candidate(result), Err(Unplannable::OutOfScope));
+    }
+
+    #[tokio::test]
+    async fn lexical_miss_preserves_unavailable_semantic_arm() {
+        let result = lexical_first(None, || async {
+            Ok(RetrievalOutcome::RetrievalUnavailable)
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, RetrievalOutcome::RetrievalUnavailable);
+        assert_eq!(retrieval_candidate(result), Err(Unplannable::RetrievalMiss));
+    }
+
+    #[test]
+    fn mismatched_semantic_metadata_is_unavailable() {
+        assert!(!metadata_matches(
+            Some("different-model"),
+            Some(1024),
+            Some("search_document"),
+            "configured-model",
+            1024,
+            "search_document",
+        ));
+    }
+
+    #[test]
+    fn provider_failure_is_retrieval_unavailable() {
+        let outcome = provider_vector(Err(anyhow::anyhow!("provider failed"))).unwrap_err();
+        assert_eq!(outcome, RetrievalOutcome::RetrievalUnavailable);
+
+        let empty_outcome = provider_vector(Ok(Vec::new())).unwrap_err();
+        assert_eq!(empty_outcome, RetrievalOutcome::RetrievalUnavailable);
     }
     use crate::catalog::model::{CapabilityParameter, QueryParameter};
     use std::collections::BTreeMap;
@@ -798,12 +883,12 @@ mod tests {
         let invoked = semantic_invoked.clone();
         let result = lexical_first(many_terms, move || async move {
             invoked.store(true, std::sync::atomic::Ordering::SeqCst);
-            Ok(Some(("semantic".into(), 0.7)))
+            Ok(RetrievalOutcome::Candidate("semantic".into(), 0.7))
         })
         .await
         .unwrap();
 
-        assert_eq!(result, Some(("semantic".into(), 0.7)));
+        assert_eq!(result, RetrievalOutcome::Candidate("semantic".into(), 0.7));
         assert!(semantic_invoked.load(std::sync::atomic::Ordering::SeqCst));
     }
 
