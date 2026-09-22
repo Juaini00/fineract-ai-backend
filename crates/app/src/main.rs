@@ -70,8 +70,8 @@ async fn main() -> anyhow::Result<()> {
         listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),
     )
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     // Worker dihentikan SETELAH server berhenti menerima request: job yang
     // sudah diterima tetap punya kesempatan diklaim dan diselesaikan.
@@ -89,6 +89,7 @@ async fn run_command(foundation: &Foundation, command: &str) -> anyhow::Result<(
             let passed = catalog_command::run(
                 foundation,
                 arguments.iter().any(|argument| argument == "--sync"),
+                arguments.iter().any(|argument| argument == "--embed"),
                 arguments.iter().any(|argument| argument == "--no-probe"),
             )
             .await?;
@@ -100,7 +101,9 @@ async fn run_command(foundation: &Foundation, command: &str) -> anyhow::Result<(
             Ok(())
         }
         other => {
-            anyhow::bail!("subcommand tidak dikenal: {other} (tersedia: catalog [--sync] [--no-probe])")
+            anyhow::bail!(
+                "subcommand tidak dikenal: {other} (tersedia: catalog [--sync] [--embed] [--no-probe])"
+            )
         }
     }
 }

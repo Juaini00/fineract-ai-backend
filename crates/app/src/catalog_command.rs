@@ -8,7 +8,12 @@ use chat::catalog::{self, Severity};
 use foundation::Foundation;
 
 /// Jalankan pemeriksaan katalog. `Ok(false)` berarti ada temuan Error.
-pub async fn run(foundation: &Foundation, sync: bool, skip_probe: bool) -> anyhow::Result<bool> {
+pub async fn run(
+    foundation: &Foundation,
+    sync: bool,
+    embed: bool,
+    skip_probe: bool,
+) -> anyhow::Result<bool> {
     let checked = catalog::check(foundation, !skip_probe).await?;
     let report = &checked.report;
 
@@ -76,6 +81,37 @@ pub async fn run(foundation: &Foundation, sync: bool, skip_probe: bool) -> anyho
         )
         .await?;
         println!("Versi katalog dicatat: {version_id}");
+    }
+
+    if embed {
+        anyhow::ensure!(sync, "--embed wajib dipakai bersama --sync");
+        let client = foundation::embedding::EmbeddingClient::new(foundation.config())?;
+        anyhow::ensure!(
+            client.available(),
+            "EMBEDDING_API_KEY belum diisi; backfill embedding tidak dapat dijalankan"
+        );
+        let pending = catalog::repository::pending_embeddings(foundation.app_db().pool()).await?;
+        println!("Embedding NULL: {} baris", pending.len());
+        for chunk in pending.chunks(32) {
+            let texts: Vec<String> = chunk.iter().map(|row| row.retrieval_text.clone()).collect();
+            let vectors = client
+                .embed(&texts, foundation::embedding::InputKind::Document)
+                .await?;
+            let rows: Vec<_> = chunk
+                .iter()
+                .zip(vectors)
+                .map(|(row, vector)| (row.id, vector))
+                .collect();
+            catalog::repository::persist_embeddings(
+                foundation.app_db().pool(),
+                &rows,
+                client.model(),
+                client.dimensions(),
+                client.document_input_type(),
+            )
+            .await?;
+        }
+        println!("Backfill embedding selesai: {} baris", pending.len());
     }
 
     Ok(report.errors() == 0)

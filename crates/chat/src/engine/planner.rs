@@ -1,9 +1,10 @@
 //! Planner deterministik: memilih satu capability yang disetujui dan mengikat
 //! parameternya.
 //!
-//! Tidak ada model di sini. Pemilihan memakai retrieval leksikal atas
-//! `knowledge_index` — teks yang diindeks berasal dari prosa capability, bukan
-//! dari SQL — dan pengikatan parameter hanya memakai default yang **sudah
+//! Pemilihan memakai arm leksikal lebih dulu, lalu exact-vector fallback atas
+//! `knowledge_index` bila kecocokan leksikal tidak cukup kuat. Teks indeks
+//! berasal dari prosa capability, bukan dari SQL, dan pengikatan parameter
+//! hanya memakai default yang **sudah
 //! dideklarasikan** katalog. Bila sebuah parameter wajib tidak dapat diisi
 //! secara deterministik, hasilnya `Unsupported`; menebak nilainya berarti
 //! menjawab pertanyaan yang tidak ditanyakan.
@@ -14,6 +15,7 @@
 use std::collections::BTreeMap;
 
 use chrono::{Datelike, NaiveDate, Utc};
+use foundation::embedding::{EmbeddingClient, InputKind};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
@@ -83,9 +85,16 @@ pub enum Unplannable {
     /// Seluruh parameter yang kurang dikumpulkan sekaligus: kontrak klarifikasi
     /// mewajibkan satu form memuat semua ambiguitas yang sudah diketahui, bukan
     /// satu pertanyaan per putaran.
-    NeedsClarification { capability: String, missing: Vec<Missing> },
+    NeedsClarification {
+        capability: String,
+        missing: Vec<Missing>,
+    },
     /// Tipe parameter belum didukung binder deterministik.
-    ParameterUnsupported { capability: String, parameter: String, kind: String },
+    ParameterUnsupported {
+        capability: String,
+        parameter: String,
+        kind: String,
+    },
 }
 
 /// Satu parameter yang harus ditanyakan.
@@ -134,7 +143,9 @@ impl Unplannable {
             Self::OutOfScope => "out_of_scope".to_string(),
             Self::RetrievalMiss => "retrieval_miss".to_string(),
             Self::QueryMissing(_) => "capability_query_missing".to_string(),
-            Self::NeedsClarification { missing, .. } if missing.iter().any(Missing::unanswerable) => {
+            Self::NeedsClarification { missing, .. }
+                if missing.iter().any(Missing::unanswerable) =>
+            {
                 "identity_slot_without_resolver".to_string()
             }
             Self::NeedsClarification { .. } => "parameter_needs_clarification".to_string(),
@@ -150,13 +161,15 @@ impl Unplannable {
                     .to_string()
             }
             Self::RetrievalMiss => {
-                "Jarvis could not retrieve a matching capability for this request."
-                    .to_string()
+                "Jarvis could not retrieve a matching capability for this request.".to_string()
             }
             Self::QueryMissing(query_id) => format!(
                 "The selected capability refers to query '{query_id}', which is not present in the approved catalog."
             ),
-            Self::NeedsClarification { capability, missing } => {
+            Self::NeedsClarification {
+                capability,
+                missing,
+            } => {
                 let blocked: Vec<&str> = missing
                     .iter()
                     .filter(|item| item.unanswerable())
@@ -179,7 +192,11 @@ impl Unplannable {
                     )
                 }
             }
-            Self::ParameterUnsupported { capability, parameter, kind } => format!(
+            Self::ParameterUnsupported {
+                capability,
+                parameter,
+                kind,
+            } => format!(
                 "Capability '{capability}' declares parameter '{parameter}' of type '{kind}', \
                  which the deterministic planner cannot bind."
             ),
@@ -190,6 +207,8 @@ impl Unplannable {
 /// Susun rencana untuk sebuah permintaan.
 pub async fn plan(
     pool: &PgPool,
+    embedding: &EmbeddingClient,
+    similarity_cutoff: f32,
     catalog: &Catalog,
     catalog_version_id: Uuid,
     request_text: &str,
@@ -197,8 +216,20 @@ pub async fn plan(
     // `supplied`: jawaban klarifikasi yang sudah diterima, dikunci nama parameter.
     supplied: &BTreeMap<String, String>,
 ) -> sqlx::Result<Result<Plan, Unplannable>> {
-    let Some((capability_id, score)) = best_capability(pool, catalog_version_id, request_text).await?
-    else {
+    let lexical = best_capability(pool, catalog_version_id, request_text).await?;
+    let semantic = || {
+        semantic_capability(
+            pool,
+            embedding,
+            similarity_cutoff,
+            catalog_version_id,
+            request_text,
+        )
+    };
+    let candidate = lexical_first(lexical, semantic)
+        .await
+        .map_err(|error| sqlx::Error::Protocol(error.to_string()))?;
+    let Some((capability_id, score)) = candidate else {
         // ponytail: lexical-only retrieval over-reports out_of_scope — an
         // Indonesian query whose capability exists still yields 0 matches today
         // (build-order §6.5, the "portfolio" example). L2 semantic retrieval
@@ -239,11 +270,11 @@ pub async fn plan(
         return Ok(Err(Unplannable::QueryMissing(query_id)));
     };
 
-    let parameters = match bind_parameters(catalog, capability, query, authorized_office_ids, supplied)
-    {
-        Ok(parameters) => parameters,
-        Err(problem) => return Ok(Err(problem)),
-    };
+    let parameters =
+        match bind_parameters(catalog, capability, query, authorized_office_ids, supplied) {
+            Ok(parameters) => parameters,
+            Err(problem) => return Ok(Err(problem)),
+        };
 
     let graph_json = serde_json::json!({
         "nodes": [{
@@ -275,7 +306,10 @@ pub async fn plan(
                 // Kolom tanpa kelas diperlakukan sebagai `pii`: fail closed.
                 // Validator katalog sudah menolak keadaan ini, tetapi default
                 // yang aman tidak boleh bergantung pada validator yang lain.
-                field.sensitivity.clone().unwrap_or_else(|| "pii".to_string())
+                field
+                    .sensitivity
+                    .clone()
+                    .unwrap_or_else(|| "pii".to_string())
             })
             .collect(),
         // Manifest tanpa timeout sudah dilaporkan validator; di sini dipakai
@@ -309,8 +343,21 @@ fn lexical_terms(text: &str) -> Vec<String> {
     terms
 }
 
-/// Retrieval leksikal. Arm embedding belum ada; bila kelak ditambahkan, ia
-/// fail-closed ke arm ini saat model/dimensi tidak cocok (#7).
+fn lexical_match_is_confident(terms: &[String], matched_terms: i64) -> bool {
+    matched_terms >= if terms.len() == 1 { 1 } else { 2 }
+}
+
+fn confident_lexical_candidate(
+    terms: &[String],
+    candidate: Option<(String, f32, i64)>,
+) -> Option<(String, f32)> {
+    candidate
+        .filter(|(_, _, matched_terms)| lexical_match_is_confident(terms, *matched_terms))
+        .map(|(source_id, score, _)| (source_id, score))
+}
+
+/// Retrieval leksikal. Kandidat multi-term harus cocok pada sedikitnya dua
+/// term agar kata umum tidak mencegah exact-vector fallback.
 async fn best_capability(
     pool: &PgPool,
     catalog_version_id: Uuid,
@@ -321,7 +368,7 @@ async fn best_capability(
         return Ok(None);
     }
 
-    sqlx::query_as::<_, (String, f32)>(
+    let candidate = sqlx::query_as::<_, (String, f32, i64)>(
         "WITH query AS (
              SELECT to_tsquery('simple', array_to_string($2::text[], ' | ')) AS terms
          ), documents AS MATERIALIZED (
@@ -331,7 +378,8 @@ async fn best_capability(
                AND source_type = 'capability'
          )
          SELECT documents.source_id,
-                ts_rank_cd(documents.document, query.terms) AS score
+                ts_rank_cd(documents.document, query.terms) AS score,
+                overlap.matched_terms
          FROM documents
          CROSS JOIN query
          CROSS JOIN LATERAL (
@@ -344,9 +392,61 @@ async fn best_capability(
          LIMIT 1",
     )
     .bind(catalog_version_id)
-    .bind(terms)
+    .bind(&terms)
     .fetch_optional(pool)
-    .await
+    .await?;
+
+    Ok(confident_lexical_candidate(&terms, candidate))
+}
+
+async fn lexical_first<F, Fut>(
+    lexical: Option<(String, f32)>,
+    semantic: F,
+) -> anyhow::Result<Option<(String, f32)>>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<Option<(String, f32)>>>,
+{
+    match lexical {
+        Some(candidate) => Ok(Some(candidate)),
+        None => semantic().await,
+    }
+}
+
+async fn semantic_capability(
+    pool: &PgPool,
+    embedding: &EmbeddingClient,
+    cutoff: f32,
+    catalog_version_id: Uuid,
+    request_text: &str,
+) -> anyhow::Result<Option<(String, f32)>> {
+    if !embedding.available() {
+        return Ok(None);
+    }
+    let Some(metadata) =
+        crate::catalog::repository::embedding_metadata(pool, catalog_version_id).await?
+    else {
+        return Ok(None);
+    };
+    if metadata.embedding_model.as_deref() != Some(embedding.model())
+        || metadata.embedding_dimensions != Some(embedding.dimensions() as i32)
+        || metadata.embedding_input_type.as_deref() != Some(embedding.document_input_type())
+    {
+        return Ok(None);
+    }
+    let vectors = match embedding
+        .embed(&[request_text.to_string()], InputKind::Query)
+        .await
+    {
+        Ok(vectors) => vectors,
+        Err(_) => return Ok(None),
+    };
+    let Some(vector) = vectors.into_iter().next() else {
+        return Ok(None);
+    };
+    crate::catalog::repository::best_vector_capability(pool, catalog_version_id, vector, cutoff)
+        .await
+        .map_err(Into::into)
 }
 
 /// Ikat parameter query memakai default yang dideklarasikan capability.
@@ -503,7 +603,8 @@ fn missing_parameter(
         // Dua sumber: manifest query menandainya input sensitif, atau capability
         // mendeklarasikan `probe:`. Selebihnya — termasuk kolom pencarian nama —
         // adalah masukan pencarian, bukan binding identitas.
-        identity: parameter.source.as_deref() == Some("transient_sensitive_input") || declared_probe,
+        identity: parameter.source.as_deref() == Some("transient_sensitive_input")
+            || declared_probe,
         resolver,
     }
 }
@@ -536,16 +637,16 @@ fn subtract_months(date: NaiveDate, months: i64) -> Option<NaiveDate> {
     let year = i32::try_from(total.div_euclid(12)).ok()?;
     let month = total.rem_euclid(12) as u32 + 1;
 
-    (0..4).find_map(|back| {
-        NaiveDate::from_ymd_opt(year, month, date.day().checked_sub(back)?)
-    })
+    (0..4).find_map(|back| NaiveDate::from_ymd_opt(year, month, date.day().checked_sub(back)?))
 }
 
 /// Ubah jawaban bertipe menjadi nilai terikat. `None` berarti jawaban tidak
 /// sesuai tipe yang dideklarasikan manifest.
 pub fn typed_answer(kind: &str, answer: &str) -> Option<Bound> {
     match kind {
-        "date" => NaiveDate::parse_from_str(answer.trim(), "%Y-%m-%d").ok().map(Bound::Date),
+        "date" => NaiveDate::parse_from_str(answer.trim(), "%Y-%m-%d")
+            .ok()
+            .map(Bound::Date),
         "integer" | "bigint" => answer.trim().parse::<i64>().ok().map(Bound::Bigint),
         "string" => Some(Bound::Text(answer.trim().to_string())),
         _ => None,
@@ -564,6 +665,38 @@ fn null_for(kind: &str) -> Option<Bound> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    #[tokio::test]
+    async fn lexical_candidate_wins_without_invoking_vector_arm() {
+        let invoked = Arc::new(AtomicBool::new(false));
+        let marker = invoked.clone();
+        let result = lexical_first(Some(("lexical".into(), 0.8)), move || async move {
+            marker.store(true, Ordering::SeqCst);
+            Ok(Some(("vector".into(), 0.99)))
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, Some(("lexical".into(), 0.8)));
+        assert!(!invoked.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn lexical_miss_invokes_vector_arm() {
+        let invoked = Arc::new(AtomicBool::new(false));
+        let marker = invoked.clone();
+        let result = lexical_first(None, move || async move {
+            marker.store(true, Ordering::SeqCst);
+            Ok(Some(("vector".into(), 0.7)))
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, Some(("vector".into(), 0.7)));
+        assert!(invoked.load(Ordering::SeqCst));
+    }
     use crate::catalog::model::{CapabilityParameter, QueryParameter};
     use std::collections::BTreeMap;
 
@@ -649,6 +782,31 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn lexical_confidence_keeps_one_term_but_falls_back_for_one_of_many() {
+        let one_term = confident_lexical_candidate(
+            &lexical_terms("portfolio"),
+            Some(("lexical".into(), 0.8, 1)),
+        );
+        assert_eq!(one_term, Some(("lexical".into(), 0.8)));
+
+        let many_terms = confident_lexical_candidate(
+            &lexical_terms("total portfolio aktif bulan ini"),
+            Some(("weak-lexical".into(), 0.4, 1)),
+        );
+        let semantic_invoked = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let invoked = semantic_invoked.clone();
+        let result = lexical_first(many_terms, move || async move {
+            invoked.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(("semantic".into(), 0.7)))
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result, Some(("semantic".into(), 0.7)));
+        assert!(semantic_invoked.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
     #[test]
     fn binds_dates_and_scope_from_declared_defaults() {
         let capability = capability(&[
@@ -662,7 +820,8 @@ mod tests {
             parameter("office_ids", "array_bigint", true, Some("authorized_scope")),
         ]);
 
-        let bound = bind_parameters(&catalog(), &capability, &query, &[1, 2], &BTreeMap::new()).unwrap();
+        let bound =
+            bind_parameters(&catalog(), &capability, &query, &[1, 2], &BTreeMap::new()).unwrap();
         let today = Utc::now().date_naive();
 
         assert_eq!(bound.len(), 3);
@@ -679,13 +838,19 @@ mod tests {
         let capability = Capability {
             parameters: BTreeMap::from([(
                 "search".to_string(),
-                CapabilityParameter { required: true, default: None, hard_cap: None, probe: None },
+                CapabilityParameter {
+                    required: true,
+                    default: None,
+                    hard_cap: None,
+                    probe: None,
+                },
             )]),
             ..capability(&[])
         };
         let query = query(vec![parameter("search", "string", true, None)]);
 
-        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem =
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya ditanyakan");
         };
@@ -701,7 +866,8 @@ mod tests {
             parameter("product_ids", "array_bigint", false, None),
         ]);
 
-        let bound = bind_parameters(&catalog(), &capability, &query, &[7], &BTreeMap::new()).unwrap();
+        let bound =
+            bind_parameters(&catalog(), &capability, &query, &[7], &BTreeMap::new()).unwrap();
         assert_eq!(bound[1], Bound::NullText);
         assert_eq!(bound[2], Bound::NullBigintArray);
     }
@@ -711,7 +877,8 @@ mod tests {
         let capability = capability(&[]);
         let query = query(vec![parameter("account_number", "string", true, None)]);
 
-        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem =
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = &problem else {
             panic!("seharusnya menuntut klarifikasi: {problem:?}");
         };
@@ -780,7 +947,10 @@ mod tests {
         supplied.insert("from_date".to_string(), "2026-01-01".to_string());
 
         let bound = bind_parameters(&catalog(), &capability, &query, &[1], &supplied).unwrap();
-        assert_eq!(bound[0], Bound::Date(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()));
+        assert_eq!(
+            bound[0],
+            Bound::Date(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap())
+        );
     }
 
     #[test]
@@ -809,7 +979,8 @@ mod tests {
             parameter("to_date", "date", true, None),
         ]);
 
-        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem =
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya menuntut klarifikasi");
         };
@@ -824,7 +995,8 @@ mod tests {
         let capability = capability_with_cap(&[("limit", "250")], Some(100));
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
-        let bound = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap();
+        let bound =
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap();
         // 250 melebihi hard_cap 100 → dipotong, bukan diteruskan apa adanya.
         assert_eq!(bound[0], Bound::Bigint(100));
     }
@@ -834,7 +1006,10 @@ mod tests {
         let capability = capability_with_cap(&[("limit", "10")], Some(100));
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
-        assert_eq!(bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap()[0], Bound::Bigint(10));
+        assert_eq!(
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap()[0],
+            Bound::Bigint(10)
+        );
     }
 
     #[test]
@@ -847,7 +1022,8 @@ mod tests {
             Some("authorized_scope"),
         )]);
 
-        let bound = bind_parameters(&catalog(), &capability, &query, &[3, 4], &BTreeMap::new()).unwrap();
+        let bound =
+            bind_parameters(&catalog(), &capability, &query, &[3, 4], &BTreeMap::new()).unwrap();
         assert_eq!(bound[0], Bound::OfficeIds(vec![3, 4]));
     }
 }

@@ -12,6 +12,7 @@
 
 use std::{sync::Arc, time::Duration};
 
+use foundation::embedding::EmbeddingClient;
 use foundation::state::Foundation;
 use sha2::{Digest, Sha256};
 use tokio::time::sleep;
@@ -43,6 +44,13 @@ pub async fn run(
     shutdown: CancellationToken,
 ) {
     let config = foundation.config();
+    let embedding = match EmbeddingClient::new(config) {
+        Ok(client) => Arc::new(client),
+        Err(error) => {
+            error!(%error, "klien embedding gagal dibuat; worker berhenti");
+            return;
+        }
+    };
     let worker = worker_identity();
     let poll = Duration::from_millis(config.worker_poll_interval_ms);
 
@@ -62,8 +70,15 @@ pub async fn run(
         .await
         {
             Ok(Some(job)) => {
-                if let Err(error) =
-                    process(&foundation, &catalog, catalog_version_id, &worker, job).await
+                if let Err(error) = process(
+                    &foundation,
+                    &catalog,
+                    catalog_version_id,
+                    &embedding,
+                    &worker,
+                    job,
+                )
+                .await
                 {
                     error!(error = %error, "job gagal diproses");
                 }
@@ -92,6 +107,7 @@ async fn process(
     foundation: &Foundation,
     catalog: &Catalog,
     catalog_version_id: Uuid,
+    embedding: &EmbeddingClient,
     worker: &str,
     job: ClaimedJob,
 ) -> anyhow::Result<()> {
@@ -113,7 +129,7 @@ async fn process(
     let settled = if repository::cancel_requested(&pool, job.id).await? {
         repository::settle_cancelled(&pool, job.id, job.session_id, job.lease_token).await?
     } else {
-        run_job(foundation, catalog, catalog_version_id, &job).await?
+        run_job(foundation, catalog, catalog_version_id, embedding, &job).await?
     };
 
     fenced.cancel();
@@ -163,6 +179,7 @@ async fn run_job(
     foundation: &Foundation,
     catalog: &Catalog,
     catalog_version_id: Uuid,
+    embedding: &EmbeddingClient,
     job: &ClaimedJob,
 ) -> anyhow::Result<bool> {
     let pool = foundation.app_db().pool();
@@ -189,6 +206,8 @@ async fn run_job(
 
     let planned = planner::plan(
         pool,
+        embedding,
+        foundation.config().embedding_similarity_cutoff,
         catalog,
         catalog_version_id,
         &job.request_text,
@@ -203,9 +222,10 @@ async fn run_job(
         // tolak. Job yang sama ditangguhkan; tidak ada job pengganti. Slot
         // identitas tanpa resolver TIDAK dapat ditanyakan (K1) dan jatuh ke arm
         // berikutnya sebagai `Unsupported`.
-        Err(planner::Unplannable::NeedsClarification { capability, missing })
-            if !missing.iter().any(planner::Missing::unanswerable) =>
-        {
+        Err(planner::Unplannable::NeedsClarification {
+            capability,
+            missing,
+        }) if !missing.iter().any(planner::Missing::unanswerable) => {
             return open_clarification(foundation, job, &capability, &missing, &authorized).await;
         }
         Err(problem) => {
@@ -322,8 +342,17 @@ async fn run_job(
             // dibuang inline ke ledger: tabel berpaginasi, node hilir, dan
             // memori session merujuk HANDLE, bukan daftar baris yang dibentangkan
             // (#11 aturan 2 dan 3). Handle-nya immutable begitu `ready`.
-            if !retain_dataset(foundation, job, &plan, node_run_id, &visible, &withheld, &authorized, &stored_rows)
-                .await?
+            if !retain_dataset(
+                foundation,
+                job,
+                &plan,
+                node_run_id,
+                &visible,
+                &withheld,
+                &authorized,
+                &stored_rows,
+            )
+            .await?
             {
                 // Fencing kalah saat meretensi: berhenti, jangan menulis response
                 // atas snapshot yang tidak jadi ada (C16).
@@ -782,7 +811,11 @@ mod tests {
 
     #[test]
     fn unsupported_response_matches_engine_matrix() {
-        let response = limitation_response("no_capability_matched", "tidak tercakup", "berapa total portfolio?");
+        let response = limitation_response(
+            "no_capability_matched",
+            "tidak tercakup",
+            "berapa total portfolio?",
+        );
 
         assert_eq!(response.kind, "limitation");
         assert_eq!(response.outcome, "Unsupported");

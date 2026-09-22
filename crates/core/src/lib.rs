@@ -6,6 +6,7 @@
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod embedding;
 pub mod envelope;
 pub mod error;
 pub mod redis;
