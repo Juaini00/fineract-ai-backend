@@ -100,6 +100,24 @@ pub struct Config {
     #[serde(default)]
     pub catalog_sync_on_startup: bool,
 
+    // ---- Embedding (#7) ----
+    #[serde(default = "default_embedding_base_url")]
+    pub embedding_base_url: String,
+    #[serde(default)]
+    pub embedding_api_key: Option<String>,
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+    #[serde(default = "default_embedding_dimensions")]
+    pub embedding_dimensions: usize,
+    #[serde(default = "default_embedding_timeout_ms")]
+    pub embedding_timeout_ms: u64,
+    #[serde(default = "default_embedding_document_input_type")]
+    pub embedding_input_type_document: String,
+    #[serde(default = "default_embedding_query_input_type")]
+    pub embedding_input_type_query: String,
+    #[serde(default = "default_embedding_similarity_cutoff")]
+    pub embedding_similarity_cutoff: f32,
+
     // ---- Worker, lease dan recovery (runtime.md §1) ----
     #[serde(default = "default_true")]
     pub worker_enabled: bool,
@@ -249,7 +267,10 @@ impl Config {
                 ("JWT_REFRESH_SECRET", &self.jwt_refresh_secret),
             ] {
                 if secret.contains("change-me") {
-                    anyhow::bail!("{name} masih memakai nilai contoh di env {:?}", self.app_env);
+                    anyhow::bail!(
+                        "{name} masih memakai nilai contoh di env {:?}",
+                        self.app_env
+                    );
                 }
             }
 
@@ -299,6 +320,30 @@ impl Config {
                 "JWT_ACCESS_TOKEN_EXPIRY_SECONDS harus lebih pendek daripada \
                  JWT_REFRESH_TOKEN_EXPIRY_SECONDS"
             );
+        }
+
+        if self.embedding_dimensions != 1024 || self.embedding_timeout_ms == 0 {
+            anyhow::bail!(
+                "EMBEDDING_DIMENSIONS wajib 1024 sesuai kolom vector(1024), dan EMBEDDING_TIMEOUT_MS wajib lebih besar dari nol"
+            );
+        }
+        if self.embedding_base_url.trim().is_empty()
+            || self.embedding_model.trim().is_empty()
+            || self.embedding_input_type_document.trim().is_empty()
+            || self.embedding_input_type_query.trim().is_empty()
+        {
+            anyhow::bail!("base URL, model, dan input_type embedding tidak boleh kosong");
+        }
+        if self.embedding_input_type_document == self.embedding_input_type_query {
+            anyhow::bail!("input_type document dan query embedding wajib berbeda");
+        }
+        let embedding_url = reqwest::Url::parse(&self.embedding_base_url)
+            .map_err(|error| anyhow::anyhow!("EMBEDDING_BASE_URL tidak sah: {error}"))?;
+        if !matches!(embedding_url.scheme(), "http" | "https") {
+            anyhow::bail!("EMBEDDING_BASE_URL wajib memakai http atau https");
+        }
+        if !(0.0..=1.0).contains(&self.embedding_similarity_cutoff) {
+            anyhow::bail!("EMBEDDING_SIMILARITY_CUTOFF wajib di antara 0 dan 1");
         }
 
         Ok(())
@@ -383,6 +428,27 @@ fn default_catalog_path() -> String {
 fn default_query_path() -> String {
     "queries".to_string()
 }
+fn default_embedding_base_url() -> String {
+    "https://api.voyageai.com/v1".to_string()
+}
+fn default_embedding_model() -> String {
+    "voyage-3-large".to_string()
+}
+fn default_embedding_dimensions() -> usize {
+    1024
+}
+fn default_embedding_timeout_ms() -> u64 {
+    30_000
+}
+fn default_embedding_document_input_type() -> String {
+    "document".to_string()
+}
+fn default_embedding_query_input_type() -> String {
+    "query".to_string()
+}
+fn default_embedding_similarity_cutoff() -> f32 {
+    0.55
+}
 fn default_idempotency_ttl_secs() -> i64 {
     86_400
 }
@@ -457,7 +523,10 @@ mod tests {
             .collect();
 
         let error = build(entries).unwrap_err().to_string();
-        assert!(error.contains("jwt_access_secret"), "pesan tidak menyebut variabelnya: {error}");
+        assert!(
+            error.contains("jwt_access_secret"),
+            "pesan tidak menyebut variabelnya: {error}"
+        );
     }
 
     #[test]
@@ -505,7 +574,10 @@ mod tests {
 
         let config = build(entries).unwrap();
         assert!(config.app_database_migrate_on_startup);
-        assert!(!config.may_migrate_on_startup(), "migrasi startup bocor ke production");
+        assert!(
+            !config.may_migrate_on_startup(),
+            "migrasi startup bocor ke production"
+        );
     }
 
     #[test]
@@ -524,5 +596,20 @@ mod tests {
         entries.push(("app_database_migrate_on_startup", "true".into()));
 
         assert!(build(entries).unwrap().may_migrate_on_startup());
+    }
+
+    #[test]
+    fn embedding_dimensions_must_match_pgvector_column() {
+        let mut entries = minimal();
+        entries.push(("embedding_dimensions", "384".into()));
+        let error = build(entries).unwrap_err().to_string();
+        assert!(error.contains("vector(1024)"), "{error}");
+    }
+
+    #[test]
+    fn embedding_cutoff_is_a_similarity() {
+        let mut entries = minimal();
+        entries.push(("embedding_similarity_cutoff", "1.1".into()));
+        assert!(build(entries).is_err());
     }
 }

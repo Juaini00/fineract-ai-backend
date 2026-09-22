@@ -10,6 +10,31 @@ use uuid::Uuid;
 
 use crate::catalog::loader::Catalog;
 
+#[derive(Debug, sqlx::FromRow)]
+pub struct PendingEmbedding {
+    pub id: Uuid,
+    pub retrieval_text: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct EmbeddingMetadata {
+    pub embedding_model: Option<String>,
+    pub embedding_dimensions: Option<i32>,
+    pub embedding_input_type: Option<String>,
+}
+
+const MARK_COMPLETE_EMBEDDINGS_SQL: &str = "UPDATE knowledge_catalog_versions v
+     SET embedding_model = $1, embedding_dimensions = $2,
+         embedding_input_type = $3,
+         status = CASE WHEN status = 'failed' THEN status ELSE 'embedded' END,
+         synced_at = now()
+     WHERE EXISTS (SELECT 1 FROM knowledge_index i WHERE i.catalog_version_id = v.id)
+       AND NOT EXISTS (
+           SELECT 1 FROM knowledge_index i
+           WHERE i.catalog_version_id = v.id
+             AND (i.embedding IS NULL OR i.embedding_model IS DISTINCT FROM $1)
+       )";
+
 /// Id versi yang sudah tercatat untuk sebuah `content_hash`.
 pub async fn version_id(pool: &PgPool, content_hash: &str) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar::<_, Uuid>(
@@ -141,6 +166,66 @@ pub async fn upsert_version(
 
     tx.commit().await?;
     Ok(version_id)
+}
+
+/// Semua baris historis yang belum punya vector; tidak dibatasi versi terkini.
+pub async fn pending_embeddings(pool: &PgPool) -> sqlx::Result<Vec<PendingEmbedding>> {
+    sqlx::query_as(
+        "SELECT id, retrieval_text FROM knowledge_index WHERE embedding IS NULL ORDER BY catalog_version_id, id",
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Simpan satu batch lokal setelah seluruh HTTP provider selesai (I1).
+pub async fn persist_embeddings(
+    pool: &PgPool,
+    rows: &[(Uuid, Vec<f32>)],
+    model: &str,
+    dimensions: usize,
+    document_input_type: &str,
+) -> sqlx::Result<()> {
+    let mut tx = pool.begin().await?;
+    for (id, embedding) in rows {
+        sqlx::query("UPDATE knowledge_index SET embedding = $2, embedding_model = $3, embedded_at = now() WHERE id = $1 AND embedding IS NULL")
+            .bind(id)
+            .bind(pgvector::Vector::from(embedding.clone()))
+            .bind(model)
+            .execute(&mut *tx).await?;
+    }
+    sqlx::query(MARK_COMPLETE_EMBEDDINGS_SQL)
+        .bind(model)
+        .bind(dimensions as i32)
+        .bind(document_input_type)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await
+}
+
+pub async fn embedding_metadata(
+    pool: &PgPool,
+    version_id: Uuid,
+) -> sqlx::Result<Option<EmbeddingMetadata>> {
+    sqlx::query_as("SELECT embedding_model, embedding_dimensions, embedding_input_type FROM knowledge_catalog_versions WHERE id = $1")
+        .bind(version_id).fetch_optional(pool).await
+}
+
+pub async fn best_vector_capability(
+    pool: &PgPool,
+    version_id: Uuid,
+    vector: Vec<f32>,
+    cutoff: f32,
+) -> sqlx::Result<Option<(String, f32)>> {
+    sqlx::query_as(
+        "SELECT source_id, (1 - (embedding <=> $2))::real AS similarity
+         FROM knowledge_index
+         WHERE catalog_version_id = $1 AND source_type = 'capability' AND embedding IS NOT NULL
+           AND embedding_model = (SELECT embedding_model FROM knowledge_catalog_versions WHERE id = $1)
+           AND 1 - (embedding <=> $2) >= $3
+         ORDER BY embedding <=> $2, source_id ASC LIMIT 1",
+    )
+    .bind(version_id).bind(pgvector::Vector::from(vector)).bind(cutoff)
+    .fetch_optional(pool).await
 }
 
 /// Teks yang dilihat retrieval. Sengaja menggabungkan prosa **dan** contoh:
