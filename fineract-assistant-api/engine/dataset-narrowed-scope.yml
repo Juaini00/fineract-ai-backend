@@ -1,0 +1,28 @@
+info:
+  name: DS-8.4 pemilik dengan scope menyempit ditolak
+  type: http
+  seq: 14.3
+  description: |
+    DS-8.4 (separuh ScopeNarrowed) — pemilik yang sama, tetapi request
+    mempersempit scope ke satu office (`office_ids=1`), sementara dataset
+    `answered` dibuat atas seluruh office yang diizinkan. Handle yang diketahui
+    bukan izin: 403, tanpa isi.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}?office_ids=1"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("DS-8.4: scope yang menyempit mendapat 403 tanpa isi", function () {
+          expect(res.getStatus()).to.equal(403);
+          const body = res.getBody();
+          expect(body.success).to.equal(false);
+          expect(body.data).to.equal(null);
+          expect(JSON.stringify(body)).to.not.include(bru.getVar("answeredJobId"));
+        });

@@ -1,0 +1,24 @@
+info:
+  name: penyempitan yang masih mencakup scope dataset tetap terbaca
+  type: http
+  seq: 14.25
+  description: |
+    FIN-45 — penyempitan bukan penolakan otomatis: `office_ids` yang masih
+    mencakup seluruh scope dataset tetap 200. Pasangan negatifnya adalah
+    `dataset-narrowed-scope.yml` (403).
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}?office_ids={{answeredScopeOffices}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-45: office_ids yang mencakup scope dataset → 200", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.dataset_id).to.equal(bru.getVar("answeredDatasetId"));
+        });

@@ -1,0 +1,26 @@
+info:
+  name: DS-8.4 baris milik user lain tidak terbaca
+  type: http
+  seq: 14.2
+  description: |
+    DS-8.4 (separuh NotOwner) — otorisasi diperiksa ulang pada SETIAP
+    pembacaan (I7), termasuk baris, bukan hanya metadata handle.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows"
+  headers:
+    - name: authorization
+      value: "Bearer {{otherToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("DS-8.4: baris dataset user lain ditolak 404, tidak ada baris yang bocor", function () {
+          expect(res.getStatus()).to.equal(404);
+          const body = res.getBody();
+          expect(body.data).to.equal(null);
+          const columns = JSON.parse(bru.getVar("answeredTableColumns"));
+          columns.forEach((column) => expect(JSON.stringify(body)).to.not.include(column));
+        });

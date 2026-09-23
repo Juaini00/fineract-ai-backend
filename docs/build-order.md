@@ -448,14 +448,16 @@ must **not** be invented (Rules 3 and 4):
    a ≥24h TTL (`dataset::ttl_secs`, floor `DATASET_TTL_SECS = 86400`, not
    env-configurable); there is no manual purge/expire endpoint. A test run cannot
    produce a purged dataset.
-3. **DS-8.4 needs a second principal and a narrower scope.** A local-only
-   `auditor` principal now exists (PR #1), so the `NotOwner` (404) branch is
-   reachable. The admin's authorized offices still cannot be narrowed per
-   request, so the `ScopeNarrowed` (403) branch is not.
+3. ~~**DS-8.4 needs a second principal and a narrower scope.**~~ **Resolved
+   (FIN-45, FIN-49).** The local-only `auditor` principal (PR #1) reaches the
+   `NotOwner` (404) branch; the owner-approved `office_ids` query on
+   `GET /chat/datasets/{id}[/rows]` narrows (never widens) the caller's
+   authorization and reaches `ScopeNarrowed` (403). Both are proven by the
+   `engine/dataset-other-user*.yml` and `engine/dataset-narrowed-scope*.yml`
+   Bruno requests.
 
-Remaining: a test-only seam for purge (#2, FIN-44) and per-request scope
-narrowing (#3, FIN-45). Until both land, DS-8.2 and DS-8.4 are not fully proven
-at the HTTP surface and L3 stays 🔨.
+Remaining: a test-only seam for purge (#2, FIN-44). Until it lands, DS-8.2 is
+proven at the unit level only and L3 stays 🔨.
 
 ---
 

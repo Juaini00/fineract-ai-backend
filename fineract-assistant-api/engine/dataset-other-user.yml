@@ -1,0 +1,27 @@
+info:
+  name: DS-8.4 handle milik user lain tidak terbaca
+  type: http
+  seq: 14.1
+  description: |
+    DS-8.4 (separuh NotOwner) — handle yang diketahui bukan izin. User lain yang
+    membaca handle `answered` mendapat 404: keberadaannya pun tidak diungkap.
+    Separuh ScopeNarrowed (403) menunggu FIN-45.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{otherToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("DS-8.4: user lain dengan handle yang diketahui mendapat 404 tanpa isi", function () {
+          expect(res.getStatus()).to.equal(404);
+          const body = res.getBody();
+          expect(body.success).to.equal(false);
+          expect(body.data).to.equal(null);
+          expect(JSON.stringify(body)).to.not.include(bru.getVar("answeredJobId"));
+        });
