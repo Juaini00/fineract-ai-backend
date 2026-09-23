@@ -425,16 +425,17 @@ ditahan — tidak pernah hanya hidup di tipe blok baru.
 #### Blok yang benar-benar dipancarkan hari ini
 
 **`metric`** — satu nilai bernama. Hasil satu baris berisi tiga kolom menjadi
-**tiga blok `metric`**, bukan satu blok berisi daftar:
+**tiga blok `metric`**, bukan satu blok berisi daftar. Contoh dari
+`client.lifecycle_summary` (grain satu baris):
 
 ```json
 {
-  "block_id": "metric:total_balance",
+  "block_id": "metric:client_count",
   "type": "metric",
   "schema_version": 1,
   "derived_from": [{ "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11" }],
-  "key": "total_balance",
-  "value": "486705.19",
+  "key": "client_count",
+  "value": 43,
   "unit": null,
   "period": { "as_of_date": "2026-09-15" }
 }
@@ -443,6 +444,10 @@ ditahan — tidak pernah hanya hidup di tipe blok baru.
 `unit` bernilai `null` selama katalog belum menyatakannya — `null` berarti
 **tidak diketahui**, dan field itu tidak dihilangkan supaya perbedaan itu
 terlihat.
+
+Hasil yang ber-grain per mata uang — mis. `savings.balance_summary`, satu baris
+per `currency_code` — **tidak pernah** menjadi satu `metric` gabungan: lebih dari
+satu baris selalu menjadi blok `table` (L1.1, database-design #14).
 
 > Angka `NUMERIC` dikirim sebagai **string**, bukan float. Pembulatan biner pada
 > angka uang adalah cara klasik total berubah satu sen tanpa ada yang

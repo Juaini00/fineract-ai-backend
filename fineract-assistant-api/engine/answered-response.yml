@@ -23,18 +23,29 @@ runtime:
           expect(document.completeness).to.equal("Complete");
         });
 
-        test("angka datang sebagai blok metric tunggal, satu per nilai", function () {
-          // §6.2 — `metrics` (jamak) hilang; tiap nilai bernama adalah satu
-          // blok `metric` dengan block_id/schema_version/derived_from.
-          const metrics = blocks.filter((b) => b.type === "metric");
-          const keys = metrics.map((m) => m.key);
-          expect(keys).to.include("account_count");
-          expect(keys).to.include("total_balance");
-          metrics.forEach((m) => {
-            expect(m.block_id).to.be.a("string");
-            expect(m.schema_version).to.equal(1);
-            expect(m.derived_from).to.be.an("array").that.is.not.empty;
-          });
+        test("saldo per mata uang datang sebagai satu blok table, bukan metric gabungan", function () {
+          // L1.1 (#14) — `savings.balance_summary` ber-grain [currency_code]:
+          // satu baris per mata uang, tidak pernah dijumlah lintas AED/EUR/USD.
+          // Lebih dari satu baris → blok `table` (§2); satu blok `metric`
+          // `total_balance` di sini berarti mata uang dijumlah — regresi L1.1.
+          const tables = blocks.filter((b) => b.type === "table");
+          expect(tables).to.have.lengthOf(1);
+          const table = tables[0];
+          expect(table.block_id).to.be.a("string");
+          expect(table.schema_version).to.equal(1);
+          expect(table.derived_from).to.be.an("array").that.is.not.empty;
+          expect(table.columns).to.deep.equal([
+            "currency_code",
+            "account_count",
+            "total_balance",
+            "average_balance",
+            "max_balance",
+          ]);
+          expect(table.row_count).to.equal(table.rows.length);
+          expect(table.rows.length).to.be.above(1);
+          const currencies = table.rows.map((row) => row[0]);
+          expect(new Set(currencies).size).to.equal(currencies.length);
+          expect(blocks.filter((b) => b.type === "metric")).to.have.lengthOf(0);
           expect(blocks.find((b) => b.type === "metrics")).to.equal(undefined);
           expect(blocks.find((b) => b.type === "provenance")).to.equal(undefined);
         });
