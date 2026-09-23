@@ -1,0 +1,24 @@
+info:
+  name: office_ids rusak ditolak, bukan diabaikan
+  type: http
+  seq: 14.5
+  description: |
+    FIN-45 — `office_ids` yang tidak dapat dibaca ditolak 422. Mengabaikannya
+    berarti membaca tanpa penyempitan: scope yang diminta klien diam-diam
+    diperlebar.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}?office_ids=1,x"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-45: office_ids rusak → 422, tidak pernah dibaca sebagai tanpa penyempitan", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().data).to.equal(null);
+        });

@@ -34,3 +34,7 @@ runtime:
           expect(handle.completeness).to.equal("Complete");
           expect(handle.row_count_available).to.equal(Number(bru.getVar("answeredRowCount")));
         });
+
+        // Scope yang dipakai saat eksekusi; DS-8.4 membandingkan penyempitan
+        // request terhadapnya.
+        bru.setVar("answeredScopeOffices", handle.scope.office_ids.join(","));

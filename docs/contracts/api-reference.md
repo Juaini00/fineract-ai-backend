@@ -571,6 +571,13 @@ terbaca statusnya**, bukan 404 dan bukan halaman kosong yang tampak seperti nol
 (§7, I5). Dataset milik user lain dijawab `404` (keberadaannya tidak diungkap);
 scope yang menyempit dijawab `403`.
 
+Kedua endpoint menerima query `office_ids` opsional — daftar dipisah koma
+(`?office_ids=1,2`). Sama seperti `office_ids` pada `POST /chat/jobs`, ia hanya
+**mempersempit** otorisasi dan tidak pernah memperluasnya. Bila scope dataset
+tidak lagi tercakup oleh otorisasi yang sudah dipersempit itu → `403`. Tidak
+hadir berarti tanpa penyempitan; nilai kosong atau rusak (`office_ids=`,
+`office_ids=1,x`) → `422`, tidak pernah dibaca sebagai "tanpa penyempitan".
+
 `truncated` = set tersimpan dibatasi cap, bukan klaim analitik dan bukan preview
 (I4). `row_count_total = null` berarti **tidak diketahui**, bukan nol.
 
@@ -602,7 +609,8 @@ Metadata handle. `200` dengan:
 
 Satu halaman baris, keyset stabil atas `sort_key` (§4 — halaman berbeda tidak
 mengubah urutan). Query: `cursor` (opsional; kosong = mulai dari baris pertama,
-cursor rusak → `422`), `limit` (opsional, di-clamp `1..=200`). `200` dengan:
+cursor rusak → `422`), `limit` (opsional, di-clamp `1..=200`), `office_ids`
+(opsional, lihat di atas). `200` dengan:
 
 ```json
 {

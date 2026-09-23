@@ -74,11 +74,14 @@ pub struct RowsPage {
 /// Ambil handle dan periksa ulang otorisasinya (I7).
 ///
 /// Dipanggil pada **setiap** pembacaan — metadata maupun baris. Handle adalah
-/// referensi, bukan grant.
+/// referensi, bukan grant. `requested` adalah `office_ids` dari request: ia
+/// hanya **mempersempit** otorisasi (PRD §10), sama seperti pada
+/// `POST /chat/jobs`; kosong berarti tanpa penyempitan.
 async fn authorized(
     foundation: &Foundation,
     dataset_id: Uuid,
     user_id: Uuid,
+    requested: &[i64],
 ) -> Result<Handle, ApiError> {
     let handle = repository::find(foundation.app_db().pool(), dataset_id)
         .await
@@ -88,7 +91,7 @@ async fn authorized(
     // Scope diverifikasi ulang terhadap otorisasi yang berlaku SEKARANG, bukan
     // terhadap `scope_json` yang tersimpan: yang tersimpan adalah konteks
     // keputusan untuk audit.
-    let caller_offices = executor::authorized_office_ids(foundation.fineract_db(), &[])
+    let caller_offices = executor::authorized_office_ids(foundation.fineract_db(), requested)
         .await
         .map_err(|error| anyhow::anyhow!("scope tidak dapat diturunkan: {:?}", error))?;
 
@@ -109,8 +112,9 @@ pub async fn read(
     foundation: &Foundation,
     dataset_id: Uuid,
     user_id: Uuid,
+    requested: &[i64],
 ) -> Result<HandleView, ApiError> {
-    let handle = authorized(foundation, dataset_id, user_id).await?;
+    let handle = authorized(foundation, dataset_id, user_id, requested).await?;
     let state = HandleState::from_status(&handle.status);
 
     Ok(HandleView {
@@ -149,10 +153,11 @@ pub async fn rows(
     foundation: &Foundation,
     dataset_id: Uuid,
     user_id: Uuid,
+    requested: &[i64],
     cursor: Cursor,
     limit: i64,
 ) -> Result<RowsPage, ApiError> {
-    let handle = authorized(foundation, dataset_id, user_id).await?;
+    let handle = authorized(foundation, dataset_id, user_id, requested).await?;
     let state = HandleState::from_status(&handle.status);
     let limit = limit.clamp(1, MAX_PAGE_SIZE);
 
@@ -273,8 +278,14 @@ mod tests {
     fn ds_8_2_a_dead_handle_always_says_why() {
         // DS-8.2 — kedaluwarsa dinyatakan, tidak pernah tampil sebagai nol baris.
         assert_eq!(unavailable_reason(HandleState::Live), None);
-        assert_eq!(unavailable_reason(HandleState::Expired), Some("dataset_expired"));
-        assert_eq!(unavailable_reason(HandleState::Purged), Some("dataset_purged"));
+        assert_eq!(
+            unavailable_reason(HandleState::Expired),
+            Some("dataset_expired")
+        );
+        assert_eq!(
+            unavailable_reason(HandleState::Purged),
+            Some("dataset_purged")
+        );
         assert_eq!(
             unavailable_reason(HandleState::None),
             Some("dataset_not_materialized")
