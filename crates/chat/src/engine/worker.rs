@@ -342,7 +342,7 @@ async fn run_job(
             // dibuang inline ke ledger: tabel berpaginasi, node hilir, dan
             // memori session merujuk HANDLE, bukan daftar baris yang dibentangkan
             // (#11 aturan 2 dan 3). Handle-nya immutable begitu `ready`.
-            let Some(dataset_id) = retain_dataset(
+            let Some(retained) = retain_dataset(
                 foundation,
                 job,
                 &plan,
@@ -366,7 +366,7 @@ async fn run_job(
                 pii_enabled,
                 &auto_bound,
                 node_run_id,
-                dataset_id,
+                &retained,
             );
 
             // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
@@ -445,7 +445,8 @@ async fn run_job(
 ///
 /// `None` berarti fencing kalah dan tidak ada apa pun yang ditulis; `Some`
 /// membawa handle yang sudah `ready` dan tertaut ke node run — satu-satunya id
-/// yang boleh muncul di lineage response (FIN-43).
+/// yang boleh muncul di lineage response (FIN-43) — beserta pemotongannya,
+/// yang wajib dinyatakan response (DS-8.1).
 ///
 /// ponytail: setiap hasil yang berhasil diretensi — bukan hanya yang besar.
 /// #11 aturan 3 mengizinkan hasil kecil hidup inline saja, tetapi setiap
@@ -464,24 +465,30 @@ async fn retain_dataset(
     withheld: &[String],
     authorized: &[i64],
     rows: &[serde_json::Map<String, serde_json::Value>],
-) -> anyhow::Result<Option<Uuid>> {
+) -> anyhow::Result<Option<dataset::Retained>> {
     let pool = foundation.app_db().pool();
     let config = foundation.config();
-    let materialized = dataset::materialize(rows);
+    let materialized = dataset::materialize(rows, dataset::row_cap(config.local_dataset_max_rows));
 
     // I4/DS-8.1 — `truncated` adalah pernyataan tentang set yang TERSIMPAN.
-    // Klaim analitiknya menurun hanya bila ada baris yang benar-benar dibuang,
-    // dan saat itu alasannya WAJIB ikut (I5).
-    let (completeness, completeness_reason) = if materialized.truncated {
-        ("Partial", Some(dataset::TRUNCATION_REASON))
+    // Klaim analitik HANDLE menurun hanya bila ada baris yang benar-benar
+    // dibuang, dan saat itu alasannya WAJIB ikut (I5). Jawaban response tetap
+    // dihitung atas seluruh baris node; ia menyatakan batas handle-nya sendiri.
+    let completeness = if materialized.truncated() {
+        "Partial"
     } else {
-        ("Complete", None)
+        "Complete"
     };
+    let completeness_reason = materialized.truncation;
     debug_assert!(dataset::claim_is_stated(
-        materialized.truncated,
+        materialized.truncated(),
         completeness,
         completeness_reason
     ));
+    let truncation = materialized.truncation.map(|reason| dataset::Truncation {
+        reason,
+        row_count_available: materialized.row_count_available,
+    });
 
     let mut provenance = node_provenance(plan, rows.len());
     // Snapshot menyatakan titik datanya; kesegaran SUMBER terpisah dari ini (§3).
@@ -512,7 +519,7 @@ async fn retain_dataset(
             sort_key_json: serde_json::json!(["__row_ordinal"]),
             completeness,
             completeness_reason,
-            truncated: materialized.truncated,
+            truncated: materialized.truncated(),
             row_count_available: materialized.row_count_available,
             row_count_total: materialized.row_count_total,
             byte_size: materialized.byte_size,
@@ -532,7 +539,10 @@ async fn retain_dataset(
     let linked =
         dataset::repository::link_node_run(pool, node_run_id, dataset_id, job.id, job.lease_token)
             .await?;
-    Ok(linked.then_some(dataset_id))
+    Ok(linked.then_some(dataset::Retained {
+        dataset_id,
+        truncation,
+    }))
 }
 
 /// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.

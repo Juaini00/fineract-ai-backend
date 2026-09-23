@@ -1,0 +1,11 @@
+info:
+  name: dataset-capped
+  seq: 10
+  description: |
+    DS-8.1 (FIN-46) — `truncated=true` + `completeness=Complete` sah hanya bila
+    batasannya dinyatakan dan tidak mengubah jawaban. Data Fineract lokal jauh
+    di bawah `DATASET_MAX_ROWS` (100.000), jadi integration runner menyalakan
+    worker dengan seam lokal `LOCAL_DATASET_MAX_ROWS=1` (hanya sah di
+    APP_ENV=local; keputusan owner). Pertanyaan yang sama dengan
+    `engine/answered-*` (satu baris per mata uang) kini meretensi satu baris
+    saja, sementara jawabannya tetap atas seluruh baris.

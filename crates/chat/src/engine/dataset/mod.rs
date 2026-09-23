@@ -138,9 +138,42 @@ pub struct Materialized {
     pub row_count_available: i64,
     /// Baris yang dilihat node. `None` berarti **tidak diketahui**, bukan nol (I4).
     pub row_count_total: Option<i64>,
-    /// Set yang tersimpan dibatasi cap — bukan pernyataan analitik.
-    pub truncated: bool,
+    /// Set yang tersimpan dibatasi cap — bukan pernyataan analitik. `Some`
+    /// membawa cap mana yang tercapai; `truncated` diturunkan darinya, sehingga
+    /// "terpotong tanpa alasan" tidak dapat direpresentasikan (I5).
+    pub truncation: Option<&'static str>,
     pub byte_size: i64,
+}
+
+impl Materialized {
+    pub fn truncated(&self) -> bool {
+        self.truncation.is_some()
+    }
+}
+
+/// Handle yang sudah `ready` dan tertaut ke node run, beserta apa yang wajib
+/// dinyatakan response tentangnya (FIN-43, DS-8.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Retained {
+    pub dataset_id: Uuid,
+    /// `Some` bila set tersimpan dibatasi cap — response yang merujuk handle
+    /// ini wajib menyatakannya (I5).
+    pub truncation: Option<Truncation>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Truncation {
+    pub reason: &'static str,
+    pub row_count_available: i64,
+}
+
+/// Cap baris yang berlaku untuk satu materialisasi.
+///
+/// `local_override` adalah seam `LOCAL_DATASET_MAX_ROWS` (FIN-46) yang hanya
+/// diterima config di `APP_ENV=local`. Ia hanya **menyempitkan**: nilai di atas
+/// [`DATASET_MAX_ROWS`] tidak pernah melebarkan batas makna runtime.md §4.
+pub fn row_cap(local_override: Option<usize>) -> usize {
+    local_override.map_or(DATASET_MAX_ROWS, |cap| cap.min(DATASET_MAX_ROWS))
 }
 
 /// Pecah baris menjadi chunk, dengan cap per-dataset ditegakkan di sini.
@@ -148,7 +181,7 @@ pub struct Materialized {
 /// Dua dimensi (baris + byte) karena lebar baris Fineract bervariasi: chunk
 /// kecil hanya menambah overhead tuple (chunk selalu dibaca utuh), chunk besar
 /// membuat de-TOAST mahal untuk satu halaman UI (runtime.md §4).
-pub fn materialize(rows: &[Map<String, Value>]) -> Materialized {
+pub fn materialize(rows: &[Map<String, Value>], max_rows: usize) -> Materialized {
     let total = rows.len() as i64;
     let mut chunks: Vec<Chunk> = Vec::new();
     let mut current: Vec<Value> = Vec::new();
@@ -156,14 +189,20 @@ pub fn materialize(rows: &[Map<String, Value>]) -> Materialized {
     let mut row_from = 0i64;
     let mut stored = 0i64;
     let mut byte_size = 0i64;
-    let mut truncated = false;
+    let mut truncation = None;
 
     for row in rows {
         let value = Value::Object(row.clone());
         let width = value.to_string().len();
 
-        if stored as usize >= DATASET_MAX_ROWS || byte_size as usize + width > DATASET_MAX_BYTES {
-            truncated = true;
+        // Batas yang tercapai dinyatakan apa adanya (DS-8.1): menyebut cap
+        // baris saat yang habis adalah cap byte adalah pernyataan yang keliru.
+        if stored as usize >= max_rows {
+            truncation = Some(ROW_CAP_REASON);
+            break;
+        }
+        if byte_size as usize + width > DATASET_MAX_BYTES {
+            truncation = Some(BYTE_CAP_REASON);
             break;
         }
 
@@ -187,7 +226,7 @@ pub fn materialize(rows: &[Map<String, Value>]) -> Materialized {
         chunks,
         row_count_available: stored,
         row_count_total: Some(total),
-        truncated,
+        truncation,
         byte_size,
     }
 }
@@ -226,8 +265,9 @@ pub fn claim_is_stated(truncated: bool, completeness: &str, reason: Option<&str>
     }
 }
 
-/// Alasan yang dipakai jalur tulis saat cap simpan tercapai.
-pub const TRUNCATION_REASON: &str = "dataset_row_cap_reached";
+/// Alasan yang dipakai jalur tulis saat cap simpan tercapai — satu per batas.
+pub const ROW_CAP_REASON: &str = "dataset_row_cap_reached";
+pub const BYTE_CAP_REASON: &str = "dataset_byte_cap_reached";
 
 /// Cursor keyset paginasi (§4): `(chunk_index, row)`.
 ///
@@ -329,7 +369,7 @@ mod tests {
         // batasannya dinyatakan.
         assert!(!claim_is_stated(true, "Complete", None));
         assert!(!claim_is_stated(true, "Complete", Some("   ")));
-        assert!(claim_is_stated(true, "Complete", Some(TRUNCATION_REASON)));
+        assert!(claim_is_stated(true, "Complete", Some(ROW_CAP_REASON)));
 
         // Tidak terpotong: tidak ada yang perlu dinyatakan.
         assert!(claim_is_stated(false, "Complete", None));
@@ -344,12 +384,30 @@ mod tests {
     fn ds_8_1_truncated_is_not_completeness_is_not_preview() {
         // DS-8.1 — tiga dimensi terpisah: set tersimpan penuh, tetapi klaim
         // analitiknya boleh `Partial` (mis. input hilir hilang), dan sebaliknya.
-        let materialized = materialize(&rows(10));
-        assert!(!materialized.truncated);
+        let materialized = materialize(&rows(10), DATASET_MAX_ROWS);
+        assert!(!materialized.truncated());
         assert_eq!(materialized.row_count_available, 10);
         assert_eq!(materialized.row_count_total, Some(10));
         // `truncated=false` tidak dengan sendirinya mengesahkan `Complete`.
         assert!(claim_is_stated(false, "Partial", Some("upstream_partial")));
+    }
+
+    #[test]
+    fn ds_8_1_row_cap_names_itself_and_only_narrows() {
+        // DS-8.1 — cap yang tercapai dinyatakan dengan namanya, dan jumlah
+        // aslinya tetap diketahui: `available < total` adalah buktinya.
+        let materialized = materialize(&rows(5), 2);
+        assert_eq!(materialized.truncation, Some(ROW_CAP_REASON));
+        assert_eq!(materialized.row_count_available, 2);
+        assert_eq!(materialized.row_count_total, Some(5));
+
+        // Tepat pada cap bukan pemotongan.
+        assert!(!materialize(&rows(2), 2).truncated());
+
+        // Seam lokal hanya menyempitkan; tidak pernah melebarkan batas makna.
+        assert_eq!(row_cap(None), DATASET_MAX_ROWS);
+        assert_eq!(row_cap(Some(1)), 1);
+        assert_eq!(row_cap(Some(DATASET_MAX_ROWS * 10)), DATASET_MAX_ROWS);
     }
 
     #[test]
@@ -376,7 +434,7 @@ mod tests {
     fn ds_8_3_chunking_freezes_a_stable_order() {
         // DS-8.3 — paginasi stabil: chunk menutupi seluruh baris sekali,
         // berurutan, tanpa tumpang tindih dan tanpa lubang.
-        let materialized = materialize(&rows(CHUNK_ROWS * 2 + 5));
+        let materialized = materialize(&rows(CHUNK_ROWS * 2 + 5), DATASET_MAX_ROWS);
         assert_eq!(materialized.chunks.len(), 3);
 
         let mut expected_from = 0i64;
@@ -478,8 +536,11 @@ mod tests {
             })
             .collect();
 
-        let materialized = materialize(&wide);
-        assert!(materialized.chunks.len() > 1, "chunk tidak ditutup oleh byte");
+        let materialized = materialize(&wide, DATASET_MAX_ROWS);
+        assert!(
+            materialized.chunks.len() > 1,
+            "chunk tidak ditutup oleh byte"
+        );
         for chunk in &materialized.chunks {
             assert!((chunk.row_count as usize) < CHUNK_ROWS);
         }
@@ -489,10 +550,10 @@ mod tests {
     fn empty_result_is_a_handle_without_chunks() {
         // Nol baris tetap menghasilkan handle: "tidak ada baris" adalah jawaban,
         // dan ia harus dapat dirujuk seperti jawaban lain.
-        let materialized = materialize(&[]);
+        let materialized = materialize(&[], DATASET_MAX_ROWS);
         assert!(materialized.chunks.is_empty());
         assert_eq!(materialized.row_count_available, 0);
         assert_eq!(materialized.row_count_total, Some(0));
-        assert!(!materialized.truncated);
+        assert!(!materialized.truncated());
     }
 }

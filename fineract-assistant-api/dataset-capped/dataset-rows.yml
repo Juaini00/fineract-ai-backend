@@ -1,0 +1,34 @@
+info:
+  name: DS-8.1 baris handle terpotong adalah awalan jawaban
+  type: http
+  seq: 6
+  description: |
+    DS-8.1 — pemotongan hanya membuang ekor set tersimpan: baris yang tersisa
+    identik dengan baris pertama jawaban, halaman membawa `truncated` dan
+    alasannya, dan tidak ada cursor lanjutan yang menjanjikan baris yang
+    tidak disimpan.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{cappedDatasetId}}/rows"
+  headers:
+    - name: authorization
+      value: "Bearer {{cappedToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("DS-8.1: satu baris tersimpan = baris pertama jawaban, pemotongan dinyatakan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.truncated).to.equal(true);
+          expect(page.completeness).to.equal("Partial");
+          expect(page.completeness_reason).to.equal("dataset_row_cap_reached");
+          expect(page.next_cursor).to.equal(null);
+          expect(page.rows).to.have.lengthOf(1);
+
+          const columns = JSON.parse(bru.getVar("cappedTableColumns"));
+          const answer = JSON.parse(bru.getVar("cappedTableRows"));
+          const stored = page.rows.map((row) => columns.map((column) => row[column]));
+          expect(stored).to.deep.equal(answer.slice(0, 1));
+        });

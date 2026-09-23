@@ -499,6 +499,7 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `skipped_inputs` | Pengguna berhenti; input yang tidak pernah diisi | `unanswered_fields`, `completed_nodes` |
 | `validation_rejected` | Ada blok yang dibuang validator | `failed_rules`, `failures` |
 | `resolver_no_candidates` | Resolver berjalan utuh dan tidak menemukan kandidat dalam scope | — |
+| `dataset_truncated` | Handle dataset di lineage menyimpan lebih sedikit baris daripada jawaban (cap retensi tercapai). Jawaban tetap dihitung atas **seluruh** baris dan `completeness` dokumen tetap `Complete`; yang dibatasi hanya paginasi lewat handle (DS-8.1) | `dataset_id`, `reason`, `row_count_available`, `row_count_total` |
 | `no_capability_matched` | Tidak ada capability yang disetujui mencakup permintaan | `request_echo` |
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
@@ -579,7 +580,17 @@ hadir berarti tanpa penyempitan; nilai kosong atau rusak (`office_ids=`,
 `office_ids=1,x`) → `422`, tidak pernah dibaca sebagai "tanpa penyempitan".
 
 `truncated` = set tersimpan dibatasi cap, bukan klaim analitik dan bukan preview
-(I4). `row_count_total = null` berarti **tidak diketahui**, bukan nol.
+(I4). `row_count_total = null` berarti **tidak diketahui**, bukan nol. Handle
+yang terpotong selalu `completeness: "Partial"` dengan `completeness_reason`
+yang menyebut cap-nya — `dataset_row_cap_reached` (`DATASET_MAX_ROWS`) atau
+`dataset_byte_cap_reached` (`DATASET_MAX_BYTES`) — dan
+`row_count_available < row_count_total`. Response job yang merujuknya
+menyatakan batas itu di blok `limitation` `dataset_truncated`.
+
+Di `APP_ENV=local` saja, env `LOCAL_DATASET_MAX_ROWS` (FIN-46, keputusan
+owner) menyempitkan cap baris agar cabang terpotong dapat diuji dengan data
+lokal. Ia tidak pernah melebarkan cap produksi, dan startup ditolak bila ia
+di-set di luar `local`.
 
 ### `GET /chat/datasets/{dataset_id}`
 
