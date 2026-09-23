@@ -12,10 +12,19 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const document = res.getBody().data;
-        test("FIN-41: vector fallback selects savings_deposit_total", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(document.kind).to.equal("analysis");
-          expect(document.evidence_json.lineage[0].capability_id)
-            .to.equal("savings_deposit_total");
-        });
+        // FIN-134 — response baru ada sesudah job settle; semantic arm memanggil
+        // API embedding sehingga latensinya bisa melewati jeda runner. Tunggu
+        // (dibatasi), jangan membaca 404 sebagai jawaban.
+        const polls = Number(bru.getVar("retrievalVectorPolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("retrievalVectorPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-41: vector fallback selects savings_deposit_total", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("analysis");
+            expect(document.evidence_json.lineage[0].capability_id)
+              .to.equal("savings_deposit_total");
+          });
+        }
