@@ -1,0 +1,26 @@
+info:
+  name: DS-8.3 halaman pertama dibaca ulang tidak berubah
+  type: http
+  seq: 13.3
+  description: |
+    DS-8.3 — membaca ulang halaman yang sama sesudah seluruh halaman dilalui
+    mengembalikan baris yang sama: halaman berbeda tidak mengubah urutan.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows?limit=1"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("DS-8.3: halaman pertama yang dibaca ulang identik", function () {
+          expect(res.getStatus()).to.equal(200);
+          const collected = JSON.parse(bru.getVar("datasetPagedRows"));
+          expect(page.rows).to.deep.equal([collected[0]]);
+        });
