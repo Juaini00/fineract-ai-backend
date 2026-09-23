@@ -1,0 +1,27 @@
+info:
+  name: client_top_n_by_deposit_volume job
+  type: http
+  seq: 4.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{answersSession}}", "request_text": "Top clients by deposit volume this month." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("answersKey", "fin52-client_top_n_by_deposit_volume-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("answersJob", res.getBody().data.job_id);

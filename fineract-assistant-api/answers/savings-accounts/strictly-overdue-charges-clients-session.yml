@@ -1,0 +1,22 @@
+info:
+  name: savings_strictly_overdue_charges_clients session
+  type: http
+  seq: 8.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-52 savings_strictly_overdue_charges_clients" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("overdueChargesSession", res.getBody().data.id);

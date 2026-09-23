@@ -1,0 +1,22 @@
+info:
+  name: savings_deposit_monthly_top_n session
+  type: http
+  seq: 8.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-52 savings_deposit_monthly_top_n" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("answersSession", res.getBody().data.id);

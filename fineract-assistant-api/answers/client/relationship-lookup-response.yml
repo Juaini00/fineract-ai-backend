@@ -1,0 +1,31 @@
+info:
+  name: client_relationship_lookup response
+  type: http
+  seq: 1.4
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{answersClarificationId}}",
+        "revision": {{answersClarificationRevision}},
+        "answers": { "search": "Nour Hashem" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("client_relationship_lookup: jawaban durable, job yang sama mengantre lagi", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("answersJob"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

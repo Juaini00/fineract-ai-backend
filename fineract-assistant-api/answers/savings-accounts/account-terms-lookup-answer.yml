@@ -1,0 +1,40 @@
+info:
+  name: savings_account_terms_lookup answer (TIDAK TERJANGKAU)
+  type: http
+  seq: 2.3
+  description: |
+    savings_account_terms_lookup tidak pernah dapat dijawab lewat jalur job: manifest capability
+    mendeklarasikan account_number sebagai parameter string biasa (required,
+    tanpa resolution/probe), tetapi query yang mendasarinya
+    (knowledge/queries/savings/account_terms_lookup.yaml)
+    menandai account_number sebagai source: transient_sensitive_input. K1
+    (planner.rs Missing::unanswerable) melarang mengikat slot identitas dari
+    teks bebas; karena capability ini tidak mendeklarasikan probe/resolver
+    untuknya, slot itu TIDAK DAPAT ditanyakan sama sekali —
+    completeness_reason selalu "identity_slot_without_resolver", persis
+    perilaku yang resolver/noresolver-job.yml (baris 6-7) buktikan dan
+    resolver/noresolver-response.yml uji sebagai perilaku yang DISENGAJA
+    untuk pola ini. Ini kapabilitas katalog yang rusak (bug), bukan hasil
+    request_text yang salah — dilaporkan ke Main, bukan dilewati diam-diam.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{acctTermsJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "savings_account_terms_lookup answer")) {
+          const document = res.getBody().data;
+          test("FIN-52 savings_account_terms_lookup: TIDAK TERJANGKAU — account_number transient_sensitive_input tanpa resolver (K1, bug katalog)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.outcome).to.equal("Unsupported");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.completeness_reason).to.equal("identity_slot_without_resolver");
+            expect(document.blocks_json[0].body).to.contain("account_number");
+            expect(document.blocks_json[0].body).to.contain("never bound from free text");
+          });
+        }

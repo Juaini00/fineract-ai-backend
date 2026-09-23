@@ -1,0 +1,27 @@
+info:
+  name: organization_office_name_lookup job
+  type: http
+  seq: 11.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{answersSession}}", "request_text": "Is there an office named Head Office?" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("answersKey", "fin52-organization_office_name_lookup-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("answersJob", res.getBody().data.job_id);

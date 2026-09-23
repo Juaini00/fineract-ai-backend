@@ -1,0 +1,14 @@
+info:
+  name: group
+  seq: 3
+  description: |
+    FIN-52 (L4.0). `group_identity_resolve` (knowledge/capabilities/group/group_identity_resolve.yaml)
+    tidak dapat dibuktikan lewat jalur job: `status: candidate`, bukan
+    `approved_mvp` — planner/lqr.rs menyaring hanya `approved_mvp`, jadi
+    kapabilitas ini TIDAK PERNAH dipilih oleh `POST /chat/jobs`, first-turn
+    maupun continuation (lihat komentar file baris 6-12: "never selected by
+    planning/data paths, which filter on approved_mvp"). Tidak ada request
+    yang bisa dijalankan di folder ini; tidak ada `tests/answers/group_identity_resolve.sql`
+    karena tidak ada jawaban job untuk diadu. Kebenaran datanya sudah
+    diverifikasi terpisah lewat PREPARE/EXECUTE langsung di
+    knowledge/VERIFICATION.md §"group_identity_resolve — lulus" (L1, bukan L4).

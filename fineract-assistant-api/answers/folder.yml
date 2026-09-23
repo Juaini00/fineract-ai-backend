@@ -1,0 +1,9 @@
+info:
+  name: answers
+  seq: 11
+  description: |
+    FIN-52 (L4.0) — gerbang L4: setiap capability jawaban dijalankan lewat jalur
+    job (POST /chat/jobs → worker → response tervalidasi), lalu jawabannya
+    diadu dengan SQL langsung yang ditulis terpisah (`tests/answers/*.sql`),
+    dihitung ulang oleh `scripts/answer-expectations.sh` tepat sebelum tahap
+    ini berjalan. Perbandingan ada di `lib/answers.js`.

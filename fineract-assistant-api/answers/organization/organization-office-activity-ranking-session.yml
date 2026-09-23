@@ -1,0 +1,22 @@
+info:
+  name: organization_office_activity_ranking session
+  type: http
+  seq: 5.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-52 organization_office_activity_ranking" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("answersSession", res.getBody().data.id);

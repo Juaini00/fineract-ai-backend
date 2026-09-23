@@ -1,0 +1,27 @@
+info:
+  name: savings_products_by_client job
+  type: http
+  seq: 11.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{productsByClientKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{productsByClientSession}}", "request_text": "What savings products does a client hold?" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("productsByClientKey", "fin52-savings_products_by_client-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("productsByClientJob", res.getBody().data.job_id);

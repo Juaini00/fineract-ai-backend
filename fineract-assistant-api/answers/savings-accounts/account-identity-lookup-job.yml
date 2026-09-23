@@ -1,0 +1,27 @@
+info:
+  name: savings_account_identity_lookup job
+  type: http
+  seq: 1.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{acctIdentityKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{acctIdentitySession}}", "request_text": "Who owns savings account number Branch 001000000001?" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("acctIdentityKey", "fin52-savings_account_identity_lookup-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("acctIdentityJob", res.getBody().data.job_id);

@@ -1,0 +1,27 @@
+info:
+  name: office_list_basic job
+  type: http
+  seq: 4.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{answersSession}}", "request_text": "List the offices in the system." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("answersKey", "fin52-office_list_basic-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("answersJob", res.getBody().data.job_id);

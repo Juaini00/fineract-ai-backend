@@ -1,0 +1,27 @@
+info:
+  name: savings_charges_by_type job
+  type: http
+  seq: 5.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{chargesByTypeKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{chargesByTypeSession}}", "request_text": "Show all charges of type Withdrawal fee on savings accounts." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("chargesByTypeKey", "fin52-savings_charges_by_type-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("chargesByTypeJob", res.getBody().data.job_id);

@@ -1,0 +1,18 @@
+info:
+  name: client_activation_top_n_offices answer
+  type: http
+  seq: 13.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "client_activation_top_n_offices answer")) {
+          answers.check(test, expect, "client_activation_top_n_offices", res.getBody().data);
+        }

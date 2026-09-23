@@ -1,0 +1,18 @@
+info:
+  name: savings_charge_count_by_type answer
+  type: http
+  seq: 4.5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{chargeCountJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "savings_charge_count_by_type answer")) {
+          answers.check(test, expect, "savings_charge_count_by_type", res.getBody().data);
+        }

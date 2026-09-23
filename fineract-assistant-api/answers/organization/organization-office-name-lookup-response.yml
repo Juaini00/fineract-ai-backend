@@ -1,0 +1,31 @@
+info:
+  name: organization_office_name_lookup response
+  type: http
+  seq: 11.4
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{answersClarificationId}}",
+        "revision": {{answersClarificationRevision}},
+        "answers": { "office_name": "Head Office" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("organization_office_name_lookup: jawaban durable, job yang sama mengantre lagi", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("answersJob"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

@@ -1,0 +1,18 @@
+info:
+  name: client_relationship_by_id answer
+  type: http
+  seq: 14.6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "client_relationship_by_id answer")) {
+          answers.check(test, expect, "client_relationship_by_id", res.getBody().data);
+        }

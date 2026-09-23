@@ -1,0 +1,18 @@
+info:
+  name: organization_office_name_lookup answer
+  type: http
+  seq: 11.5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "organization_office_name_lookup answer")) {
+          answers.check(test, expect, "organization_office_name_lookup", res.getBody().data);
+        }

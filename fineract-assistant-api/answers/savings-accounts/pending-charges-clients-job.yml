@@ -1,0 +1,27 @@
+info:
+  name: savings_pending_charges_clients job
+  type: http
+  seq: 7.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{pendingChargesKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{pendingChargesSession}}", "request_text": "Show clients with pending savings account charges as of today." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("pendingChargesKey", "fin52-savings_pending_charges_clients-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("pendingChargesJob", res.getBody().data.job_id);

@@ -7,3 +7,5 @@ node_modules
 # OS files
 .DS_Store
 Thumbs.db
+# FIN-52: pembanding SQL langsung, dihasilkan scripts/answer-expectations.sh
+.answers

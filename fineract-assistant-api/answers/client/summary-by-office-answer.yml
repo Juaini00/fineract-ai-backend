@@ -1,0 +1,18 @@
+info:
+  name: client_summary_by_office answer
+  type: http
+  seq: 11.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "client_summary_by_office answer")) {
+          answers.check(test, expect, "client_summary_by_office", res.getBody().data);
+        }

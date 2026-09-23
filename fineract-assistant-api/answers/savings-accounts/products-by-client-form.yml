@@ -1,0 +1,26 @@
+info:
+  name: savings_products_by_client form klarifikasi
+  type: http
+  seq: 11.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{productsByClientJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (answers.awaitResponse(bru, res, "savings_products_by_client form klarifikasi")) {
+          const form = res.getBody().data;
+          test("form klarifikasi terbuka untuk slot client_id", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(form.state).to.equal("open");
+            expect(form.fields_json[0].field_id).to.equal("client_id");
+            expect(form.fields_json[0].type).to.equal("single_choice");
+          });
+          bru.setVar("productsByClientClarificationId", form.clarification_id);
+          bru.setVar("productsByClientRevision", form.revision);
+        }
