@@ -1,0 +1,21 @@
+info:
+  name: vector retrieval selects the held-out capability
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{retrievalVectorJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalVectorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        test("FIN-41: vector fallback selects savings_deposit_total", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("analysis");
+          expect(document.evidence_json.lineage[0].capability_id)
+            .to.equal("savings_deposit_total");
+        });
