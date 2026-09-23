@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_charges_by_type form klarifikasi")) {
+        if (answers.awaitResponse(bru, req, res)) {
           const form = res.getBody().data;
           test("form klarifikasi terbuka untuk slot charge_name (teks bebas, bukan identitas)", function () {
             expect(res.getStatus()).to.equal(200);

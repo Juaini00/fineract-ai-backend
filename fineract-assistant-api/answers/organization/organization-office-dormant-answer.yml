@@ -13,6 +13,18 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "organization_office_dormant answer")) {
-          answers.check(test, expect, "organization_office_dormant", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "organization_office_dormant", document);
+          // FIN-133: hard_cap=100 -> baris dipotong ke 100; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi kantor
+          // dorman > 100.
+          answers.expectRowCap(
+            test,
+            expect,
+            "organization_office_dormant",
+            document,
+            100,
+            answers.populationSize("organization_office_dormant")
+          );
         }

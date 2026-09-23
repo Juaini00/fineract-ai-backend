@@ -13,6 +13,6 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "office_list_basic answer")) {
+        if (answers.awaitResponse(bru, req, res)) {
           answers.check(test, expect, "office_list_basic", res.getBody().data);
         }

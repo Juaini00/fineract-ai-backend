@@ -13,6 +13,18 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_pending_charges_clients answer")) {
-          answers.check(test, expect, "savings_pending_charges_clients", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_pending_charges_clients", document);
+          // FIN-133: hard_cap=10000 -> baris dipotong ke 10000; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi charge
+          // pending > 10000.
+          answers.expectRowCap(
+            test,
+            expect,
+            "savings_pending_charges_clients",
+            document,
+            10000,
+            answers.populationSize("savings_pending_charges_clients")
+          );
         }

@@ -2,6 +2,13 @@ info:
   name: savings_withdrawal_monthly_top_n answer
   type: http
   seq: 9.3
+  description: |
+    Dasi bulan/amount di top-10 (nit FIN-52, lihat
+    deposit-monthly-top-n-answer.yml): baris yang dipilih di dalam setiap
+    bulan deterministik, tapi urutan TAMPIL final tidak membedakan dasi lebih
+    lanjut — plan luck. sortBy: ["month_start", "transaction_id"] menyortir
+    kedua sisi memakai transaction_id (unik) sebagai kunci total-order
+    sebelum dibandingkan, tanpa mengubah baris mana yang terpilih.
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
@@ -13,6 +20,8 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_withdrawal_monthly_top_n answer")) {
-          answers.check(test, expect, "savings_withdrawal_monthly_top_n", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "savings_withdrawal_monthly_top_n", res.getBody().data, {
+            sortBy: ["month_start", "transaction_id"],
+          });
         }

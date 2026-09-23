@@ -2,6 +2,10 @@ info:
   name: savings_products_by_client answer
   type: http
   seq: 11.6
+  description: |
+    queries/savings/products_by_client.sql tidak punya ORDER BY (nit FIN-52).
+    sortBy: ["savings_product_id"] menyortir kedua sisi sebelum dibandingkan,
+    supaya urutan hasil planner (plan luck) tidak membuat gate ini flaky.
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{productsByClientJob}}/response"
@@ -13,6 +17,8 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_products_by_client answer")) {
-          answers.check(test, expect, "savings_products_by_client", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "savings_products_by_client", res.getBody().data, {
+            sortBy: ["savings_product_id"],
+          });
         }

@@ -21,3 +21,20 @@ info:
     knowledge/VERIFICATION.md §"savings_charge_type_identity_resolve —
     lulus" (L1, not L4). No `tests/answers/savings_charge_type_identity_resolve.sql`
     and no Bruno chain in this folder for it.
+
+    `tests/answers/savings_account_identity_lookup.sql` and
+    `tests/answers/savings_account_terms_lookup.sql` do not exist and never
+    will. Both capabilities are permanently TIDAK TERJANGKAU (unreachable)
+    through `POST /chat/jobs`: their manifests declare `account_number` as a
+    plain required string parameter (no `probe`/resolver), but the
+    underlying query (knowledge/queries/savings/account_identity_lookup.yaml,
+    account_terms_lookup.yaml) marks `account_number`
+    `source: transient_sensitive_input`. K1 (planner.rs `Missing::
+    unanswerable`) forbids binding an identity slot from free text, so the
+    planner always returns `identity_slot_without_resolver` before any SQL
+    runs — see account-identity-lookup-answer.yml and
+    account-terms-lookup-answer.yml, which assert exactly that outcome and
+    pin the capability id in the limitation body. A SQL oracle for a query
+    the planner can never execute would be dead code asserted against
+    nothing (`lib/answers.js::check`/`checkSubset` are never called for
+    these two ids); deleting it is the documentation.

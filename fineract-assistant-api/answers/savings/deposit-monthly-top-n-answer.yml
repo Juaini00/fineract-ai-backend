@@ -2,6 +2,15 @@ info:
   name: savings_deposit_monthly_top_n answer
   type: http
   seq: 8.3
+  description: |
+    29 dasi bulan/amount di top-10 hari ini (nit FIN-52): baris yang dipilih
+    di dalam setiap bulan deterministik (ORDER BY amount DESC, transaction_date
+    DESC, id DESC di ranking window/LATERAL, sama di production dan oracle),
+    tapi urutan TAMPIL final (ORDER BY month_start, amount DESC) tidak
+    membedakan dasi lebih lanjut — plan luck. sortBy: ["month_start",
+    "transaction_id"] menyortir kedua sisi memakai transaction_id (unik)
+    sebagai kunci total-order sebelum dibandingkan, tanpa mengubah baris mana
+    yang terpilih.
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
@@ -13,6 +22,8 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_deposit_monthly_top_n answer")) {
-          answers.check(test, expect, "savings_deposit_monthly_top_n", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "savings_deposit_monthly_top_n", res.getBody().data, {
+            sortBy: ["month_start", "transaction_id"],
+          });
         }

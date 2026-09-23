@@ -13,6 +13,18 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_client_activity answer")) {
-          answers.check(test, expect, "savings_client_activity", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_client_activity", document);
+          // FIN-133: limit.default unbounded + hard_cap=100 terdeklarasi ->
+          // baris dipotong ke 100; completeness Partial + limitation
+          // row_cap_reached hanya bila populasi transaksi klien 65 > 100.
+          answers.expectRowCap(
+            test,
+            expect,
+            "savings_client_activity",
+            document,
+            100,
+            answers.populationSize("savings_client_activity")
+          );
         }

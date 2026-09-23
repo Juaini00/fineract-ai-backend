@@ -4,11 +4,14 @@ info:
   seq: 8.3
   description: |
     client_random_sample.sql adalah populasi PENUH nasabah aktif yang sah
-    (limit/office_name tidak terikat dari teks bebas, jadi tidak menyempit).
-    38 = jumlah nasabah aktif dalam scope kantor terotorisasi saat ini
-    (< hard_cap 50, jadi LIMIT tidak pernah memotong); checkSubset menguji
-    setiap baris jawaban ada di populasi, tanpa duplikat, dan jumlahnya
-    persis 38 — urutannya sengaja acak sehingga tidak diadu posisi.
+    (office_name tidak terikat dari teks bebas, jadi pool tidak menyempit).
+    FIN-133: limit.default unbounded + defaults.default_limit=5 terdeklarasi
+    -> nilai limit yang diikat job adalah 5 (bukan hard_cap 50 — ini bukan
+    disclosure, hanya ukuran jawaban yang diminta; completeness tidak
+    terpengaruh). checkSubset menguji setiap baris jawaban ada di populasi,
+    tanpa duplikat, dan jumlahnya persis `min(ukuran populasi, 5)` — dihitung
+    dari populasi SQL langsung saat run, bukan angka populasi hari ini yang
+    di-hard-code di sini. Urutannya sengaja acak sehingga tidak diadu posisi.
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
@@ -20,6 +23,6 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "client_random_sample answer")) {
-          answers.checkSubset(test, expect, "client_random_sample", res.getBody().data, 38);
+        if (answers.awaitResponse(bru, req, res)) {
+          answers.checkSubset(test, expect, "client_random_sample", res.getBody().data, 5);
         }

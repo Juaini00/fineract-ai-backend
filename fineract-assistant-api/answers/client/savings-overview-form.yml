@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "client_savings_overview form")) {
+        if (answers.awaitResponse(bru, req, res)) {
           const form = res.getBody().data;
           test("client_savings_overview: form minta search bertipe text", function () {
             expect(form.state).to.equal("open");

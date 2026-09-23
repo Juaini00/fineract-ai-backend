@@ -1,5 +1,7 @@
--- params: {"from_date": ":month_start", "to_date": ":today", "limit": null}
--- Kantor tanpa aktivitas tabungan tercatat pada rentang tanggal, terlama dulu.
+-- params: {"from_date": ":month_start", "to_date": ":today", "limit": 100}
+-- Kantor tanpa aktivitas tabungan tercatat pada rentang tanggal, terlama
+-- dulu, dibatasi row cap 100 (organization/office_dormant.yaml hard_cap=100,
+-- FIN-133; lihat organization_office_dormant__population.sql).
 SELECT
     o.id AS office_id,
     o.name AS office_name,
@@ -16,3 +18,4 @@ WHERE o.id = ANY(:'office_ids'::bigint[])
 GROUP BY o.id, o.name, o.opening_date
 HAVING count(t.id) = 0
 ORDER BY o.opening_date ASC NULLS LAST, o.id ASC
+LIMIT 100

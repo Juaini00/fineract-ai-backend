@@ -1,8 +1,10 @@
--- params: {"currency_code": null, "limit": null}
+-- params: {"currency_code": null, "limit": 100}
 -- Saldo tabungan per kantor dan mata uang (L1.1), diurutkan dari saldo
--- terbesar. INNER JOIN dipakai supaya kantor tanpa akun tersingkir secara
--- alami, berbeda dari queries/organization/office_savings_summary.sql yang
--- LEFT JOIN lalu HAVING.
+-- terbesar, dibatasi row cap 100
+-- (organization/office_savings_summary.yaml hard_cap=100, FIN-133; lihat
+-- organization_office_savings_summary__population.sql). INNER JOIN dipakai
+-- supaya kantor tanpa akun tersingkir secara alami, berbeda dari
+-- queries/organization/office_savings_summary.sql yang LEFT JOIN lalu HAVING.
 SELECT
     o.id AS office_id,
     o.name AS office_name,
@@ -16,3 +18,4 @@ JOIN m_savings_account sa ON sa.client_id = c.id
 WHERE o.id = ANY(:'office_ids'::bigint[])
 GROUP BY o.id, o.name, sa.currency_code
 ORDER BY total_balance DESC, o.id ASC
+LIMIT 100

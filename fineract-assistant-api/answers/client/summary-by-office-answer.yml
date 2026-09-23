@@ -13,6 +13,18 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "client_summary_by_office answer")) {
-          answers.check(test, expect, "client_summary_by_office", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_summary_by_office", document);
+          // FIN-133: hard_cap=10000 -> baris dipotong ke 10000; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi office
+          // berpenduduk nasabah > 10000.
+          answers.expectRowCap(
+            test,
+            expect,
+            "client_summary_by_office",
+            document,
+            10000,
+            answers.populationSize("client_summary_by_office")
+          );
         }

@@ -27,13 +27,14 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "savings_account_identity_lookup answer")) {
+        if (answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           test("FIN-52 savings_account_identity_lookup: TIDAK TERJANGKAU — account_number transient_sensitive_input tanpa resolver (K1, bug katalog)", function () {
             expect(res.getStatus()).to.equal(200);
             expect(document.outcome).to.equal("Unsupported");
             expect(document.completeness).to.equal("Unknown");
             expect(document.completeness_reason).to.equal("identity_slot_without_resolver");
+            expect(document.blocks_json[0].body).to.contain("'savings_account_identity_lookup'");
             expect(document.blocks_json[0].body).to.contain("account_number");
             expect(document.blocks_json[0].body).to.contain("never bound from free text");
           });

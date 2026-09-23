@@ -13,6 +13,18 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, res, "organization_office_savings_summary answer")) {
-          answers.check(test, expect, "organization_office_savings_summary", res.getBody().data);
+        if (answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "organization_office_savings_summary", document);
+          // FIN-133: hard_cap=100 -> baris dipotong ke 100; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi grain
+          // (office, currency_code) > 100.
+          answers.expectRowCap(
+            test,
+            expect,
+            "organization_office_savings_summary",
+            document,
+            100,
+            answers.populationSize("organization_office_savings_summary")
+          );
         }
