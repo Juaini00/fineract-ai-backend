@@ -1,0 +1,22 @@
+info:
+  name: FIN-133 session row cap savings_client_activity
+  type: http
+  seq: 27
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno FIN-133 row cap" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-133: session dibuat", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("rowCapSessionId", res.getBody().data.id);

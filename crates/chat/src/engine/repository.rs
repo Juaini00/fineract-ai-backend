@@ -877,6 +877,9 @@ pub async fn persist_plan(
 pub struct NodeOutcome<'a> {
     pub status: &'a str,
     pub completeness: Option<&'a str>,
+    /// Wajib saat `completeness` bukan `Complete`, mis. `row_cap_reached`
+    /// (FIN-133): klaim yang turun tanpa alasan adalah penghilangan senyap (I5).
+    pub completeness_reason: Option<&'a str>,
     pub failure_code: Option<&'a str>,
     /// Binding yang BENAR-BENAR dikonsumsi node — termasuk slot yang diikat
     /// resolver tanpa bertanya (K5). Ini yang dibaca validator D2, dan itulah
@@ -915,6 +918,7 @@ pub async fn complete_node(
         "UPDATE job_node_runs
          SET status = $4,
              completeness = $5,
+             completeness_reason = $13,
              failure_code = $6,
              output_json = $7,
              provenance_json = $8,
@@ -947,6 +951,7 @@ pub async fn complete_node(
     .bind(hex::encode(Sha256::digest(
         outcome.input_binding_json.to_string().as_bytes(),
     )))
+    .bind(outcome.completeness_reason)
     .fetch_optional(&mut *tx)
     .await?;
 

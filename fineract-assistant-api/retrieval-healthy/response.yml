@@ -12,11 +12,20 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const document = res.getBody().data;
-        test("FIN-42: healthy semantic no-match is out_of_scope", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(document.kind).to.equal("limitation");
-          expect(document.outcome).to.equal("Unsupported");
-          expect(document.completeness).to.equal("Unknown");
-          expect(document.completeness_reason).to.equal("out_of_scope");
-        });
+        // FIN-134 — response baru ada sesudah job settle; semantic arm memanggil
+        // API embedding sehingga latensinya bisa melewati jeda runner. Tunggu
+        // (dibatasi), jangan membaca 404 sebagai jawaban.
+        const polls = Number(bru.getVar("retrievalHealthyPolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("retrievalHealthyPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-42: healthy semantic no-match is out_of_scope", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("limitation");
+            expect(document.outcome).to.equal("Unsupported");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.completeness_reason).to.equal("out_of_scope");
+          });
+        }

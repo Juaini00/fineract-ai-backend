@@ -1,0 +1,58 @@
+info:
+  name: FIN-133 row cap tercapai dinyatakan, bukan dipotong diam-diam
+  type: http
+  seq: 32
+  description: |
+    Populasi aktivitas klien 65 melebihi row cap 100. Jawabannya dipotong ke
+    100 baris, `completeness` turun menjadi `Partial` dengan alasan
+    `row_cap_reached`, dan blok `limitation` menyatakan bahwa masih ada baris
+    lain. Lineage mencatat cap (100), bukan 101 yang diikat ke SQL.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{rowCapJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const blocks = document.blocks_json;
+        const lineage = document.evidence_json.lineage[0];
+
+        test("FIN-133: capability savings_client_activity menjawab", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("analysis");
+          expect(document.outcome).to.equal("Answered");
+          expect(document.validation_status).to.equal("passed");
+          expect(lineage.capability_id).to.equal("savings_client_activity");
+        });
+
+        test("FIN-133: completeness Partial dengan alasan row_cap_reached", function () {
+          expect(document.completeness).to.equal("Partial");
+          expect(document.completeness_reason).to.equal("row_cap_reached");
+        });
+
+        test("FIN-133: blok limitation row_cap_reached menyatakan cap", function () {
+          const limitation = blocks.find(function (b) { return b.block_id === "row_cap_reached"; });
+          expect(limitation, "blok row_cap_reached tidak ada").to.not.equal(undefined);
+          expect(limitation.type).to.equal("limitation");
+          expect(limitation.row_cap).to.equal(100);
+          expect(limitation.rows_shown).to.equal(100);
+          expect(limitation.more_rows_exist).to.equal(true);
+        });
+
+        test("FIN-133: tabel memuat tepat 100 baris", function () {
+          const table = blocks.find(function (b) { return b.type === "table"; });
+          expect(table.row_count).to.equal(100);
+          expect(table.rows).to.have.lengthOf(100);
+          expect(lineage.row_count).to.equal(100);
+        });
+
+        test("FIN-133: lineage mencatat limit = cap (100), bukan cap + 1", function () {
+          const limit = lineage.parameters.find(function (p) { return p.name === "limit"; });
+          expect(limit.value).to.equal(100);
+        });
+
+        bru.setVar("rowCapDatasetId", lineage.dataset_id);

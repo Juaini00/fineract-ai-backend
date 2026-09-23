@@ -345,6 +345,20 @@ Kombinasi yang dilarang (dan tidak akan pernah dikirim): `Empty`/`NotFound`
 dengan `Partial`; `SkippedByUser` dengan `Complete`; lifecycle nonterminal
 dengan `outcome` terisi.
 
+`completeness_reason` pada dokumen `analysis` bernilai
+`curated_query:<query_id>` saat jawabannya utuh. Bila `limit` capability
+dideklarasikan `unbounded` tanpa `defaults.default_limit` tetapi punya cap
+(`hard_cap`, selain itu `guards.max_limit`) dan populasi yang cocok melebihi cap
+itu, hasilnya dipotong ke cap: `completeness: "Partial"` dengan
+`completeness_reason: "row_cap_reached"`, node ledger-nya dan handle dataset di
+lineage juga `Partial` dengan alasan yang sama, dan dokumennya membawa blok
+`limitation` `row_cap_reached` (FIN-133). Hasil yang muat di bawah cap tetap
+`Complete`, tanpa blok itu. Bila `limit` dideklarasikan `unbounded` dan
+capability mendeklarasikan `defaults.default_limit`, nilai itu yang diikat
+(dipotong ke cap) sebagai ukuran jawaban yang diminta — tanpa pengungkapan,
+kelengkapan tidak berubah. Default literal pada `limit` (mis. `"10"`) tetap
+menang atas `defaults.default_limit`.
+
 ### `GET /chat/jobs/{job_id}/response`
 
 `404` selama `final_response_version` masih `null`. Frontend **tidak boleh**
@@ -500,6 +514,7 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `validation_rejected` | Ada blok yang dibuang validator | `failed_rules`, `failures` |
 | `resolver_no_candidates` | Resolver berjalan utuh dan tidak menemukan kandidat dalam scope | — |
 | `dataset_truncated` | Handle dataset di lineage menyimpan lebih sedikit baris daripada jawaban (cap retensi tercapai). Jawaban tetap dihitung atas **seluruh** baris dan `completeness` dokumen tetap `Complete`; yang dibatasi hanya paginasi lewat handle (DS-8.1) | `dataset_id`, `reason`, `row_count_available`, `row_count_total` |
+| `row_cap_reached` | Populasi yang cocok melebihi row cap capability; hanya `row_cap` baris pertama yang ditampilkan. `completeness` dokumen `Partial` dengan `completeness_reason: "row_cap_reached"` (FIN-133). Tanpa `derived_from` | `row_cap`, `rows_shown` (= `row_cap`), `more_rows_exist` (`true`) |
 | `no_capability_matched` | Tidak ada capability yang disetujui mencakup permintaan | `request_echo` |
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
@@ -538,6 +553,11 @@ klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
 Scope dicatat sebagai **jumlah**, bukan daftar office. `derivations` kosong
 selama belum ada narasi model; ia adalah satu-satunya jalan angka turunan
 ("naik 12%") menjadi sah (responses.md §4).
+
+Parameter `limit` yang terikat sebagai row cap dicatat dengan nilai **cap**-nya
+(mis. `100`), bukan `cap + 1` yang diikat ke SQL untuk mendeteksi kelebihan
+baris; `limit` dari `defaults.default_limit` dicatat dengan nilai yang diikat
+(mis. `5`).
 
 `dataset_id` adalah handle yang meretensi hasil node itu — **selalu terisi**
 pada dokumen `analysis`, karena setiap node yang berhasil diretensi sebagai
@@ -584,8 +604,16 @@ hadir berarti tanpa penyempitan; nilai kosong atau rusak (`office_ids=`,
 yang terpotong selalu `completeness: "Partial"` dengan `completeness_reason`
 yang menyebut cap-nya — `dataset_row_cap_reached` (`DATASET_MAX_ROWS`) atau
 `dataset_byte_cap_reached` (`DATASET_MAX_BYTES`) — dan
-`row_count_available < row_count_total`. Response job yang merujuknya
-menyatakan batas itu di blok `limitation` `dataset_truncated`.
+`row_count_available < row_count_total` (atau `row_count_total = null` bila row
+cap capability juga tercapai). Response job yang merujuknya menyatakan batas
+itu di blok `limitation` `dataset_truncated`.
+
+Handle hasil node yang terkena row cap capability (FIN-133) juga
+`completeness: "Partial"`, dengan `completeness_reason: "row_cap_reached"` bila
+cap simpan tidak tercapai (bila keduanya tercapai, alasan cap simpan yang
+disebut). Set yang tersimpan tidak terpotong — `truncated: false`,
+`row_count_available` = cap — tetapi populasi sumbernya lebih besar dan tidak
+dihitung, sehingga `row_count_total = null` (tidak diketahui), bukan cap.
 
 Di `APP_ENV=local` saja, env `LOCAL_DATASET_MAX_ROWS` (FIN-46, keputusan
 owner) menyempitkan cap baris agar cabang terpotong dapat diuji dengan data
