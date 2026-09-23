@@ -61,3 +61,17 @@ runtime:
           const scope = lineage.parameters.find((p) => p.name === "office_ids");
           expect(scope.value).to.match(/authorized offices$/);
         });
+
+        test("FIN-43: lineage membawa dataset_id nyata, bukan null", function () {
+          // Tanpa id ini klien tidak punya jalan menuju GET /chat/datasets/{id}
+          // (build-order §6.6 #1).
+          const lineage = document.evidence_json.lineage[0];
+          expect(lineage.dataset_id).to.match(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+          );
+          bru.setVar("answeredDatasetId", lineage.dataset_id);
+          bru.setVar("answeredRowCount", lineage.row_count);
+          const table = blocks.find((b) => b.type === "table");
+          bru.setVar("answeredTableRows", JSON.stringify(table.rows));
+          bru.setVar("answeredTableColumns", JSON.stringify(table.columns));
+        });

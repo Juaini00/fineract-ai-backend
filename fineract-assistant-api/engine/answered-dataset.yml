@@ -1,0 +1,36 @@
+info:
+  name: dataset handle dari lineage response
+  type: http
+  seq: 12
+  description: |
+    FIN-43 — id dataset dipelajari dari `evidence_json.lineage[0].dataset_id`
+    response job, lalu dipakai membaca handle-nya. Sebelumnya lineage selalu
+    `null`, sehingga endpoint ini tidak terjangkau klien (build-order §6.6 #1).
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+
+        test("FIN-43: handle dari lineage terbaca dan milik job yang sama", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.dataset_id).to.equal(bru.getVar("answeredDatasetId"));
+          expect(handle.job_id).to.equal(bru.getVar("answeredJobId"));
+          expect(handle.handle_state).to.equal("live");
+          expect(handle.status).to.equal("ready");
+          expect(handle.unavailable_reason).to.equal(null);
+        });
+
+        test("FIN-43: handle meretensi set yang sama dengan yang dilaporkan lineage", function () {
+          expect(handle.truncated).to.equal(false);
+          expect(handle.completeness).to.equal("Complete");
+          expect(handle.row_count_available).to.equal(Number(bru.getVar("answeredRowCount")));
+        });
