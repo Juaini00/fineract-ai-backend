@@ -69,12 +69,17 @@ pub struct Handle {
 }
 
 /// Satu chunk sebagaimana tersimpan, lengkap dengan diskriminator encoding-nya.
+///
+/// `payload` (JSONB) `NULL` berarti chunk ini menyimpan isinya di
+/// `payload_bytes` — encoding yang belum dibaca runtime ini (DS-8.5). Kolom
+/// BYTEA itu sengaja tidak di-SELECT: tidak ada decoder yang memakainya, dan
+/// membacanya hanya menambah de-TOAST tanpa guna.
 #[derive(Debug, Clone, FromRow)]
 pub struct StoredChunk {
     pub chunk_index: i32,
     pub row_from: i64,
     pub row_to: i64,
-    pub payload: Value,
+    pub payload: Option<Value>,
     pub format: String,
     pub encoding_version: i32,
 }

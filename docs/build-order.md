@@ -341,6 +341,28 @@ Update after FIN-46 (DS-8.1):
   cut was reported as a row-cap cut.
 - L3 stays 🔨: DS-8.5 and DS-8.6 are still unit-level.
 
+Update after FIN-50 (DS-8.5):
+
+- **DS-8.5 now holds in the schema, not only in the discriminator.** The
+  original `dataset_chunks.payload JSONB NOT NULL` meant a real `BYTEA` chunk
+  still required a migration (as `migration/carry-over.md` #11 itself said:
+  "add a column + a new format value"), contradicting DS-8.5's "without a
+  migration". Owner decision: prepare the column now. Migration
+  `20260923000001` makes `payload` nullable, adds `payload_bytes BYTEA`, and
+  enforces exactly one payload per chunk — with deliberately no CHECK tying
+  `format` to a column, so a future encoding is a value, not DDL.
+- Proof is at the database, the surface DS-8.5 names: `tests/schema_smoke.sql`
+  T13 writes a legacy JSONB chunk and a `bytea_zstd`/v2 chunk into the same
+  dataset with no DDL, and rejects a chunk with zero or two payloads. The read
+  path names an unreadable chunk (`chunk_encoding_unsupported`) instead of
+  reading it as zero rows; `decode` now also rejects a `json` chunk whose
+  payload is not an array, which it previously read as empty.
+- `docs/data/database-design.md` §4.17 still lists only `payload JSONB`, and
+  `docs/migration/carry-over.md` #11 still says a future BYTEA needs "a column
+  + a new format value" — the column now exists. The owner updates both in a
+  separate `docs:` commit (Rule 3).
+- L3 stays 🔨: DS-8.6 is still unit-level.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -366,7 +388,8 @@ Latest run — **30 of 59 scenarios have a test**:
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
 stage waits on CLR-3. DS-8.1..8.4 are proven by Bruno requests (`engine/`,
-`dataset-capped/`); DS-8.5 and DS-8.6 are still unit-level
+`dataset-capped/`); DS-8.5 is proven at the schema by `tests/schema_smoke.sql`
+T13 plus unit tests; DS-8.6 is still unit-level
 (`crates/chat/src/engine/dataset/`). RESP is now complete at the unit level, but "has a test" is a coverage
 figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
 test actually proves its scenario, and RESP-8.7/8.9 in particular prove
@@ -477,8 +500,9 @@ must **not** be invented (Rules 3 and 4):
    Bruno requests.
 
 All three mechanisms now exist; DS-8.1 (FIN-46), DS-8.2, DS-8.3 and DS-8.4 are
-proven at the HTTP surface. L3 still stays 🔨 until every DS scenario is
-checked for conformance (DS-8.5, DS-8.6 remain unit-level).
+proven at the HTTP surface and DS-8.5 (FIN-50) at the schema. L3 still stays
+🔨 until every DS scenario is checked for conformance (DS-8.6 remains
+unit-level).
 
 ---
 

@@ -260,6 +260,49 @@ BEGIN
     END IF;
 END $$;
 
+-- ============================================================
+-- T13. DS-8.5 (FIN-50) — chunk BYTEA kelak = nilai format baru, BUKAN migrasi.
+--      Chunk JSONB lama tetap sah, chunk BYTEA berformat baru diterima skema
+--      apa adanya, dan setiap chunk memuat TEPAT satu payload.
+-- ============================================================
+INSERT INTO chat_sessions (id, owner_user_id)
+VALUES ('88888888-8888-8888-8888-888888888888', '11111111-1111-1111-1111-111111111111');
+
+INSERT INTO chat_jobs (id, session_id, owner_user_id, request_text, lifecycle)
+VALUES ('99999999-9999-9999-9999-999999999999', '88888888-8888-8888-8888-888888888888',
+        '11111111-1111-1111-1111-111111111111', 'ds-8.5', 'Running');
+
+INSERT INTO datasets (id, job_id, session_id, owner_user_id)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-9999-9999-999999999999',
+        '88888888-8888-8888-8888-888888888888', '11111111-1111-1111-1111-111111111111');
+
+INSERT INTO dataset_chunks (dataset_id, chunk_index, row_from, row_to, payload, row_count)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 0, 0, 1, '[{"id":1}]'::jsonb, 1);
+
+INSERT INTO dataset_chunks (dataset_id, chunk_index, row_from, row_to, payload, payload_bytes,
+                            row_count, format, encoding_version)
+VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, 1, 2, NULL, '\x28b52ffd'::bytea,
+        1, 'bytea_zstd', 2);
+
+DO $$
+BEGIN
+    INSERT INTO dataset_chunks (dataset_id, chunk_index, row_from, row_to, row_count)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, 2, 3, 1);
+    RAISE EXCEPTION 'T13a GAGAL: chunk tanpa payload seharusnya ditolak';
+EXCEPTION WHEN check_violation THEN
+    NULL;
+END $$;
+
+DO $$
+BEGIN
+    INSERT INTO dataset_chunks (dataset_id, chunk_index, row_from, row_to, payload, payload_bytes,
+                                row_count)
+    VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, 2, 3, '[]'::jsonb, '\x00'::bytea, 1);
+    RAISE EXCEPTION 'T13b GAGAL: chunk dengan dua payload seharusnya ditolak';
+EXCEPTION WHEN check_violation THEN
+    NULL;
+END $$;
+
 ROLLBACK;
 
 \echo '=== SEMUA SMOKE TEST LULUS ==='

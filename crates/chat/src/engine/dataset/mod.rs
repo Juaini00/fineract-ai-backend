@@ -313,13 +313,18 @@ pub struct UnsupportedEncoding {
 /// Encoding yang tidak dikenal **ditolak dengan menyebut dirinya**, bukan
 /// dianggap kosong: chunk yang ditulis versi lebih baru harus terbaca sebagai
 /// "belum dapat dibaca di sini", bukan sebagai dataset yang kehilangan baris.
+///
+/// `json` adalah kolom `payload` JSONB, `None` bila chunk menyimpan payload-nya
+/// di `payload_bytes` (DS-8.5): format BYTEA kelak hanya menambah cabang di
+/// sini, bukan migrasi. Payload JSON yang bukan array juga ditolak — ia bukan
+/// "nol baris".
 pub fn decode(
     format: &str,
     encoding_version: i32,
-    payload: &Value,
+    json: Option<&Value>,
 ) -> Result<Vec<Value>, UnsupportedEncoding> {
-    match (format, encoding_version) {
-        (FORMAT_JSON, ENCODING_VERSION) => Ok(payload.as_array().cloned().unwrap_or_default()),
+    match (format, encoding_version, json) {
+        (FORMAT_JSON, ENCODING_VERSION, Some(Value::Array(rows))) => Ok(rows.clone()),
         _ => Err(UnsupportedEncoding {
             format: format.to_string(),
             encoding_version,
@@ -488,17 +493,27 @@ mod tests {
         // baru: chunk lama tetap terbaca, dan yang baru ditolak dengan menyebut
         // dirinya alih-alih dibaca sebagai dataset kosong.
         let payload = json!([{ "id": 1 }]);
-        assert_eq!(decode(FORMAT_JSON, ENCODING_VERSION, &payload).unwrap().len(), 1);
-
         assert_eq!(
-            decode("bytea_zstd", 2, &payload),
+            decode(FORMAT_JSON, ENCODING_VERSION, Some(&payload))
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // Chunk BYTEA (payload JSONB-nya NULL, isinya di `payload_bytes`) yang
+        // ditulis runtime lebih baru: ditolak dengan namanya.
+        assert_eq!(
+            decode("bytea_zstd", 2, None),
             Err(UnsupportedEncoding {
                 format: "bytea_zstd".to_string(),
                 encoding_version: 2,
             })
         );
         // Versi baru pada format yang sama juga bukan asumsi.
-        assert!(decode(FORMAT_JSON, 2, &payload).is_err());
+        assert!(decode(FORMAT_JSON, 2, Some(&payload)).is_err());
+        // Chunk `json` tanpa array bukan dataset kosong.
+        assert!(decode(FORMAT_JSON, ENCODING_VERSION, None).is_err());
+        assert!(decode(FORMAT_JSON, ENCODING_VERSION, Some(&json!({}))).is_err());
     }
 
     #[test]
