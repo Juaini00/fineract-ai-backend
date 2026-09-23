@@ -32,6 +32,10 @@ pub struct Capability {
     pub request_shape: Option<RequestShape>,
     #[serde(default)]
     pub guards: BTreeMap<String, serde_yaml::Value>,
+    /// `defaults:` tingkat capability, mis. `default_limit` — ukuran jawaban
+    /// yang diminta saat `limit` dideklarasikan `unbounded` (FIN-133).
+    #[serde(default)]
+    pub defaults: BTreeMap<String, serde_yaml::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -1,0 +1,34 @@
+info:
+  name: FIN-133 pertanyaan sampel acak nasabah
+  type: http
+  seq: 34
+  description: |
+    `client_random_sample` mendeklarasikan `limit: unbounded` + `hard_cap: 50`
+    dan `defaults.default_limit: 5`: planner mengikat 5 sebagai ukuran jawaban
+    yang diminta, tanpa pengungkapan.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{defaultLimitIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{defaultLimitSessionId}}",
+        "request_text": "Give me a random sample of clients."
+      }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("defaultLimitIdemKey", "bruno-fin133-default-limit-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-133: job diterima", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("defaultLimitJobId", res.getBody().data.job_id);

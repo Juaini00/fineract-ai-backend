@@ -1,0 +1,22 @@
+info:
+  name: FIN-133 session default_limit client_random_sample
+  type: http
+  seq: 33
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno FIN-133 default_limit" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-133: session dibuat", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("defaultLimitSessionId", res.getBody().data.id);

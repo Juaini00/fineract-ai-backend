@@ -1,0 +1,23 @@
+info:
+  name: FIN-133 form klarifikasi client_id
+  type: http
+  seq: 29
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{rowCapJobId}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const form = res.getBody().data;
+        test("FIN-133: form klarifikasi terbuka untuk slot client_id", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(form.state).to.equal("open");
+          expect(form.fields_json[0].field_id).to.equal("client_id");
+          expect(form.fields_json[0].type).to.equal("single_choice");
+        });
+        bru.setVar("rowCapClarificationId", form.clarification_id);
+        bru.setVar("rowCapRevision", form.revision);

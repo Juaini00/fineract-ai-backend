@@ -1,0 +1,31 @@
+info:
+  name: FIN-133 jawab klarifikasi dengan klien 65
+  type: http
+  seq: 31
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{rowCapJobId}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{rowCapIdemKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{rowCapClarificationId}}",
+        "revision": {{rowCapRevision}},
+        "answers": { "client_id": "{{rowCapOptionId}}" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-133: jawaban durable, job yang sama kembali mengantre", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("rowCapJobId"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

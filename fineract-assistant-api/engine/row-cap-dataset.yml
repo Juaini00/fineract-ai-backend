@@ -1,0 +1,38 @@
+info:
+  name: FIN-133 handle dataset hasil row cap tidak mengaku lengkap
+  type: http
+  seq: 32.5
+  description: |
+    Handle yang meretensi hasil node ber-row cap menyimpan tepat 100 baris dan
+    tidak terpotong oleh cap simpan (`truncated: false`), tetapi populasi
+    sumbernya lebih besar: klaimnya `Partial` + `row_cap_reached`, dan
+    `row_count_total` tidak diketahui (`null`), bukan 100 (I4).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{rowCapDatasetId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+
+        test("FIN-133: handle dari lineage terbaca dan milik job row cap", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.dataset_id).to.equal(bru.getVar("rowCapDatasetId"));
+          expect(handle.job_id).to.equal(bru.getVar("rowCapJobId"));
+          expect(handle.status).to.equal("ready");
+        });
+
+        test("FIN-133: handle Partial dengan alasan row_cap_reached", function () {
+          expect(handle.completeness).to.equal("Partial");
+          expect(handle.completeness_reason).to.equal("row_cap_reached");
+        });
+
+        test("FIN-133: set tersimpan = cap, total populasi tidak diketahui", function () {
+          expect(handle.truncated).to.equal(false);
+          expect(handle.row_count_available).to.equal(100);
+          expect(handle.row_count_total).to.equal(null);
+        });

@@ -277,7 +277,12 @@ async fn run_job(
     let executed = executor::execute(foundation.fineract_db(), &plan).await;
 
     match executed {
-        Ok(result) => {
+        Ok(mut result) => {
+            // FIN-133 — executor mengikat `cap + 1`; kelebihan baris dipotong
+            // di sini, SEBELUM apa pun disimpan: ledger, dataset, response, dan
+            // memori melihat set yang sama, dan pemotongannya dinyatakan.
+            let row_cap = compose::cap_rows(&plan, &mut result.rows);
+
             // Sakelar PII disnapshot saat job diterima (#15), bukan dibaca ulang
             // sekarang: laporan tidak boleh berubah makna karena konfigurasi
             // berubah di tengah eksekusi.
@@ -305,7 +310,12 @@ async fn run_job(
                 PLAN_VERSION,
                 NodeOutcome {
                     status: "Completed",
-                    completeness: Some("Complete"),
+                    completeness: Some(if row_cap.is_some() {
+                        "Partial"
+                    } else {
+                        "Complete"
+                    }),
+                    completeness_reason: row_cap.map(|_| compose::ROW_CAP_REACHED),
                     failure_code: None,
                     // Hasil kecil disimpan inline; dataset berchunk baru
                     // diperlukan saat hasil besar, dan belum ada konsumennya.
@@ -351,6 +361,7 @@ async fn run_job(
                 &withheld,
                 &authorized,
                 &stored_rows,
+                row_cap,
             )
             .await?
             else {
@@ -367,6 +378,7 @@ async fn run_job(
                 &auto_bound,
                 node_run_id,
                 &retained,
+                row_cap,
             );
 
             // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
@@ -420,6 +432,7 @@ async fn run_job(
                     status: "Failed",
                     // Hasilnya TIDAK DIKETAHUI, bukan nol (I4).
                     completeness: Some("Unknown"),
+                    completeness_reason: None,
                     failure_code: Some(failure_code),
                     // Binding tetap dicatat meski node gagal: "dengan parameter
                     // apa ia gagal" adalah separuh dari investigasinya.
@@ -465,25 +478,21 @@ async fn retain_dataset(
     withheld: &[String],
     authorized: &[i64],
     rows: &[serde_json::Map<String, serde_json::Value>],
+    row_cap: Option<compose::RowCapReached>,
 ) -> anyhow::Result<Option<dataset::Retained>> {
     let pool = foundation.app_db().pool();
     let config = foundation.config();
     let materialized = dataset::materialize(rows, dataset::row_cap(config.local_dataset_max_rows));
 
-    // I4/DS-8.1 — `truncated` adalah pernyataan tentang set yang TERSIMPAN.
-    // Klaim analitik HANDLE menurun hanya bila ada baris yang benar-benar
-    // dibuang, dan saat itu alasannya WAJIB ikut (I5). Jawaban response tetap
-    // dihitung atas seluruh baris node; ia menyatakan batas handle-nya sendiri.
-    let completeness = if materialized.truncated() {
-        "Partial"
-    } else {
-        "Complete"
-    };
-    let completeness_reason = materialized.truncation;
+    let claim = handle_claim(
+        materialized.truncation,
+        materialized.row_count_total,
+        row_cap,
+    );
     debug_assert!(dataset::claim_is_stated(
         materialized.truncated(),
-        completeness,
-        completeness_reason
+        claim.completeness,
+        claim.completeness_reason
     ));
     let truncation = materialized.truncation.map(|reason| dataset::Truncation {
         reason,
@@ -517,11 +526,11 @@ async fn retain_dataset(
             // persis seperti yang dikembalikan query yang disetujui, dan
             // paginasi mengikuti ordinal itu.
             sort_key_json: serde_json::json!(["__row_ordinal"]),
-            completeness,
-            completeness_reason,
+            completeness: claim.completeness,
+            completeness_reason: claim.completeness_reason,
             truncated: materialized.truncated(),
             row_count_available: materialized.row_count_available,
-            row_count_total: materialized.row_count_total,
+            row_count_total: claim.row_count_total,
             byte_size: materialized.byte_size,
             ttl_secs: dataset::ttl_secs(
                 config.clarification_wait_limit_secs,
@@ -543,6 +552,50 @@ async fn retain_dataset(
         dataset_id,
         truncation,
     }))
+}
+
+/// Klaim analitik atas satu handle dataset (dataset-lifecycle §5, I4).
+#[derive(Debug, PartialEq, Eq)]
+struct HandleClaim {
+    completeness: &'static str,
+    completeness_reason: Option<&'static str>,
+    row_count_total: Option<i64>,
+}
+
+/// Dua batas yang berbeda, satu klaim.
+///
+/// - Cap SIMPAN (`dataset_row_cap_reached`/`dataset_byte_cap_reached`):
+///   `truncated=true`, handle menyimpan lebih sedikit daripada yang dilihat
+///   node. Jawaban response tetap dihitung atas seluruh baris node.
+/// - Row cap capability (`row_cap_reached`, FIN-133): node sendiri hanya
+///   melihat `cap` baris dari populasi yang lebih besar. Set yang tersimpan
+///   tidak terpotong (`truncated` tetap dari cap simpan), tetapi klaim
+///   analitiknya `Partial` dan total populasinya **tidak diketahui** —
+///   `row_count_total = NULL`, bukan `cap` (I4): menulis `cap` akan membuat
+///   handle tampak memuat seluruh populasi.
+///
+/// Bila keduanya tercapai, alasan cap simpan yang ditulis: api-reference
+/// menjanjikan handle terpotong menyebut cap simpannya.
+fn handle_claim(
+    storage_truncation: Option<&'static str>,
+    row_count_total: Option<i64>,
+    row_cap: Option<compose::RowCapReached>,
+) -> HandleClaim {
+    let completeness_reason = storage_truncation.or(row_cap.map(|_| compose::ROW_CAP_REACHED));
+
+    HandleClaim {
+        completeness: if completeness_reason.is_some() {
+            "Partial"
+        } else {
+            "Complete"
+        },
+        completeness_reason,
+        row_count_total: if row_cap.is_some() {
+            None
+        } else {
+            row_count_total
+        },
+    }
 }
 
 /// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.
@@ -854,5 +907,54 @@ mod tests {
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0]["type"], "limitation");
         assert!(!blocks[0]["body"].as_str().unwrap().is_empty());
+    }
+
+    /// FIN-133 — handle hasil yang terkena row cap tidak boleh tampil
+    /// `Complete` dengan total = cap: klaimnya `Partial`, totalnya tidak
+    /// diketahui, dan set tersimpan tidak disebut terpotong.
+    #[test]
+    fn row_capped_handle_is_partial_with_unknown_total() {
+        let reached = Some(compose::RowCapReached { row_cap: 100 });
+
+        assert_eq!(
+            handle_claim(None, Some(100), reached),
+            HandleClaim {
+                completeness: "Partial",
+                completeness_reason: Some(compose::ROW_CAP_REACHED),
+                row_count_total: None,
+            }
+        );
+    }
+
+    /// Cap simpan dan row cap bersamaan: alasan cap simpan yang disebut,
+    /// total tetap tidak diketahui. Tanpa keduanya: `Complete`, total utuh.
+    #[test]
+    fn storage_cap_reason_wins_and_uncapped_handle_stays_complete() {
+        let reached = Some(compose::RowCapReached { row_cap: 100 });
+
+        assert_eq!(
+            handle_claim(Some(dataset::ROW_CAP_REASON), Some(100), reached),
+            HandleClaim {
+                completeness: "Partial",
+                completeness_reason: Some(dataset::ROW_CAP_REASON),
+                row_count_total: None,
+            }
+        );
+        assert_eq!(
+            handle_claim(Some(dataset::BYTE_CAP_REASON), Some(7), None),
+            HandleClaim {
+                completeness: "Partial",
+                completeness_reason: Some(dataset::BYTE_CAP_REASON),
+                row_count_total: Some(7),
+            }
+        );
+        assert_eq!(
+            handle_claim(None, Some(7), None),
+            HandleClaim {
+                completeness: "Complete",
+                completeness_reason: None,
+                row_count_total: Some(7),
+            }
+        );
     }
 }

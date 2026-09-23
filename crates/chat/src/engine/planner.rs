@@ -41,6 +41,11 @@ pub enum Bound {
     NullText,
     NullBigintArray,
     NullBigint,
+    /// Row cap capability untuk `limit: unbounded` tanpa `default_limit`
+    /// (FIN-133). Nilainya adalah **cap**; executor mengikat `cap + 1` supaya
+    /// "ada baris melebihi cap" teramati, lalu worker memotong hasil ke cap dan
+    /// menyatakannya (`row_cap_reached`). Lineage menampilkan cap, bukan cap + 1.
+    RowCap(i64),
 }
 
 /// Rencana untuk satu node `CuratedQuery`.
@@ -62,6 +67,16 @@ pub struct Plan {
     pub retrieval_score: f32,
     pub graph_json: Value,
     pub graph_hash: String,
+}
+
+impl Plan {
+    /// Row cap yang berlaku pada eksekusi ini, bila planner mengikatnya.
+    pub fn row_cap(&self) -> Option<i64> {
+        self.parameters.iter().find_map(|bound| match bound {
+            Bound::RowCap(cap) => Some(*cap),
+            _ => None,
+        })
+    }
 }
 
 /// Kenapa sebuah permintaan tidak dapat direncanakan. Setiap varian menjadi
@@ -565,10 +580,17 @@ fn bind_parameters(
                     .map_or(value, |cap| value.min(cap));
                 Bound::Bigint(capped)
             }
-            // `unbounded` berarti "tanpa batas", yaitu NULL pada pola
-            // `($n IS NULL OR ...)` — bukan nilai yang dikarang.
-            // `unbounded` menyatakan "memang tanpa batas" — NULL yang disengaja,
-            // dan SQL menanganinya lewat pola `($n IS NULL OR ...)`.
+            // FIN-133 — `limit: unbounded` bukan izin membaca tanpa batas bila
+            // capability mendeklarasikan batasnya: `default_limit` adalah
+            // ukuran jawaban yang diminta, cap adalah janji kepada sumber data.
+            (_, Some("unbounded"))
+                if parameter.name == "limit"
+                    && matches!(parameter.kind.as_str(), "integer" | "bigint") =>
+            {
+                unbounded_limit(capability, declared)
+            }
+            // `unbounded` tanpa cap menyatakan "memang tanpa batas" — NULL yang
+            // disengaja, dan SQL menanganinya lewat pola `($n IS NULL OR ...)`.
             (_, Some("unbounded")) => match null_for(&parameter.kind) {
                 Some(null) => null,
                 None => {
@@ -620,6 +642,35 @@ fn bind_parameters(
     }
 
     Ok(bound)
+}
+
+/// Keputusan owner FIN-133 untuk `limit` ber-`default: unbounded` tanpa nilai
+/// dari pengguna:
+///
+/// 1. `defaults.default_limit` ada → itulah ukuran jawaban yang diminta,
+///    dipotong ke cap. Tidak ada pengungkapan: jawabannya memang sebesar itu.
+/// 2. Tanpa `default_limit` tetapi ada cap (`hard_cap`, selain itu
+///    `guards.max_limit`) → [`Bound::RowCap`]; kelebihan baris diungkap.
+/// 3. Tanpa cap sama sekali → NULL, "memang tanpa batas".
+fn unbounded_limit(
+    capability: &Capability,
+    declared: Option<&crate::catalog::model::CapabilityParameter>,
+) -> Bound {
+    let cap = declared
+        .and_then(|declared| declared.hard_cap)
+        .or_else(|| capability.guards.get("max_limit").and_then(yaml_i64));
+
+    match capability.defaults.get("default_limit").and_then(yaml_i64) {
+        Some(requested) => Bound::Bigint(cap.map_or(requested, |cap| requested.min(cap))),
+        None => cap.map_or(Bound::NullBigint, Bound::RowCap),
+    }
+}
+
+/// Angka YAML yang ditulis sebagai bilangan (`50`) maupun string (`"50"`).
+fn yaml_i64(value: &serde_yaml::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_str()?.trim().parse().ok())
 }
 
 fn missing_parameter(
@@ -831,6 +882,7 @@ mod tests {
             parameters: declared,
             request_shape: None,
             guards: BTreeMap::new(),
+            defaults: BTreeMap::new(),
         }
     }
 
@@ -1095,6 +1147,78 @@ mod tests {
             bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap()[0],
             Bound::Bigint(10)
         );
+    }
+
+    /// Capability dengan parameter `limit` saja, plus `guards.max_limit` dan
+    /// `defaults.default_limit` opsional — tiga sumber batas FIN-133.
+    fn limited(
+        default: &str,
+        hard_cap: Option<i64>,
+        max_limit: Option<i64>,
+        default_limit: Option<i64>,
+    ) -> (Capability, QueryManifest) {
+        let mut capability = capability_with_cap(&[("limit", default)], hard_cap);
+        if let Some(max_limit) = max_limit {
+            capability
+                .guards
+                .insert("max_limit".into(), serde_yaml::Value::from(max_limit));
+        }
+        if let Some(default_limit) = default_limit {
+            capability.defaults.insert(
+                "default_limit".into(),
+                serde_yaml::Value::from(default_limit),
+            );
+        }
+        (
+            capability,
+            query(vec![parameter("limit", "integer", false, None)]),
+        )
+    }
+
+    fn bind_limit(capability: &Capability, query: &QueryManifest) -> Bound {
+        bind_parameters(&catalog(), capability, query, &[1], &BTreeMap::new()).unwrap()[0].clone()
+    }
+
+    /// FIN-133 kasus 1 — `default_limit` adalah ukuran jawaban yang diminta,
+    /// dipotong ke `hard_cap`, selain itu ke `guards.max_limit`.
+    #[test]
+    fn unbounded_limit_binds_declared_default_limit_clamped_to_cap() {
+        // client_random_sample: default_limit 5, hard_cap 50.
+        let (capability, query) = limited("unbounded", Some(50), Some(50), Some(5));
+        assert_eq!(bind_limit(&capability, &query), Bound::Bigint(5));
+
+        let (capability, query) = limited("unbounded", Some(50), None, Some(80));
+        assert_eq!(bind_limit(&capability, &query), Bound::Bigint(50));
+
+        let (capability, query) = limited("unbounded", None, Some(30), Some(80));
+        assert_eq!(bind_limit(&capability, &query), Bound::Bigint(30));
+    }
+
+    /// FIN-133 kasus 2 — tanpa `default_limit`, cap menjadi row cap; `hard_cap`
+    /// lebih diutamakan daripada `guards.max_limit`.
+    #[test]
+    fn unbounded_limit_without_default_limit_binds_the_row_cap() {
+        // savings_client_activity: hard_cap 100.
+        let (capability, query) = limited("unbounded", Some(100), Some(500), None);
+        assert_eq!(bind_limit(&capability, &query), Bound::RowCap(100));
+
+        let (capability, query) = limited("unbounded", None, Some(100), None);
+        assert_eq!(bind_limit(&capability, &query), Bound::RowCap(100));
+    }
+
+    /// FIN-133 kasus 3 — tanpa cap yang dideklarasikan, `unbounded` tetap NULL.
+    #[test]
+    fn unbounded_limit_without_any_cap_stays_null() {
+        let (capability, query) = limited("unbounded", None, None, None);
+        assert_eq!(bind_limit(&capability, &query), Bound::NullBigint);
+    }
+
+    /// Default literal (top-N `limit: "10"`) tidak tersentuh keputusan
+    /// FIN-133, bahkan bila capability juga mendeklarasikan `default_limit`.
+    #[test]
+    fn literal_limit_default_wins_over_default_limit() {
+        let (capability, query) = limited("10", Some(100), Some(100), Some(5));
+        assert_eq!(bind_limit(&capability, &query), Bound::Bigint(10));
     }
 
     #[test]

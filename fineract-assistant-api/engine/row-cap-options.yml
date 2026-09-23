@@ -1,0 +1,24 @@
+info:
+  name: FIN-133 halaman opsi client_id kedua
+  type: http
+  seq: 30
+  description: |
+    Klien 65 (Jasmin Dao) berada di peringkat ke-30 dari 43 kandidat terurut
+    id menaik, sehingga muncul di halaman kedua (cursor=25).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{rowCapJobId}}/clarification/options?field_id=client_id&cursor=25"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        const option = page.options.find(function (o) { return String(o.option_id) === "65"; });
+        test("FIN-133: klien 65 ada di halaman opsi kedua", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(option, "client_id=65 tidak ditemukan di cursor=25").to.not.equal(undefined);
+        });
+        bru.setVar("rowCapOptionId", option && option.option_id);

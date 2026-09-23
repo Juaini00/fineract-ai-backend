@@ -60,6 +60,32 @@ impl AutoBound {
     }
 }
 
+/// `completeness_reason` dan `block_id` saat node mengembalikan lebih banyak
+/// baris daripada row cap capability (FIN-133).
+pub const ROW_CAP_REACHED: &str = "row_cap_reached";
+
+/// Hasil node dipotong ke row cap: masih ada baris yang tidak ditampilkan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowCapReached {
+    pub row_cap: usize,
+}
+
+/// Potong baris ke row cap plan (FIN-133).
+///
+/// Executor mengikat `cap + 1`, jadi lebih dari `cap` baris berarti populasi
+/// yang cocok memang lebih besar dari yang boleh dibaca. `Some` HANYA saat
+/// itu terjadi: hasil yang muat di bawah cap adalah jawaban utuh, dan
+/// menyatakannya terpotong berarti membuat klaim yang tidak benar.
+pub fn cap_rows(plan: &Plan, rows: &mut Vec<Map<String, Value>>) -> Option<RowCapReached> {
+    let row_cap = usize::try_from(plan.row_cap()?).ok()?;
+    if rows.len() <= row_cap {
+        return None;
+    }
+
+    rows.truncate(row_cap);
+    Some(RowCapReached { row_cap })
+}
+
 /// Bungkus §1 untuk satu blok.
 ///
 /// Satu tempat, bukan sembilan: `block_id` yang kadang bernama `id` dan
@@ -200,6 +226,11 @@ pub fn expired_dataset_table(
 /// `completeness` `Complete`: pencarian yang berhasil dan memang tidak
 /// menemukan apa pun berbeda dari pencarian yang tidak selesai (engine.md
 /// melarang `Empty` + `Partial`).
+///
+/// `row_cap` (FIN-133): baris sudah dipotong ke cap oleh [`cap_rows`]; jawaban
+/// menjadi `Partial` dengan alasan `row_cap_reached` dan blok `limitation`
+/// menyatakan bahwa masih ada baris yang tidak ditampilkan.
+#[allow(clippy::too_many_arguments)]
 pub fn analysis(
     plan: &Plan,
     rows: &[Map<String, Value>],
@@ -208,6 +239,7 @@ pub fn analysis(
     auto_bound: &[AutoBound],
     node_run_id: Uuid,
     retained: &Retained,
+    row_cap: Option<RowCapReached>,
 ) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
     let derived_from = [from_node(node_run_id)];
@@ -280,6 +312,27 @@ pub fn analysis(
         ));
     }
 
+    // FIN-133 / I5 — row cap tercapai: jawaban hanya memuat sebagian populasi
+    // yang cocok, dan itu dinyatakan, bukan dibiarkan terbaca sebagai utuh.
+    if let Some(reached) = row_cap {
+        blocks.push(block(
+            ROW_CAP_REACHED,
+            "limitation",
+            &[],
+            json!({
+                "title": "Result capped",
+                "body": format!(
+                    "The approved capability caps this result at {} row(s). More rows matched \
+                     the request; only the first {} are shown.",
+                    reached.row_cap, reached.row_cap
+                ),
+                "row_cap": reached.row_cap,
+                "rows_shown": reached.row_cap,
+                "more_rows_exist": true,
+            }),
+        ));
+    }
+
     // D2 (§5) — pengungkapan auto-bind hidup di blok `note`, bukan
     // `limitation`: slot yang diikat karena hanya ada satu kandidat adalah
     // **asumsi yang diambil**, bukan batas jawaban. Validator memeriksa blok
@@ -315,15 +368,20 @@ pub fn analysis(
 
     let blocks = Value::Array(blocks);
 
+    // Query capability berjalan utuh dalam satu eksekusi: tidak ada bagian
+    // yang dilewati, jadi klaimnya `Complete` — kecuali row cap memotongnya.
+    // Validator tetap menghitungnya ulang dari ledger lewat `derived_from`:
+    // klaim ini tidak pernah menjadi kebenaran hanya karena ditulis di sini.
+    let (completeness, completeness_reason) = match row_cap {
+        Some(_) => ("Partial", ROW_CAP_REACHED.to_string()),
+        None => ("Complete", format!("curated_query:{}", plan.query_id)),
+    };
+
     SettledResponse {
         kind: "analysis",
         outcome,
-        // Query capability berjalan utuh dalam satu eksekusi: tidak ada bagian
-        // yang dilewati, jadi klaimnya `Complete`. Validator tetap
-        // menghitungnya ulang dari ledger lewat `derived_from` — klaim ini
-        // tidak pernah menjadi kebenaran hanya karena ditulis di sini.
-        completeness: "Complete",
-        completeness_reason: format!("curated_query:{}", plan.query_id),
+        completeness,
+        completeness_reason,
         response_hash: hex::encode(Sha256::digest(blocks.to_string().as_bytes())),
         evidence: evidence(
             plan,
@@ -443,6 +501,10 @@ fn table_block(
 ///
 /// `office_ids` menjadi **jumlah**, bukan daftar: scope adalah metadata, dan
 /// menuliskan seluruh daftarnya tidak menambah kemampuan menelusuri apa pun.
+///
+/// Row cap (FIN-133) ditulis sebagai **cap**, bukan `cap + 1` yang diikat
+/// executor: baris sentinel itu mekanisme deteksi, bukan parameter yang
+/// dipilih siapa pun.
 pub fn bindings(plan: &Plan) -> Value {
     let office_count = plan
         .parameters
@@ -461,7 +523,7 @@ pub fn bindings(plan: &Plan) -> Value {
                 "name": name,
                 "value": match value {
                     Bound::Date(date) => Value::String(date.to_string()),
-                    Bound::Bigint(value) => Value::from(*value),
+                    Bound::Bigint(value) | Bound::RowCap(value) => Value::from(*value),
                     Bound::Text(value) => Value::String(value.clone()),
                     Bound::OfficeIds(_) => Value::String(format!("{office_count} authorized offices")),
                     Bound::NullText | Bound::NullBigintArray | Bound::NullBigint => Value::Null,
@@ -617,6 +679,7 @@ mod tests {
             &[],
             node(),
             &dataset(),
+            None,
         );
         let blocks = response.blocks.as_array().unwrap();
 
@@ -635,7 +698,7 @@ mod tests {
     #[test]
     fn many_rows_become_a_table() {
         let rows = [row("1.00", 1), row("2.00", 2)];
-        let response = analysis(&plan(), &rows, 30, false, &[], node(), &dataset());
+        let response = analysis(&plan(), &rows, 30, false, &[], node(), &dataset(), None);
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
@@ -646,7 +709,7 @@ mod tests {
 
     #[test]
     fn no_rows_is_empty_not_a_failure() {
-        let response = analysis(&plan(), &[], 5, false, &[], node(), &dataset());
+        let response = analysis(&plan(), &[], 5, false, &[], node(), &dataset(), None);
 
         assert_eq!(response.outcome, "Empty");
         // engine.md melarang Empty + Partial: pencarian parsial tidak boleh
@@ -674,6 +737,7 @@ mod tests {
             &[],
             node(),
             &dataset(),
+            None,
         );
         let rendered = response.blocks.to_string();
 
@@ -698,7 +762,7 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row], 5, true, &[], node(), &dataset());
+        let response = analysis(&plan, &[row], 5, true, &[], node(), &dataset(), None);
         assert!(response.blocks.to_string().contains("Budi"));
     }
 
@@ -719,6 +783,7 @@ mod tests {
             &auto_bound,
             node(),
             &dataset(),
+            None,
         );
         let blocks = response.blocks.as_array().unwrap();
 
@@ -745,6 +810,7 @@ mod tests {
             &[],
             node(),
             &dataset(),
+            None,
         );
 
         let lineage = &response.evidence["lineage"][0];
@@ -761,6 +827,95 @@ mod tests {
         assert!(
             !response.blocks.to_string().contains("provenance"),
             "lineage masih bocor ke dalam blok"
+        );
+    }
+
+    fn capped_plan(cap: i64) -> Plan {
+        let mut plan = plan();
+        plan.parameters.push(Bound::RowCap(cap));
+        plan.parameter_names.push("limit".into());
+        plan
+    }
+
+    /// FIN-133 — hanya kelebihan baris yang memotong; hasil yang muat di bawah
+    /// cap, atau plan tanpa row cap, dibiarkan utuh.
+    #[test]
+    fn cap_rows_truncates_only_when_the_node_returned_more_than_the_cap() {
+        let mut over = vec![row("1.00", 1), row("2.00", 2), row("3.00", 3)];
+        assert_eq!(
+            cap_rows(&capped_plan(2), &mut over),
+            Some(RowCapReached { row_cap: 2 })
+        );
+        assert_eq!(over.len(), 2);
+        assert_eq!(over[1]["deposit_count"], 2);
+
+        let mut exact = vec![row("1.00", 1), row("2.00", 2)];
+        assert_eq!(cap_rows(&capped_plan(2), &mut exact), None);
+        assert_eq!(exact.len(), 2);
+
+        let mut uncapped = vec![row("1.00", 1), row("2.00", 2), row("3.00", 3)];
+        assert_eq!(cap_rows(&plan(), &mut uncapped), None);
+        assert_eq!(uncapped.len(), 3);
+    }
+
+    /// FIN-133 — row cap tercapai: `Partial` + `row_cap_reached`, dinyatakan
+    /// lewat blok `limitation`, lineage menampilkan cap (bukan cap + 1), dan
+    /// dokumennya lolos validator di atas node `Partial`.
+    #[test]
+    fn row_cap_reached_is_partial_disclosed_and_passes_the_validator() {
+        use crate::engine::validate::{self, Ledger};
+        use std::collections::BTreeMap;
+
+        let plan = capped_plan(2);
+        let mut rows = vec![row("1.00", 1), row("2.00", 2), row("3.00", 3)];
+        let reached = cap_rows(&plan, &mut rows);
+        let response = analysis(&plan, &rows, 5, false, &[], node(), &dataset(), reached);
+
+        assert_eq!(response.outcome, "Answered");
+        assert_eq!(response.completeness, "Partial");
+        assert_eq!(response.completeness_reason, ROW_CAP_REACHED);
+        assert_shape(&response.blocks);
+
+        let blocks = response.blocks.as_array().unwrap();
+        assert_eq!(blocks[0]["row_count"], 2);
+        let limitation = blocks
+            .iter()
+            .find(|b| b["block_id"] == ROW_CAP_REACHED)
+            .expect("blok row_cap_reached");
+        assert_eq!(limitation["type"], "limitation");
+        assert!(limitation.get("derived_from").is_none());
+        assert_eq!(limitation["row_cap"], 2);
+        assert_eq!(limitation["rows_shown"], 2);
+        assert_eq!(limitation["more_rows_exist"], true);
+
+        let lineage = &response.evidence["lineage"][0];
+        assert_eq!(lineage["parameters"][2]["name"], "limit");
+        assert_eq!(lineage["parameters"][2]["value"], 2);
+        assert_eq!(lineage["row_count"], 2);
+
+        let ledger = Ledger {
+            contributors: BTreeMap::from([(node().to_string(), "Partial".to_string())]),
+            ..Ledger::default()
+        };
+        assert_eq!(validate::apply(response, &ledger).status(), "passed");
+    }
+
+    /// FIN-133 — cap ada tetapi tidak terlampaui: jawaban utuh, tanpa blok.
+    #[test]
+    fn row_cap_not_exceeded_stays_complete_without_a_limitation() {
+        let plan = capped_plan(5);
+        let mut rows = vec![row("1.00", 1), row("2.00", 2)];
+        let reached = cap_rows(&plan, &mut rows);
+        let response = analysis(&plan, &rows, 5, false, &[], node(), &dataset(), reached);
+
+        assert_eq!(response.completeness, "Complete");
+        assert_eq!(
+            response.completeness_reason,
+            "curated_query:savings.deposit_total"
+        );
+        assert!(
+            !response.blocks.to_string().contains(ROW_CAP_REACHED),
+            "row cap yang tidak tercapai tidak boleh diungkap"
         );
     }
 

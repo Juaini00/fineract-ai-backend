@@ -87,6 +87,9 @@ pub async fn run(
                 Bound::Date(date) => query.bind(*date),
                 Bound::OfficeIds(ids) => query.bind(ids.clone()),
                 Bound::Bigint(value) => query.bind(*value),
+                // Satu baris melebihi cap: satu-satunya cara mengetahui bahwa
+                // hasilnya terpotong tanpa query hitung terpisah (FIN-133).
+                Bound::RowCap(cap) => query.bind(cap.saturating_add(1)),
                 Bound::Text(value) => query.bind(value.clone()),
                 Bound::NullText => query.bind(Option::<String>::None),
                 Bound::NullBigintArray => query.bind(Option::<Vec<i64>>::None),
