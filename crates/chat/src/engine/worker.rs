@@ -342,7 +342,7 @@ async fn run_job(
             // dibuang inline ke ledger: tabel berpaginasi, node hilir, dan
             // memori session merujuk HANDLE, bukan daftar baris yang dibentangkan
             // (#11 aturan 2 dan 3). Handle-nya immutable begitu `ready`.
-            if !retain_dataset(
+            let Some(dataset_id) = retain_dataset(
                 foundation,
                 job,
                 &plan,
@@ -353,11 +353,11 @@ async fn run_job(
                 &stored_rows,
             )
             .await?
-            {
+            else {
                 // Fencing kalah saat meretensi: berhenti, jangan menulis response
                 // atas snapshot yang tidak jadi ada (C16).
                 return Ok(false);
-            }
+            };
 
             let response = compose::analysis(
                 &plan,
@@ -366,6 +366,7 @@ async fn run_job(
                 pii_enabled,
                 &auto_bound,
                 node_run_id,
+                dataset_id,
             );
 
             // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
@@ -442,7 +443,9 @@ async fn run_job(
 /// Retensi hasil node sebagai dataset (§3): chunk ditulis, handle menjadi
 /// `ready`, lalu ledger node menunjuknya (C5).
 ///
-/// `false` berarti fencing kalah dan tidak ada apa pun yang ditulis.
+/// `None` berarti fencing kalah dan tidak ada apa pun yang ditulis; `Some`
+/// membawa handle yang sudah `ready` dan tertaut ke node run — satu-satunya id
+/// yang boleh muncul di lineage response (FIN-43).
 ///
 /// ponytail: setiap hasil yang berhasil diretensi — bukan hanya yang besar.
 /// #11 aturan 3 mengizinkan hasil kecil hidup inline saja, tetapi setiap
@@ -461,7 +464,7 @@ async fn retain_dataset(
     withheld: &[String],
     authorized: &[i64],
     rows: &[serde_json::Map<String, serde_json::Value>],
-) -> anyhow::Result<bool> {
+) -> anyhow::Result<Option<Uuid>> {
     let pool = foundation.app_db().pool();
     let config = foundation.config();
     let materialized = dataset::materialize(rows);
@@ -523,12 +526,13 @@ async fn retain_dataset(
     .await?;
 
     let Some(dataset_id) = created else {
-        return Ok(false);
+        return Ok(None);
     };
 
-    dataset::repository::link_node_run(pool, node_run_id, dataset_id, job.id, job.lease_token)
-        .await
-        .map_err(Into::into)
+    let linked =
+        dataset::repository::link_node_run(pool, node_run_id, dataset_id, job.id, job.lease_token)
+            .await?;
+    Ok(linked.then_some(dataset_id))
 }
 
 /// T5 — tangguhkan job dan terbitkan satu form berisi seluruh slot yang kurang.

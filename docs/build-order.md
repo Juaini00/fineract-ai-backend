@@ -419,23 +419,23 @@ another user / a narrower scope is refused) are acceptance scenarios about the
 Adding Bruno tests for them is blocked by three mechanisms that do not exist and
 must **not** be invented (Rules 3 and 4):
 
-1. **No `dataset_id` is discoverable over HTTP.** The response lineage hardcodes
-   `evidence_json.lineage[].dataset_id = null` (`compose::evidence`, and
-   [api-reference.md](contracts/api-reference.md) §5). A client has no path to
-   learn a valid handle id, so it cannot call `GET /chat/datasets/{id}` at all.
+1. ~~**No `dataset_id` is discoverable over HTTP.**~~ **Resolved (FIN-43).**
+   `evidence_json.lineage[].dataset_id` now carries the handle that retained the
+   node's result; `engine/answered-dataset.yml` and `answered-dataset-rows.yml`
+   learn the id from a job response and read the handle and its rows through
+   `GET /chat/datasets/{id}`.
 2. **DS-8.2 needs a `purged` handle.** Purge happens only via the reaper (T11) on
    a ≥24h TTL (`dataset::ttl_secs`, floor `DATASET_TTL_SECS = 86400`, not
    env-configurable); there is no manual purge/expire endpoint. A test run cannot
    produce a purged dataset.
-3. **DS-8.4 needs a second principal.** There is one seeded admin and no
-   user-creation route, and the admin's authorized offices cannot be narrowed
-   per request — so neither the `NotOwner` (404) nor the `ScopeNarrowed` (403)
-   branch is reachable.
+3. **DS-8.4 needs a second principal and a narrower scope.** A local-only
+   `auditor` principal now exists (PR #1), so the `NotOwner` (404) branch is
+   reachable. The admin's authorized offices still cannot be narrowed per
+   request, so the `ScopeNarrowed` (403) branch is not.
 
-Unblocking requires an owner decision: expose `dataset_id` in the response
-lineage (a Lane-C change to `compose.rs` + `worker.rs`, travelling with
-api-reference.md), plus a test-only seam for purge and a second principal. Until
-then DS stays 6/6 at the unit level and L3 stays 🔨.
+Remaining: a test-only seam for purge (#2, FIN-44) and per-request scope
+narrowing (#3, FIN-45). Until both land, DS-8.2 and DS-8.4 are not fully proven
+at the HTTP surface and L3 stays 🔨.
 
 ---
 

@@ -1,0 +1,32 @@
+info:
+  name: baris dataset sama dengan tabel response
+  type: http
+  seq: 13
+  description: |
+    FIN-43 — baris yang dibaca lewat handle adalah baris yang sama dengan blok
+    `table` di response: handle menunjuk hasil node ini, bukan dataset lain.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("FIN-43: satu halaman memuat seluruh baris tabel response, urutan sama", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.dataset_id).to.equal(bru.getVar("answeredDatasetId"));
+          expect(page.handle_state).to.equal("live");
+          expect(page.next_cursor).to.equal(null);
+
+          const columns = JSON.parse(bru.getVar("answeredTableColumns"));
+          const tableRows = JSON.parse(bru.getVar("answeredTableRows"));
+          const stored = page.rows.map((row) => columns.map((column) => row[column]));
+          expect(stored).to.deep.equal(tableRows);
+        });

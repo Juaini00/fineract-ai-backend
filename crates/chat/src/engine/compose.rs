@@ -206,6 +206,7 @@ pub fn analysis(
     pii_enabled: bool,
     auto_bound: &[AutoBound],
     node_run_id: Uuid,
+    dataset_id: Uuid,
 ) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
     let derived_from = [from_node(node_run_id)];
@@ -297,7 +298,7 @@ pub fn analysis(
         completeness: "Complete",
         completeness_reason: format!("curated_query:{}", plan.query_id),
         response_hash: hex::encode(Sha256::digest(blocks.to_string().as_bytes())),
-        evidence: evidence(plan, node_run_id, rows.len(), duration_ms),
+        evidence: evidence(plan, node_run_id, dataset_id, rows.len(), duration_ms),
         blocks,
     }
 }
@@ -475,15 +476,21 @@ fn as_of(plan: &Plan) -> Value {
 /// render (§1), jadi menaruh jejak asal angka di dalam blok berarti jejak itu
 /// hilang pada klien pertama yang tidak mengenalnya. `evidence_json` adalah
 /// kolomnya sendiri dan selalu ikut dokumen.
-pub fn evidence(plan: &Plan, node_run_id: Uuid, row_count: usize, duration_ms: i64) -> Value {
+///
+/// `dataset_id` adalah handle yang meretensi hasil node ini — satu-satunya
+/// jalan klien mengetahui id untuk `GET /chat/datasets/{id}` (FIN-43, §6.6).
+pub fn evidence(
+    plan: &Plan,
+    node_run_id: Uuid,
+    dataset_id: Uuid,
+    row_count: usize,
+    duration_ms: i64,
+) -> Value {
     json!({
         "lineage": [
             {
                 "node_run_id": node_run_id,
-                // L3 belum ada: hasil kecil disimpan inline, jadi tidak ada
-                // handle dataset untuk dirujuk. `null` berarti "tidak ada",
-                // bukan "lupa dicatat".
-                "dataset_id": Value::Null,
+                "dataset_id": dataset_id,
                 "capability_id": plan.capability_id,
                 "query_id": plan.query_id,
                 "sql_file": plan.sql_file,
@@ -540,6 +547,10 @@ mod tests {
         Uuid::from_u128(7)
     }
 
+    fn dataset() -> Uuid {
+        Uuid::from_u128(11)
+    }
+
     /// Setiap blok memenuhi §1 dan §2 sekaligus.
     fn assert_shape(blocks: &Value) {
         for block in blocks.as_array().unwrap() {
@@ -562,7 +573,7 @@ mod tests {
 
     #[test]
     fn single_row_becomes_one_metric_block_per_named_value() {
-        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[], node());
+        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[], node(), dataset());
         let blocks = response.blocks.as_array().unwrap();
 
         assert_eq!(response.outcome, "Answered");
@@ -579,7 +590,8 @@ mod tests {
 
     #[test]
     fn many_rows_become_a_table() {
-        let response = analysis(&plan(), &[row("1.00", 1), row("2.00", 2)], 30, false, &[], node());
+        let rows = [row("1.00", 1), row("2.00", 2)];
+        let response = analysis(&plan(), &rows, 30, false, &[], node(), dataset());
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
@@ -590,7 +602,7 @@ mod tests {
 
     #[test]
     fn no_rows_is_empty_not_a_failure() {
-        let response = analysis(&plan(), &[], 5, false, &[], node());
+        let response = analysis(&plan(), &[], 5, false, &[], node(), dataset());
 
         assert_eq!(response.outcome, "Empty");
         // engine.md melarang Empty + Partial: pencarian parsial tidak boleh
@@ -610,7 +622,7 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row.clone(), row], 5, false, &[], node());
+        let response = analysis(&plan, &[row.clone(), row], 5, false, &[], node(), dataset());
         let rendered = response.blocks.to_string();
 
         assert!(!rendered.contains("Budi"), "PII bocor ke response: {rendered}");
@@ -634,7 +646,7 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row], 5, true, &[], node());
+        let response = analysis(&plan, &[row], 5, true, &[], node(), dataset());
         assert!(response.blocks.to_string().contains("Budi"));
     }
 
@@ -647,7 +659,8 @@ mod tests {
             field_id: "client_id".into(),
             label: Some("Siti".into()),
         }];
-        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &auto_bound, node());
+        let response =
+            analysis(&plan(), &[row("1.00", 1)], 5, false, &auto_bound, node(), dataset());
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
@@ -665,14 +678,16 @@ mod tests {
     /// dalam blok yang boleh dilewati klien.
     #[test]
     fn resp_8_3_lineage_lives_in_evidence_not_in_a_block() {
-        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[], node());
+        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[], node(), dataset());
 
         let lineage = &response.evidence["lineage"][0];
         assert_eq!(lineage["node_run_id"], node().to_string());
         assert_eq!(lineage["query_id"], "savings.deposit_total");
         assert_eq!(lineage["catalog_content_hash"], "hash");
         assert_eq!(lineage["parameters"][1]["value"], "3 authorized offices");
-        assert!(lineage.get("dataset_id").is_some(), "dataset_id wajib hadir walau null");
+        // FIN-43 — lineage membawa handle yang nyata, bukan `null`: tanpa ini
+        // klien tidak punya jalan menuju `GET /chat/datasets/{id}`.
+        assert_eq!(lineage["dataset_id"], dataset().to_string());
         assert!(response.evidence["derivations"].is_array());
 
         // Tidak ada blok `provenance`: ia bukan bagian dari kosakata §2.

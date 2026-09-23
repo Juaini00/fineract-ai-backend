@@ -514,7 +514,7 @@ klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
   "lineage": [
     {
       "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11",
-      "dataset_id": null,
+      "dataset_id": "3c1e9a52-7d4b-4f0e-9b61-2a8f5c0d7e44",
       "capability_id": "savings_balance_summary",
       "query_id": "savings.balance_summary",
       "sql_file": "queries/savings/balance_summary.sql",
@@ -526,7 +526,7 @@ klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
         { "name": "office_ids", "value": "8 authorized offices" },
         { "name": "currency_code", "value": null }
       ],
-      "row_count": 1,
+      "row_count": 3,
       "duration_ms": 31
     }
   ],
@@ -537,6 +537,13 @@ klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
 Scope dicatat sebagai **jumlah**, bukan daftar office. `derivations` kosong
 selama belum ada narasi model; ia adalah satu-satunya jalan angka turunan
 ("naik 12%") menjadi sah (responses.md §4).
+
+`dataset_id` adalah handle yang meretensi hasil node itu — **selalu terisi**
+pada dokumen `analysis`, karena setiap node yang berhasil diretensi sebagai
+dataset sebelum response dikomposisi. Inilah satu-satunya jalan klien
+mengetahui id untuk [`GET /chat/datasets/{dataset_id}`](#get-chatdatasetsdataset_id)
+dan `/rows`; baris yang dibaca di sana sama, dalam urutan yang sama, dengan
+blok `table` di dokumen.
 
 Dokumen `limitation` yang tidak pernah menjalankan operasi sumber membawa
 `evidence_json: {}` — tidak ada lineage karena memang tidak ada operasi.
