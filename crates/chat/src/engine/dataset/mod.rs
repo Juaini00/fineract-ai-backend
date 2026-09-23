@@ -33,9 +33,11 @@ const DATASET_TTL_SECS: i64 = 86_400;
 pub const FORMAT_JSON: &str = "json";
 pub const ENCODING_VERSION: i32 = 1;
 
-/// Lifecycle job yang belum terminal. Dataset miliknya tidak boleh disentuh
-/// eviction berapa pun umurnya (#11, §6 dokumen).
-const NONTERMINAL: [&str; 4] = ["Queued", "Running", "WaitingForUser", "Cancelling"];
+/// Lifecycle job yang **terminal** — satu-satunya yang dataset-nya boleh dilepas
+/// eviction/purge (#11, §6 dokumen). Daftar izin, bukan daftar larangan: state
+/// yang belum dikenal (mis. lifecycle baru yang kelak ditambahkan ke CHECK)
+/// diperlakukan sebagai masih hidup, bukan sebagai boleh dibuang (DS-8.6).
+const TERMINAL: [&str; 4] = ["Completed", "Failed", "Cancelled", "Expired"];
 
 /// TTL efektif satu dataset.
 ///
@@ -341,14 +343,14 @@ pub struct Candidate {
 
 /// Saring kandidat yang benar-benar boleh dilepas.
 ///
-/// Dataset milik job **nonterminal** tidak pernah ikut, berapa pun umurnya
-/// (#11, §6): job yang masih berjalan atau masih menunggu jawaban pengguna akan
-/// membaca handle-nya kembali, dan membuang chunk-nya berarti membuat job hidup
-/// menjawab atas data yang sudah tidak ada.
+/// Dataset milik job yang **belum terminal** tidak pernah ikut, berapa pun
+/// umurnya (#11, §6): job yang masih berjalan atau masih menunggu jawaban
+/// pengguna akan membaca handle-nya kembali, dan membuang chunk-nya berarti
+/// membuat job hidup menjawab atas data yang sudah tidak ada.
 pub fn releasable(candidates: &[Candidate]) -> Vec<Uuid> {
     candidates
         .iter()
-        .filter(|candidate| !NONTERMINAL.contains(&candidate.job_lifecycle.as_str()))
+        .filter(|candidate| TERMINAL.contains(&candidate.job_lifecycle.as_str()))
         .map(|candidate| candidate.dataset_id)
         .collect()
 }
@@ -519,18 +521,41 @@ mod tests {
     #[test]
     fn ds_8_6_release_never_touches_a_running_job() {
         // DS-8.6 — eviction/purge tidak menyentuh dataset job yang masih hidup,
-        // berapa pun umurnya.
-        let running = Uuid::new_v4();
-        let waiting = Uuid::new_v4();
-        let done = Uuid::new_v4();
+        // berapa pun umurnya: keempat lifecycle nonterminal (CHECK
+        // `chat_jobs.lifecycle`) dikecualikan, keempat yang terminal dilepas.
+        // Keduanya literal, disalin dari CHECK — bukan dari `TERMINAL`: test
+        // yang dibangun dari konstanta yang diujinya tidak dapat gagal.
+        let nonterminal = ["Queued", "Running", "WaitingForUser", "Cancelling"];
+        let terminal = ["Completed", "Failed", "Cancelled", "Expired"];
+        let candidates: Vec<Candidate> = nonterminal
+            .iter()
+            .chain(terminal.iter())
+            .map(|lifecycle| Candidate {
+                dataset_id: Uuid::new_v4(),
+                job_lifecycle: (*lifecycle).into(),
+            })
+            .collect();
 
-        let candidates = vec![
-            Candidate { dataset_id: running, job_lifecycle: "Running".into() },
-            Candidate { dataset_id: waiting, job_lifecycle: "WaitingForUser".into() },
-            Candidate { dataset_id: done, job_lifecycle: "Completed".into() },
-        ];
+        let released = releasable(&candidates);
+        assert_eq!(
+            released,
+            candidates[nonterminal.len()..]
+                .iter()
+                .map(|candidate| candidate.dataset_id)
+                .collect::<Vec<_>>()
+        );
+    }
 
-        assert_eq!(releasable(&candidates), vec![done]);
+    #[test]
+    fn ds_8_6_unknown_lifecycle_is_kept_not_evicted() {
+        // DS-8.6 — gagal tertutup: lifecycle yang tidak dikenal runtime ini
+        // tidak boleh dianggap terminal hanya karena tidak ada di daftar
+        // larangan.
+        let candidate = Candidate {
+            dataset_id: Uuid::new_v4(),
+            job_lifecycle: "Resuming".into(),
+        };
+        assert!(releasable(&[candidate]).is_empty());
     }
 
     #[test]
