@@ -3,12 +3,10 @@ info:
   type: http
   seq: 9.2
   description: |
-    FIN-52 review: request_text sebelumnya "Largest withdrawal for each month
-    in the last 12 months." (N=1) sementara chain ini menegakkan limit=10 —
-    tidak match. Diganti ke penulisan netral yang sama pola dengan
-    deposit-monthly-top-n-job.yml ("Top deposits per month..."), yang sudah
-    terbukti dirutekan ke capability yang benar; tidak ada app berjalan
-    untuk verifikasi curl langsung saat perubahan ini dibuat.
+    FIN-52: request_text tidak menyebut N ("withdrawals", jamak) karena limit
+    yang diikat adalah default literal 10 (keputusan owner). "Top withdrawals
+    per month…" dirutekan retrieval ke client_activation_top_n_offices
+    (dicek langsung ke app), jadi dipakai "Largest withdrawals…".
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -22,7 +20,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{answersSession}}", "request_text": "Top withdrawals per month in the last 12 months." }
+      { "session_id": "{{answersSession}}", "request_text": "Largest withdrawals per month in the last 12 months." }
 runtime:
   scripts:
     - type: before-request

@@ -389,6 +389,45 @@ Update after FIN-51 (DS-8.6):
   DS-8.5 at the schema, DS-8.6 at the release predicate. 🧪 is the ceiling
   while L0 is 🔨.
 
+Update after FIN-52 (L4 answer gate) and the bugs it found (FIN-132, FIN-133, FIN-134):
+
+- **The L4 correctness gate now runs on every integration run.** Stage
+  `answers` (`scripts/integration-test.sh`) runs every reachable answer
+  capability through the real job path (`POST /chat/jobs` → worker →
+  validated response, with the clarification round-trip where a capability
+  needs one), and compares the answer with direct SQL written separately from
+  `queries/**` (`tests/answers/*.sql`). `scripts/answer-expectations.sh`
+  recomputes that SQL live just before the stage, using the same UTC
+  `business_today` the planner binds. `fineract-assistant-api/lib/answers.js`
+  asserts four things: the capability id, bound parameters = the oracle's
+  declared parameters (office scope included), column set, and rows in order.
+  Row-capped capabilities also assert the `row_cap_reached` disclosure against
+  an uncapped population count. Latest run: 219 requests, 245 tests, all green.
+- **Coverage: 42 of 48 capabilities** are compared (41 row-for-row, 1 random
+  sample as a subset of the population). The other six:
+  - 4 are continuation-only resolvers/probes, never an answer node:
+    `organization_office_identity_resolve`, `client_identity_resolve`,
+    `savings_charge_type_identity_resolve` (a probe that nothing wires) and
+    `group_identity_resolve` (`status: candidate`).
+  - 2 can never be answered: `savings_account_identity_lookup` and
+    `savings_account_terms_lookup`. Their `account_number` is
+    `transient_sensitive_input` with no probe, so K1 returns
+    `identity_slot_without_resolver`; the `answers` chain asserts exactly that.
+- One comparison is vacuous today: `client_activation_top_n_offices` has 0
+  activations this month, so 0 rows = 0 rows.
+- **Wrong answers the gate caught and that are now fixed:**
+  - FIN-132: `savings_activity_list` labelled type 17 as `withhold_tax`.
+  - FIN-133: `limit: unbounded` ignored the declared caps (4114 rows instead of
+    100 disclosed). Owner decision: cap + disclose.
+- **Open findings (not fixed here):**
+  - The planner never extracts dates, limits, currencies or names from the
+    request text. It binds manifest defaults, and says nothing about the
+    parameters the user stated.
+  - Some phrasings are misrouted by retrieval, e.g. "Top withdrawals per month…"
+    goes to `client_activation_top_n_offices`.
+- **L4 stays 🔨.** The "every capability in use matches direct SQL" half of the
+  §3 gate holds. The seven OVR scenarios still have no test (FIN-53…FIN-59).
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
