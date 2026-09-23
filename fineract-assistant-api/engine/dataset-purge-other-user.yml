@@ -1,0 +1,24 @@
+info:
+  name: seam purge tidak melewati otorisasi
+  type: http
+  seq: 14.6
+  description: |
+    FIN-44 — seam lokal tetap memeriksa otorisasi pembacaan: user lain tidak
+    dapat mem-purge handle yang bukan miliknya (404, keberadaannya tidak
+    diungkap).
+
+http:
+  method: post
+  url: "{{baseUrl}}/_local/datasets/{{answeredDatasetId}}/purge"
+  headers:
+    - name: authorization
+      value: "Bearer {{otherToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-44: purge oleh user lain → 404", function () {
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().data).to.equal(null);
+        });

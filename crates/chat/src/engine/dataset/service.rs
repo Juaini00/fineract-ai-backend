@@ -144,6 +144,32 @@ pub async fn read(
     })
 }
 
+/// Seam lokal (FIN-44, keputusan owner): purge handle milik pemanggil sekarang,
+/// agar DS-8.2 dapat dibuktikan tanpa menunggu TTL ≥24 jam.
+///
+/// Route-nya hanya dipasang saat `APP_ENV=local` (lihat `route::local_router`);
+/// di sini otorisasi yang sama dengan pembacaan tetap berlaku — handle milik
+/// orang lain tetap 404. Purge memakai aturan reaper: dataset job nonterminal
+/// ditolak `409`, bukan dipurge.
+pub async fn purge_now(
+    foundation: &Foundation,
+    dataset_id: Uuid,
+    user_id: Uuid,
+) -> Result<HandleView, ApiError> {
+    authorized(foundation, dataset_id, user_id, &[]).await?;
+
+    let purged = repository::purge_now(foundation.app_db().pool(), dataset_id)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if !purged {
+        return Err(ApiError::Conflict(
+            "dataset is not ready or its job is not terminal".into(),
+        ));
+    }
+
+    read(foundation, dataset_id, user_id, &[]).await
+}
+
 /// Satu halaman baris, keyset atas `(chunk_index, row)`.
 ///
 /// Handle mati tetap dijawab `200` dengan `handle_state`-nya: dataset yang

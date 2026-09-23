@@ -256,7 +256,34 @@ pub async fn purge_expired(pool: &PgPool) -> sqlx::Result<u64> {
     .map(|(dataset_id, job_lifecycle)| Candidate { dataset_id, job_lifecycle })
     .collect::<Vec<_>>();
 
-    let ids = releasable(&candidates);
+    purge(pool, &releasable(&candidates)).await
+}
+
+/// Seam lokal (FIN-44): purge SATU handle sekarang, tanpa menunggu TTL.
+///
+/// Aturan yang sama dengan reaper, bukan jalur kedua: kandidatnya disaring
+/// [`releasable`] — dataset milik job nonterminal tidak disentuh (#11) — dan
+/// purge-nya adalah [`purge`] yang juga dipakai T11. Yang dilewati hanya
+/// `expires_at`. `false` berarti tidak ada yang dipurge (bukan `ready`, atau
+/// job-nya belum terminal).
+pub async fn purge_now(pool: &PgPool, dataset_id: Uuid) -> sqlx::Result<bool> {
+    let candidates = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT d.id, j.lifecycle
+         FROM datasets d
+         JOIN chat_jobs j ON j.id = d.job_id
+         WHERE d.id = $1 AND d.status = 'ready'",
+    )
+    .bind(dataset_id)
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|(dataset_id, job_lifecycle)| Candidate { dataset_id, job_lifecycle })
+    .collect::<Vec<_>>();
+
+    Ok(purge(pool, &releasable(&candidates)).await? == 1)
+}
+
+async fn purge(pool: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
     if ids.is_empty() {
         return Ok(0);
     }
@@ -264,7 +291,7 @@ pub async fn purge_expired(pool: &PgPool) -> sqlx::Result<u64> {
     let mut tx = pool.begin().await?;
 
     sqlx::query("DELETE FROM dataset_chunks WHERE dataset_id = ANY($1)")
-        .bind(&ids)
+        .bind(ids)
         .execute(&mut *tx)
         .await?;
 
@@ -275,7 +302,7 @@ pub async fn purge_expired(pool: &PgPool) -> sqlx::Result<u64> {
          SET status = 'purged', purged_at = now(), chunk_count = 0, byte_size = 0
          WHERE id = ANY($1) AND status = 'ready'",
     )
-    .bind(&ids)
+    .bind(ids)
     .execute(&mut *tx)
     .await?
     .rows_affected();

@@ -1,0 +1,29 @@
+info:
+  name: seam lokal mem-purge handle answered
+  type: http
+  seq: 14.7
+  description: |
+    FIN-44 — `POST /_local/datasets/{id}/purge` hanya dirakit saat
+    APP_ENV=local. Ia memakai aturan reaper (T11) tanpa menunggu TTL ≥24 jam:
+    chunk dihapus, baris handle dipertahankan, status → `purged`.
+
+http:
+  method: post
+  url: "{{baseUrl}}/_local/datasets/{{answeredDatasetId}}/purge"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+
+        test("FIN-44: purge pemilik → 200, handle kini purged", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.dataset_id).to.equal(bru.getVar("answeredDatasetId"));
+          expect(handle.status).to.equal("purged");
+          expect(handle.chunk_count).to.equal(0);
+          expect(handle.purged_at).to.be.a("string");
+        });

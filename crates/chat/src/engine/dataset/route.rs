@@ -1,12 +1,14 @@
 //! Handler baca dataset.
 //!
-//! Tidak ada endpoint tulis: dataset dibuat oleh worker dan **immutable setelah
-//! `ready`** (§1). Koreksi atau penyegaran adalah dataset baru, bukan UPDATE.
+//! Tidak ada endpoint tulis produk: dataset dibuat oleh worker dan **immutable
+//! setelah `ready`** (§1). Koreksi atau penyegaran adalah dataset baru, bukan
+//! UPDATE. Satu-satunya pengecualian adalah seam lokal [`local_router`], yang
+//! tidak pernah dipasang di luar `APP_ENV=local`.
 
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
-    routing::get,
+    routing::{get, post},
 };
 use foundation::{AuthUser, Envelope, error::ApiError, state::Foundation};
 use serde::Deserialize;
@@ -21,6 +23,24 @@ pub fn router() -> Router<Foundation> {
     Router::new()
         .route("/chat/datasets/{dataset_id}", get(read))
         .route("/chat/datasets/{dataset_id}/rows", get(rows))
+}
+
+/// Seam test FIN-44 (keputusan owner): purge sebuah handle tanpa menunggu TTL.
+///
+/// **Hanya** dirakit `app` saat `APP_ENV=local` — di staging/production route
+/// ini tidak ada (404 dari router, bukan penolakan di handler), jadi ia tidak
+/// pernah menjadi kapabilitas produk.
+pub fn local_router() -> Router<Foundation> {
+    Router::new().route("/_local/datasets/{dataset_id}/purge", post(purge))
+}
+
+async fn purge(
+    State(foundation): State<Foundation>,
+    user: AuthUser,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<Envelope<HandleView>>, ApiError> {
+    let handle = service::purge_now(&foundation, dataset_id, user.user_id).await?;
+    Ok(Json(Envelope::ok(handle)))
 }
 
 /// `office_ids` berbentuk daftar dipisah koma (`?office_ids=1,2`). Ia hanya

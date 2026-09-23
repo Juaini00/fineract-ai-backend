@@ -36,3 +36,10 @@ pub fn router(catalog: Arc<catalog::Catalog>, hub: Arc<events::Hub>) -> Router<F
         .layer(Extension(catalog))
         .layer(Extension(hub))
 }
+
+/// Seam test yang hanya boleh dirakit `app` saat `APP_ENV=local` (FIN-44).
+/// Dipisah dari [`router`] supaya "tidak ada di production" adalah fakta
+/// perakitan, bukan cabang di dalam handler.
+pub fn local_router() -> Router<Foundation> {
+    engine::dataset::route::local_router()
+}

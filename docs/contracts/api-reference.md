@@ -634,6 +634,21 @@ cursor rusak → `422`), `limit` (opsional, di-clamp `1..=200`), `office_ids`
 `next_cursor: null` menandai halaman terakhir. Handle mati mengembalikan `rows: []`
 dengan `unavailable_reason` terisi — bukan halaman kosong tanpa penjelasan.
 
+### `POST /_local/datasets/{dataset_id}/purge` — hanya `APP_ENV=local`
+
+Seam test (FIN-44, keputusan owner), **bukan** kapabilitas produk: route ini
+hanya dirakit saat `APP_ENV=local`; di staging/production ia tidak ada (`404`
+dari router). Ia menjalankan purge yang sama dengan reaper (T11) untuk satu
+handle tanpa menunggu TTL ≥24 jam — chunk dihapus, baris handle dipertahankan,
+`status` → `purged` — supaya DS-8.2 dapat dibuktikan di permukaan HTTP.
+
+- Otorisasinya sama dengan pembacaan: handle milik user lain → `404`.
+- Hanya handle `ready` yang job-nya sudah terminal yang dipurge (aturan reaper,
+  #11); selain itu → `409`, termasuk handle yang sudah `purged`.
+- `200` mengembalikan metadata handle sesudah purge, berbentuk sama dengan
+  `GET /chat/datasets/{dataset_id}` (`handle_state: "purged"`,
+  `unavailable_reason: "dataset_purged"`).
+
 ---
 
 ## 6. Klarifikasi

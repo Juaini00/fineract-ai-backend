@@ -1,0 +1,24 @@
+info:
+  name: purge ulang ditolak 409
+  type: http
+  seq: 14.95
+  description: |
+    FIN-44 — seam hanya mem-purge handle `ready` (aturan reaper). Handle yang
+    sudah purged tidak "dipurge lagi" diam-diam: 409, dan statusnya tetap
+    terbaca sebagai purged.
+
+http:
+  method: post
+  url: "{{baseUrl}}/_local/datasets/{{answeredDatasetId}}/purge"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-44: purge handle yang sudah purged → 409", function () {
+          expect(res.getStatus()).to.equal(409);
+          expect(res.getBody().data).to.equal(null);
+        });
