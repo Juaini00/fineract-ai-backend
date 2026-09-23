@@ -1,0 +1,7 @@
+info:
+  name: retrieval-vector
+  seq: 8
+  description: |
+    FIN-41 held-out Indonesian paraphrase. Lexical retrieval is deliberately
+    insufficient, so the healthy exact-vector arm must select
+    savings_deposit_total and preserve that capability in response lineage.

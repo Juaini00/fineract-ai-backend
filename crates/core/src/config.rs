@@ -447,7 +447,7 @@ fn default_embedding_query_input_type() -> String {
     "query".to_string()
 }
 fn default_embedding_similarity_cutoff() -> f32 {
-    0.55
+    0.40
 }
 fn default_idempotency_ttl_secs() -> i64 {
     86_400

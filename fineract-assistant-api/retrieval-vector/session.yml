@@ -1,0 +1,22 @@
+info:
+  name: session for vector retrieval
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalVectorToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "held-out vector retrieval" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("retrievalVectorSession", res.getBody().data.id);

@@ -17,8 +17,8 @@
 #      kebenaran, jadi menghilangkannya tidak boleh mengubah satu pun hasil —
 #      hanya latensinya. Tanpa tahap ini, "fallback polling" hanya klaim.
 #   4. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
-#      `retrieval-healthy` hanya berjalan bila API key tersedia dan versi katalog
-#      sudah memiliki embedding lengkap dari `catalog --sync --embed`.
+#      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
+#      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
 # Pakai:
 #   scripts/integration-test.sh                 # seluruh tahap
@@ -54,7 +54,7 @@ if [ "$#" -gt 0 ]; then
     for folder in "$@"; do
         if [ "$folder" = "retrieval-unavailable" ]; then
             RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
-        elif [ "$folder" = "retrieval-healthy" ]; then
+        elif [ "$folder" = "retrieval-vector" ] || [ "$folder" = "retrieval-healthy" ]; then
             RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
         elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
             ENGINE_FOLDERS+=("$folder")
@@ -66,7 +66,7 @@ else
     INTAKE_FOLDERS=(health auth chat)
     ENGINE_FOLDERS=(engine clarification resolver sse)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
-    RETRIEVAL_HEALTHY_FOLDERS=(retrieval-healthy)
+    RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
 
 command -v bru >/dev/null || {

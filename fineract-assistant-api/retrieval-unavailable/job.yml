@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{retrievalUnavailableSession}}", "request_text": "Akumulasi dana masuk anggota selama siklus berjalan" }
+      { "session_id": "{{retrievalUnavailableSession}}", "request_text": "Hitung penerimaan simpanan sepanjang rentang ini" }
 runtime:
   scripts:
     - type: before-request
