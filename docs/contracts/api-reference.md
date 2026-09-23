@@ -592,6 +592,13 @@ owner) menyempitkan cap baris agar cabang terpotong dapat diuji dengan data
 lokal. Ia tidak pernah melebarkan cap produksi, dan startup ditolak bila ia
 di-set di luar `local`.
 
+Chunk yang disimpan dengan encoding yang belum dibaca runtime ini (mis. chunk
+`BYTEA` berformat baru — DS-8.5, FIN-50) tidak pernah tampil sebagai "baris
+habis": `/rows` berhenti di chunk itu dan mengembalikan `unavailable_reason:
+"chunk_encoding_unsupported"` bersama baris yang sudah terbaca sebelumnya.
+Pada kasus ini `next_cursor` juga `null` — yang menentukan apakah dataset
+benar-benar habis adalah `unavailable_reason`, bukan cursor.
+
 ### `GET /chat/datasets/{dataset_id}`
 
 Metadata handle. `200` dengan:

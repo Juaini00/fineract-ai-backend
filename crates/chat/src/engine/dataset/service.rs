@@ -225,7 +225,11 @@ pub async fn rows(
             break;
         }
 
-        let decoded = match decode(&chunk.format, chunk.encoding_version, &chunk.payload) {
+        let decoded = match decode(
+            &chunk.format,
+            chunk.encoding_version,
+            chunk.payload.as_ref(),
+        ) {
             Ok(rows) => rows,
             // Chunk yang ditulis encoding lebih baru: berhenti dan NYATAKAN,
             // jangan lanjutkan seolah dataset habis di sini (I5).
