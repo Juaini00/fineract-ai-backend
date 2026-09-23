@@ -1,0 +1,31 @@
+info:
+  name: DS-8.3 halaman 1 (limit 1)
+  type: http
+  seq: 13.1
+  description: |
+    DS-8.3 — paginasi stabil. Dataset `answered` (satu baris per mata uang)
+    dibaca satu baris per halaman; halaman-halamannya kemudian dibandingkan
+    dengan pembacaan satu halaman penuh (`answered-dataset-rows.yml`).
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows?limit=1"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("DS-8.3: halaman pertama memuat tepat satu baris dan cursor lanjutan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.rows).to.have.lengthOf(1);
+          expect(page.next_cursor).to.be.a("string");
+          expect(page.sort_key).to.deep.equal(["__row_ordinal"]);
+        });
+
+        bru.setVar("datasetPagedRows", JSON.stringify(page.rows));
+        bru.setVar("datasetPage2Cursor", page.next_cursor);
