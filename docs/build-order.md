@@ -431,7 +431,7 @@ failure. A dashboard colouring by `outcome` will show 32 false errors.
 "Out of scope" and "we failed to find a capability we actually have" look
 identical in the data and in the UI. They must be separated.
 
-### 6.6 DS-8.2 / DS-8.4 cannot be proven at the HTTP surface yet — blocked
+### 6.6 DS-8.2 / DS-8.4 could not be proven at the HTTP surface — RESOLVED
 
 DS-8.2 (a `purged` dataset still reads as purged) and DS-8.4 (a re-read by
 another user / a narrower scope is refused) are acceptance scenarios about the
@@ -444,10 +444,12 @@ must **not** be invented (Rules 3 and 4):
    node's result; `engine/answered-dataset.yml` and `answered-dataset-rows.yml`
    learn the id from a job response and read the handle and its rows through
    `GET /chat/datasets/{id}`.
-2. **DS-8.2 needs a `purged` handle.** Purge happens only via the reaper (T11) on
-   a ≥24h TTL (`dataset::ttl_secs`, floor `DATASET_TTL_SECS = 86400`, not
-   env-configurable); there is no manual purge/expire endpoint. A test run cannot
-   produce a purged dataset.
+2. ~~**DS-8.2 needs a `purged` handle.**~~ **Resolved (FIN-44, FIN-47).** The
+   owner-approved seam `POST /_local/datasets/{id}/purge` is assembled only when
+   `APP_ENV=local` (absent from the router elsewhere) and runs the reaper's own
+   purge rule for one handle without waiting for the ≥24h TTL. Production TTL
+   (`DATASET_TTL_SECS = 86400` floor) is unchanged. `engine/dataset-purged*.yml`
+   prove DS-8.2.
 3. ~~**DS-8.4 needs a second principal and a narrower scope.**~~ **Resolved
    (FIN-45, FIN-49).** The local-only `auditor` principal (PR #1) reaches the
    `NotOwner` (404) branch; the owner-approved `office_ids` query on
@@ -456,8 +458,9 @@ must **not** be invented (Rules 3 and 4):
    `engine/dataset-other-user*.yml` and `engine/dataset-narrowed-scope*.yml`
    Bruno requests.
 
-Remaining: a test-only seam for purge (#2, FIN-44). Until it lands, DS-8.2 is
-proven at the unit level only and L3 stays 🔨.
+All three mechanisms now exist; DS-8.2, DS-8.3 and DS-8.4 are proven at the
+HTTP surface. L3 still stays 🔨 until every DS scenario is checked for
+conformance (DS-8.1, DS-8.5, DS-8.6 remain unit-level).
 
 ---
 

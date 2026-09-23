@@ -8,7 +8,7 @@ mod catalog_command;
 mod cors;
 mod health;
 
-use foundation::{Config, Foundation, auth, telemetry};
+use foundation::{AppEnv, Config, Foundation, auth, telemetry};
 
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, signal};
@@ -55,9 +55,15 @@ async fn main() -> anyhow::Result<()> {
     // dikerjakan instance lain.
     let hub = chat::events::Hub::spawn(&foundation, engine.shutdown_token());
 
-    let router = health::router()
+    let mut router = health::router()
         .merge(auth::route::router())
-        .merge(chat::router(catalog, hub))
+        .merge(chat::router(catalog, hub));
+    // Seam test (FIN-44) hanya ada di local: di env lain route-nya tidak
+    // dirakit sama sekali, jadi tidak ada flag yang dapat salah dinyalakan.
+    if app_env == AppEnv::Local {
+        router = router.merge(chat::local_router());
+    }
+    let router = router
         .with_state(foundation)
         .layer(cors::layer(&cors_allowed_origins));
 
