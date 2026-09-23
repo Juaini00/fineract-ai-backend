@@ -254,10 +254,10 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | Layer | Status | Prerequisites met? |
 | --- | --- | --- |
 | L0 Foundation | 🔨 | — |
-| L1 Correct catalog | 🔨 | L0 🔨 |
-| L2 Retrieval | ⬜ | L1 🔨 |
+| L1 Correct catalog | 🧪 | L0 🔨 |
+| L2 Retrieval | 🧪 | L1 🧪 |
 | L3 Datasets | 🔨 | L0 🔨 |
-| L4 Correct answers | 🔨 | L1 🔨, L3 🔨 |
+| L4 Correct answers | 🔨 | L1 🧪, L3 🔨 |
 | L5 Response shape | 🔨 | L0 🔨 |
 | L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
@@ -305,6 +305,24 @@ Coverage moved from 0/59 to **16/59** (see §5.1) — the two RESP scenarios add
 this cycle. Besides L1 (🧪), no other layer reaches 🧪 or ✅: the ceiling is
 capped by unfinished prerequisites and by scenarios that still lack a test.
 
+Update after L2 (FIN-40/41/42/7, PR #10–#12, #14) and FIN-43 (PR #16):
+
+- **L2 ⬜ → 🧪.** The §3 gate holds at the HTTP surface: an Indonesian question
+  whose capability exists finds it (lexical arm, FIN-40), a held-out Indonesian
+  question reaches `savings_deposit_total` through the semantic arm alone
+  (FIN-41; every catalog version's `knowledge_index` rows carry a
+  `vector(1024)`, 0 NULL), and a retrieval failure is reported as
+  `retrieval_miss` while an out-of-domain request with a healthy semantic arm is
+  `out_of_scope` (FIN-42, §6.5). Proven by the `retrieval-unavailable`,
+  `retrieval-vector` and `retrieval-healthy` Bruno stages. Ceiling is 🧪 because
+  L1 is 🧪, not ✅.
+- **L3 stays 🔨.** §6.6 #1 is resolved: `dataset_id` is discoverable from the
+  response lineage and the handle/rows endpoints are exercised end to end. #2
+  (purge seam) and the scope-narrowing half of #3 remain.
+- The table rows for L1 and L4 are corrected to the already-recorded L1 🧪.
+
+Coverage is **30/59** (see §5.1).
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -313,23 +331,25 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **16 of 59 scenarios have a test**:
+Latest run — **30 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
-| `API-` | [contracts/api.md](contracts/api.md) | 6 | 0 | L0 |
-| `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 0 | L0 |
+| `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
+| `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 0 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **16** | |
+| | **Total** | **59** | **30** | |
 
-The DS tests are unit-level (`crates/chat/src/engine/dataset/`) — DS-8.2 and
-DS-8.4 are HTTP-surface behaviours that still lack a Bruno test (blocked; see
-§6.6). RESP is now complete at the unit level, but "has a test" is a coverage
+API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
+their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
+stage waits on CLR-3. The DS tests are unit-level
+(`crates/chat/src/engine/dataset/`); DS-8.2 and DS-8.4 still lack a full Bruno
+proof (§6.6). RESP is now complete at the unit level, but "has a test" is a coverage
 figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
 test actually proves its scenario, and RESP-8.7/8.9 in particular prove
 composition logic that no live path emits yet.
