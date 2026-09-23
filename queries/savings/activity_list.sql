@@ -2,14 +2,27 @@ SELECT
     t.id AS transaction_id,
     t.transaction_date,
     t.transaction_type_enum::bigint AS transaction_type_enum,
+    -- Label = `code` pada knowledge/schema/fineract/enums/savings_transaction_type.yaml,
+    -- SELURUH nilai yang didokumentasikan (FIN-132). Hanya nilai yang tidak
+    -- didokumentasikan yang menjadi 'other'.
     CASE t.transaction_type_enum
+        WHEN 0 THEN 'invalid'
         WHEN 1 THEN 'deposit'
         WHEN 2 THEN 'withdrawal'
         WHEN 3 THEN 'interest_posting'
         WHEN 4 THEN 'withdrawal_fee'
         WHEN 5 THEN 'annual_fee'
+        WHEN 6 THEN 'waive_charges'
+        WHEN 7 THEN 'pay_charge'
         WHEN 8 THEN 'dividend_payout'
-        WHEN 17 THEN 'withhold_tax'
+        WHEN 10 THEN 'accrual'
+        WHEN 12 THEN 'initiate_transfer'
+        WHEN 13 THEN 'approve_transfer'
+        WHEN 14 THEN 'withdraw_transfer'
+        WHEN 15 THEN 'reject_transfer'
+        WHEN 16 THEN 'written_off'
+        WHEN 17 THEN 'overdraft_interest'
+        WHEN 18 THEN 'withhold_tax'
         WHEN 19 THEN 'escheat'
         WHEN 20 THEN 'amount_hold'
         WHEN 21 THEN 'amount_release'
