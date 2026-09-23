@@ -1,0 +1,30 @@
+info:
+  name: DS-8.2 baris dataset purged dinyatakan tidak tersedia
+  type: http
+  seq: 14.9
+  description: |
+    DS-8.2 — halaman baris dataset purged bukan halaman kosong yang tampak
+    seperti "datanya nol": `rows: []` selalu disertai `handle_state` dan
+    `unavailable_reason`, dan jumlah baris aslinya tetap dinyatakan.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+
+        test("DS-8.2: rows purged → 200, kosong DENGAN alasan, bukan nol diam-diam", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.handle_state).to.equal("purged");
+          expect(page.unavailable_reason).to.equal("dataset_purged");
+          expect(page.rows).to.have.lengthOf(0);
+          expect(page.next_cursor).to.equal(null);
+          expect(page.row_count_available).to.equal(Number(bru.getVar("answeredRowCount")));
+        });

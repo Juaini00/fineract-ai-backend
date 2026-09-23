@@ -1,0 +1,35 @@
+info:
+  name: DS-8.2 dataset purged masih terbaca statusnya
+  type: http
+  seq: 14.8
+  description: |
+    DS-8.2 — dataset `purged` tidak menjadi 404 dan tidak menjadi objek tanpa
+    status: `handle_state` selalu ada (C13) dan alasan ketidaktersediaannya
+    dinyatakan (I5). Ringkasan handle — jumlah baris, scope, provenance —
+    tetap terbaca; yang hilang hanya baris detailnya.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+
+        test("DS-8.2: handle purged → 200 dengan handle_state purged dan alasan dinyatakan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.handle_state).to.equal("purged");
+          expect(handle.unavailable_reason).to.equal("dataset_purged");
+          expect(handle.purged_at).to.be.a("string");
+        });
+
+        test("DS-8.2: ringkasan handle bertahan sesudah purge", function () {
+          expect(handle.job_id).to.equal(bru.getVar("answeredJobId"));
+          expect(handle.row_count_available).to.equal(Number(bru.getVar("answeredRowCount")));
+          expect(handle.provenance).to.be.an("object").that.is.not.empty;
+        });
