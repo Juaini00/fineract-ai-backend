@@ -1,0 +1,30 @@
+info:
+  name: login principal kedua untuk DS-8.4
+  type: http
+  seq: 14
+  description: |
+    DS-8.4 — principal lokal `auditor` (hanya APP_ENV=local, PR #1). Ia tidak
+    memiliki job `answered`, jadi handle dataset-nya bukan miliknya.
+
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {
+        "username": "{{username2}}",
+        "password": "{{password2}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("200 — principal kedua dapat login", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+        bru.setVar("otherToken", res.getBody().data.access_token);

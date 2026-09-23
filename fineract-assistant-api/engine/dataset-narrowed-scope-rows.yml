@@ -1,0 +1,26 @@
+info:
+  name: DS-8.4 baris dengan scope menyempit ditolak
+  type: http
+  seq: 14.4
+  description: |
+    DS-8.4 (separuh ScopeNarrowed) — penyempitan diperiksa ulang pada
+    pembacaan baris juga, bukan hanya metadata (I7).
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{answeredDatasetId}}/rows?office_ids=1"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("DS-8.4: baris dengan scope menyempit ditolak 403, tidak ada baris yang bocor", function () {
+          expect(res.getStatus()).to.equal(403);
+          const body = res.getBody();
+          expect(body.data).to.equal(null);
+          const columns = JSON.parse(bru.getVar("answeredTableColumns"));
+          columns.forEach((column) => expect(JSON.stringify(body)).to.not.include(column));
+        });
