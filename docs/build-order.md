@@ -256,8 +256,8 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | L0 Foundation | 🔨 | — |
 | L1 Correct catalog | 🧪 | L0 🔨 |
 | L2 Retrieval | 🧪 | L1 🧪 |
-| L3 Datasets | 🔨 | L0 🔨 |
-| L4 Correct answers | 🔨 | L1 🧪, L3 🔨 |
+| L3 Datasets | 🧪 | L0 🔨 |
+| L4 Correct answers | 🔨 | L1 🧪, L3 🧪 |
 | L5 Response shape | 🔨 | L0 🔨 |
 | L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
@@ -361,7 +361,33 @@ Update after FIN-50 (DS-8.5):
   `docs/migration/carry-over.md` #11 still says a future BYTEA needs "a column
   + a new format value" — the column now exists. The owner updates both in a
   separate `docs:` commit (Rule 3).
-- L3 stays 🔨: DS-8.6 is still unit-level.
+- L3 stays 🔨 at this point: DS-8.6 is still unit-level.
+
+Update after FIN-51 (DS-8.6):
+
+- **The eviction guard is fail-closed.** `dataset::releasable` — the single
+  predicate both release paths route through (T11 reaper `purge_expired` and
+  the FIN-44 local seam `purge_now`) — now releases only datasets whose job is
+  in an explicit **terminal** allowlist (`Completed`/`Failed`/`Cancelled`/
+  `Expired`). Before, it excluded a denylist of the four nonterminal states,
+  so a lifecycle added to the CHECK later would have been evicted by default.
+- DS-8.6 is proven at the unit, as its ticket specifies:
+  `ds_8_6_release_never_touches_a_running_job` (all four nonterminal states
+  kept, all four terminal released) and
+  `ds_8_6_unknown_lifecycle_is_kept_not_evicted`. The terminal control case is
+  also exercised at HTTP by `engine/dataset-purge.yml` (FIN-44). The
+  nonterminal branch has no HTTP trigger: a handle's id is surfaced only in the
+  settled response's lineage, and terminal lifecycles are absorbing. A
+  nonterminal job can still hold a `ready` handle — `retain_dataset` commits
+  before settle, so a cancel or lease loss in between leaves it
+  `Cancelling`/`Queued` until the reaper settles it — so the guard is
+  load-bearing, not defence in depth. (A lease-loss re-run also writes a second
+  handle for the same node; `datasets` has no unique key on job/node.)
+- Quota eviction (`SESSION_RETAINED_BYTES_QUOTA`, LRU) does not exist yet; when
+  it is built it must route through `releasable`.
+- **L3 🔨 → 🧪.** All six DS scenarios pass: DS-8.1..8.4 at the HTTP surface,
+  DS-8.5 at the schema, DS-8.6 at the release predicate. 🧪 is the ceiling
+  while L0 is 🔨.
 
 ### 5.1 Scenario coverage
 
@@ -389,7 +415,8 @@ API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
 stage waits on CLR-3. DS-8.1..8.4 are proven by Bruno requests (`engine/`,
 `dataset-capped/`); DS-8.5 is proven at the schema by `tests/schema_smoke.sql`
-T13 plus unit tests; DS-8.6 is still unit-level
+T13 plus unit tests; DS-8.6 is proven at the release predicate
+(`ds_8_6_*`), the only path any eviction takes
 (`crates/chat/src/engine/dataset/`). RESP is now complete at the unit level, but "has a test" is a coverage
 figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
 test actually proves its scenario, and RESP-8.7/8.9 in particular prove
@@ -500,9 +527,8 @@ must **not** be invented (Rules 3 and 4):
    Bruno requests.
 
 All three mechanisms now exist; DS-8.1 (FIN-46), DS-8.2, DS-8.3 and DS-8.4 are
-proven at the HTTP surface and DS-8.5 (FIN-50) at the schema. L3 still stays
-🔨 until every DS scenario is checked for conformance (DS-8.6 remains
-unit-level).
+proven at the HTTP surface, DS-8.5 (FIN-50) at the schema and DS-8.6 (FIN-51)
+at the release predicate every eviction path uses. L3 is 🧪 (see §5).
 
 ---
 
