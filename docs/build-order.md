@@ -323,6 +323,24 @@ Update after L2 (FIN-40/41/42/7, PR #10–#12, #14) and FIN-43 (PR #16):
 
 Coverage is **30/59** (see §5.1).
 
+Update after FIN-46 (DS-8.1):
+
+- **DS-8.1 is proven at the HTTP surface.** Local Fineract data (15,607
+  transactions) never reaches `DATASET_MAX_ROWS` (100,000), so the truncated
+  branch was unreachable. The owner-approved seam `LOCAL_DATASET_MAX_ROWS`
+  (honoured only when `APP_ENV=local`; startup fails elsewhere; it only
+  narrows the cap) drives the new `dataset-capped` Bruno stage: the stored
+  handle is `truncated=true`, `Partial`, `dataset_row_cap_reached`,
+  `row_count_available` 1 < `row_count_total`; the answer stays `Complete`
+  over all N node rows and states the handle's cap in a `limitation` block
+  `dataset_truncated`. Locally N = 3 (AED/EUR/USD), and the served numbers were
+  cross-checked by hand against direct SQL on `fineract_default` (the Bruno
+  stage itself asserts N > 1 stored-vs-answer, not the SQL values).
+- The truncation reason now names the cap that was actually hit
+  (`dataset_row_cap_reached` vs `dataset_byte_cap_reached`); before, a byte-cap
+  cut was reported as a row-cap cut.
+- L3 stays 🔨: DS-8.5 and DS-8.6 are still unit-level.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -347,9 +365,9 @@ Latest run — **30 of 59 scenarios have a test**:
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
-stage waits on CLR-3. The DS tests are unit-level
-(`crates/chat/src/engine/dataset/`); DS-8.2 and DS-8.4 still lack a full Bruno
-proof (§6.6). RESP is now complete at the unit level, but "has a test" is a coverage
+stage waits on CLR-3. DS-8.1..8.4 are proven by Bruno requests (`engine/`,
+`dataset-capped/`); DS-8.5 and DS-8.6 are still unit-level
+(`crates/chat/src/engine/dataset/`). RESP is now complete at the unit level, but "has a test" is a coverage
 figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
 test actually proves its scenario, and RESP-8.7/8.9 in particular prove
 composition logic that no live path emits yet.
@@ -458,9 +476,9 @@ must **not** be invented (Rules 3 and 4):
    `engine/dataset-other-user*.yml` and `engine/dataset-narrowed-scope*.yml`
    Bruno requests.
 
-All three mechanisms now exist; DS-8.2, DS-8.3 and DS-8.4 are proven at the
-HTTP surface. L3 still stays 🔨 until every DS scenario is checked for
-conformance (DS-8.1, DS-8.5, DS-8.6 remain unit-level).
+All three mechanisms now exist; DS-8.1 (FIN-46), DS-8.2, DS-8.3 and DS-8.4 are
+proven at the HTTP surface. L3 still stays 🔨 until every DS scenario is
+checked for conformance (DS-8.5, DS-8.6 remain unit-level).
 
 ---
 

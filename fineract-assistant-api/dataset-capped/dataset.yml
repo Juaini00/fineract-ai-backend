@@ -1,0 +1,34 @@
+info:
+  name: DS-8.1 handle terpotong menyatakan dirinya Partial dengan alasan
+  type: http
+  seq: 5
+  description: |
+    DS-8.1 — `truncated` (set TERSIMPAN) terpisah dari kelengkapan jawaban.
+    Handle yang terpotong tidak mengklaim `Complete` atas dirinya: ia `Partial`
+    dengan alasan yang menyebut cap-nya, dan jumlah aslinya tetap diketahui.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{cappedDatasetId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{cappedToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+        const total = JSON.parse(bru.getVar("cappedTableRows")).length;
+
+        test("DS-8.1: truncated=true dengan alasan tertulis, bukan Complete diam-diam", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.handle_state).to.equal("live");
+          expect(handle.truncated).to.equal(true);
+          expect(handle.completeness).to.equal("Partial");
+          expect(handle.completeness_reason).to.equal("dataset_row_cap_reached");
+        });
+
+        test("DS-8.1: tersimpan < total, dan total = jumlah baris jawaban", function () {
+          expect(handle.row_count_available).to.equal(1);
+          expect(handle.row_count_total).to.equal(total);
+          expect(handle.row_count_available).to.be.below(handle.row_count_total);
+        });

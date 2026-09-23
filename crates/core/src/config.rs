@@ -154,6 +154,13 @@ pub struct Config {
     /// polling menjadi fallback, bukan jalur utama (SSE §transport).
     #[serde(default = "default_worker_poll_interval_ms")]
     pub worker_poll_interval_ms: u64,
+    /// Seam KHUSUS `local` (FIN-46, keputusan owner): turunkan cap baris
+    /// dataset (`DATASET_MAX_ROWS`, runtime.md §4) agar cabang
+    /// `truncated=true` DS-8.1 dapat dibuktikan di permukaan HTTP — data
+    /// Fineract lokal jauh di bawah 100.000 baris. Hanya menyempitkan, tidak
+    /// pernah melebarkan cap produksi; di luar `local` startup ditolak.
+    #[serde(default)]
+    pub local_dataset_max_rows: Option<usize>,
 
     // ---- Event dan SSE (runtime.md §5) ----
     /// Jeda baca PostgreSQL saat tidak ada notifikasi. Ini **fallback yang
@@ -344,6 +351,20 @@ impl Config {
         }
         if !(0.0..=1.0).contains(&self.embedding_similarity_cutoff) {
             anyhow::bail!("EMBEDDING_SIMILARITY_CUTOFF wajib di antara 0 dan 1");
+        }
+
+        // Seam test yang lolos keluar local berarti production diam-diam
+        // menyimpan dataset terpotong: gagal keras, jangan diabaikan.
+        if let Some(cap) = self.local_dataset_max_rows {
+            if self.app_env != AppEnv::Local {
+                anyhow::bail!(
+                    "LOCAL_DATASET_MAX_ROWS hanya sah di APP_ENV=local, bukan {:?}",
+                    self.app_env
+                );
+            }
+            if cap == 0 {
+                anyhow::bail!("LOCAL_DATASET_MAX_ROWS wajib lebih besar dari nol");
+            }
         }
 
         Ok(())
@@ -611,5 +632,17 @@ mod tests {
         let mut entries = minimal();
         entries.push(("embedding_similarity_cutoff", "1.1".into()));
         assert!(build(entries).is_err());
+    }
+
+    #[test]
+    fn local_dataset_cap_seam_refuses_to_start_outside_local() {
+        let mut entries = minimal();
+        entries.push(("app_env", "production".into()));
+        entries.push(("jwt_access_secret", "produksi-access".into()));
+        entries.push(("jwt_refresh_secret", "produksi-refresh".into()));
+        entries.push(("local_dataset_max_rows", "1".into()));
+
+        let error = build(entries).unwrap_err().to_string();
+        assert!(error.contains("LOCAL_DATASET_MAX_ROWS"), "{error}");
     }
 }

@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::engine::{
+    dataset::Retained,
     planner::{Bound, Plan},
     repository::SettledResponse,
 };
@@ -206,7 +207,7 @@ pub fn analysis(
     pii_enabled: bool,
     auto_bound: &[AutoBound],
     node_run_id: Uuid,
-    dataset_id: Uuid,
+    retained: &Retained,
 ) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
     let derived_from = [from_node(node_run_id)];
@@ -249,6 +250,32 @@ pub fn analysis(
                     withheld.join(", ")
                 ),
                 "withheld_columns": withheld,
+            }),
+        ));
+    }
+
+    // DS-8.1 — `truncated=true` hidup bersama `Complete` HANYA bila batasnya
+    // dinyatakan dan tidak mengubah jawaban. Jawaban di atas dihitung atas
+    // seluruh baris node; yang dibatasi hanya handle yang dirujuk lineage,
+    // dan itu dinyatakan di sini, bukan dibiarkan ditemukan saat paginasi.
+    if let Some(truncation) = &retained.truncation {
+        blocks.push(block(
+            "dataset_truncated",
+            "limitation",
+            &[],
+            json!({
+                "title": "Retained dataset is capped",
+                "body": format!(
+                    "The answer covers all {} row(s) returned by the approved query. The dataset \
+                     handle retained for paging keeps only the first {} row(s) ({}).",
+                    rows.len(),
+                    truncation.row_count_available,
+                    truncation.reason
+                ),
+                "dataset_id": retained.dataset_id,
+                "reason": truncation.reason,
+                "row_count_available": truncation.row_count_available,
+                "row_count_total": rows.len(),
             }),
         ));
     }
@@ -298,7 +325,13 @@ pub fn analysis(
         completeness: "Complete",
         completeness_reason: format!("curated_query:{}", plan.query_id),
         response_hash: hex::encode(Sha256::digest(blocks.to_string().as_bytes())),
-        evidence: evidence(plan, node_run_id, dataset_id, rows.len(), duration_ms),
+        evidence: evidence(
+            plan,
+            node_run_id,
+            retained.dataset_id,
+            rows.len(),
+            duration_ms,
+        ),
         blocks,
     }
 }
@@ -547,8 +580,11 @@ mod tests {
         Uuid::from_u128(7)
     }
 
-    fn dataset() -> Uuid {
-        Uuid::from_u128(11)
+    fn dataset() -> Retained {
+        Retained {
+            dataset_id: Uuid::from_u128(11),
+            truncation: None,
+        }
     }
 
     /// Setiap blok memenuhi §1 dan §2 sekaligus.
@@ -573,7 +609,15 @@ mod tests {
 
     #[test]
     fn single_row_becomes_one_metric_block_per_named_value() {
-        let response = analysis(&plan(), &[row("1500.00", 3)], 12, false, &[], node(), dataset());
+        let response = analysis(
+            &plan(),
+            &[row("1500.00", 3)],
+            12,
+            false,
+            &[],
+            node(),
+            &dataset(),
+        );
         let blocks = response.blocks.as_array().unwrap();
 
         assert_eq!(response.outcome, "Answered");
@@ -591,7 +635,7 @@ mod tests {
     #[test]
     fn many_rows_become_a_table() {
         let rows = [row("1.00", 1), row("2.00", 2)];
-        let response = analysis(&plan(), &rows, 30, false, &[], node(), dataset());
+        let response = analysis(&plan(), &rows, 30, false, &[], node(), &dataset());
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
@@ -602,7 +646,7 @@ mod tests {
 
     #[test]
     fn no_rows_is_empty_not_a_failure() {
-        let response = analysis(&plan(), &[], 5, false, &[], node(), dataset());
+        let response = analysis(&plan(), &[], 5, false, &[], node(), &dataset());
 
         assert_eq!(response.outcome, "Empty");
         // engine.md melarang Empty + Partial: pencarian parsial tidak boleh
@@ -622,7 +666,15 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row.clone(), row], 5, false, &[], node(), dataset());
+        let response = analysis(
+            &plan,
+            &[row.clone(), row],
+            5,
+            false,
+            &[],
+            node(),
+            &dataset(),
+        );
         let rendered = response.blocks.to_string();
 
         assert!(!rendered.contains("Budi"), "PII bocor ke response: {rendered}");
@@ -646,7 +698,7 @@ mod tests {
         let mut row = row("1.00", 1);
         row.insert("client_display_name".into(), Value::String("Budi".into()));
 
-        let response = analysis(&plan, &[row], 5, true, &[], node(), dataset());
+        let response = analysis(&plan, &[row], 5, true, &[], node(), &dataset());
         assert!(response.blocks.to_string().contains("Budi"));
     }
 
@@ -659,8 +711,15 @@ mod tests {
             field_id: "client_id".into(),
             label: Some("Siti".into()),
         }];
-        let response =
-            analysis(&plan(), &[row("1.00", 1)], 5, false, &auto_bound, node(), dataset());
+        let response = analysis(
+            &plan(),
+            &[row("1.00", 1)],
+            5,
+            false,
+            &auto_bound,
+            node(),
+            &dataset(),
+        );
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
@@ -678,7 +737,15 @@ mod tests {
     /// dalam blok yang boleh dilewati klien.
     #[test]
     fn resp_8_3_lineage_lives_in_evidence_not_in_a_block() {
-        let response = analysis(&plan(), &[row("1.00", 1)], 5, false, &[], node(), dataset());
+        let response = analysis(
+            &plan(),
+            &[row("1.00", 1)],
+            5,
+            false,
+            &[],
+            node(),
+            &dataset(),
+        );
 
         let lineage = &response.evidence["lineage"][0];
         assert_eq!(lineage["node_run_id"], node().to_string());
@@ -687,7 +754,7 @@ mod tests {
         assert_eq!(lineage["parameters"][1]["value"], "3 authorized offices");
         // FIN-43 — lineage membawa handle yang nyata, bukan `null`: tanpa ini
         // klien tidak punya jalan menuju `GET /chat/datasets/{id}`.
-        assert_eq!(lineage["dataset_id"], dataset().to_string());
+        assert_eq!(lineage["dataset_id"], dataset().dataset_id.to_string());
         assert!(response.evidence["derivations"].is_array());
 
         // Tidak ada blok `provenance`: ia bukan bagian dari kosakata §2.

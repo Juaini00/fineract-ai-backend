@@ -16,7 +16,11 @@
 #      identik dengan tahap 2, dan itulah buktinya: notifikasi bukan sumber
 #      kebenaran, jadi menghilangkannya tidak boleh mengubah satu pun hasil —
 #      hanya latensinya. Tanpa tahap ini, "fallback polling" hanya klaim.
-#   4. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
+#   4. `dataset-capped` menjalankan worker dengan seam lokal
+#      LOCAL_DATASET_MAX_ROWS=1 (FIN-46): data lokal jauh di bawah cap
+#      produksi, jadi cabang `truncated=true` DS-8.1 hanya terjangkau lewat
+#      cap yang disempitkan. Tahap lain berjalan TANPA seam ini.
+#   5. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
@@ -24,6 +28,7 @@
 #   scripts/integration-test.sh                 # seluruh tahap
 #   scripts/integration-test.sh auth            # satu folder (tahap intake)
 #   scripts/integration-test.sh engine          # tahap engine saja
+#   scripts/integration-test.sh dataset-capped  # tahap cap dataset saja
 #   PORT=3210 scripts/integration-test.sh       # port tertentu
 #   KEEP_RUNNING=1 scripts/integration-test.sh  # biarkan app terakhir hidup
 #
@@ -46,13 +51,24 @@ if [ -f "$ROOT/.env" ]; then
     set +a
 fi
 
+# Seam cap dataset hanya milik tahap `dataset-capped`. Bila `.env` menyetelnya,
+# dotenvy di app membacanya kembali di SETIAP tahap dan tahap engine gagal
+# dengan pesan yang tidak menunjuk penyebabnya — tolak sejak awal.
+if [ -n "${LOCAL_DATASET_MAX_ROWS+x}" ]; then
+    echo "LOCAL_DATASET_MAX_ROWS tidak boleh di-set di .env/environment; runner menyetelnya hanya untuk dataset-capped" >&2
+    exit 1
+fi
+
 if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
     RETRIEVAL_UNAVAILABLE_FOLDERS=()
+    DATASET_CAPPED_FOLDERS=()
     RETRIEVAL_HEALTHY_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "retrieval-unavailable" ]; then
+        if [ "$folder" = "dataset-capped" ]; then
+            DATASET_CAPPED_FOLDERS+=("$folder")
+        elif [ "$folder" = "retrieval-unavailable" ]; then
             RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-vector" ] || [ "$folder" = "retrieval-healthy" ]; then
             RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
@@ -65,6 +81,7 @@ if [ "$#" -gt 0 ]; then
 else
     INTAKE_FOLDERS=(health auth chat)
     ENGINE_FOLDERS=(engine clarification resolver sse)
+    DATASET_CAPPED_FOLDERS=(dataset-capped)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
@@ -180,6 +197,13 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
             run_folders 1500 sse
         fi
     done
+fi
+
+if [ "${#DATASET_CAPPED_FOLDERS[@]}" -gt 0 ]; then
+    stop_app
+    start_app true LOCAL_DATASET_MAX_ROWS=1
+    echo "==> bru run dataset-capped (cap retensi dataset disempitkan ke 1 baris)"
+    run_folders 1500 "${DATASET_CAPPED_FOLDERS[@]}"
 fi
 
 if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then
