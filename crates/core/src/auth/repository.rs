@@ -94,7 +94,7 @@ pub async fn create_session(
     session_expires_at: DateTime<Utc>,
     token_expires_at: DateTime<Utc>,
 ) -> sqlx::Result<Uuid> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = crate::commit_isolation::begin(pool).await?;
 
     let session_id = sqlx::query_scalar::<_, Uuid>(
         "INSERT INTO auth_sessions (user_id, user_agent, ip_address, expires_at, last_seen_at)
@@ -148,7 +148,7 @@ pub async fn rotate_refresh_token(
     new_token_hash: &str,
     new_expires_at: DateTime<Utc>,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = crate::commit_isolation::begin(pool).await?;
 
     let revoked = sqlx::query("UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL")
         .bind(current_token_id)
@@ -175,7 +175,7 @@ pub async fn rotate_refresh_token(
 /// Cabut session beserta seluruh refresh token-nya (logout, atau respons
 /// terhadap pemakaian ulang token yang sudah dicabut).
 pub async fn revoke_session(pool: &PgPool, session_id: Uuid) -> sqlx::Result<()> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = crate::commit_isolation::begin(pool).await?;
 
     sqlx::query("UPDATE auth_sessions SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL")
         .bind(session_id)

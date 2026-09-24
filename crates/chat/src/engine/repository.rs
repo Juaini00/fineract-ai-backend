@@ -43,7 +43,7 @@ pub async fn claim_next(
     lease_duration_secs: i64,
     job_ttl_running_secs: i64,
 ) -> sqlx::Result<Option<ClaimedJob>> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let claimed = sqlx::query_as::<_, ClaimedJob>(
         "UPDATE chat_jobs
@@ -367,7 +367,7 @@ pub async fn settle_with_response(
     validated: Validated,
     facts: &[MemoryFact],
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let validation_status = validated.status();
     let Validated { served: response, rejected, report } = validated;
@@ -536,7 +536,7 @@ pub async fn settle_cancelled(
     session_id: Uuid,
     lease_token: Uuid,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = sqlx::query(
         "UPDATE chat_jobs
@@ -619,7 +619,7 @@ pub async fn sweep(pool: &PgPool, worker: &str) -> sqlx::Result<ReaperSweep> {
 }
 
 async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let jobs = sqlx::query_as::<_, (Uuid, Uuid)>(
         "UPDATE chat_jobs
@@ -650,7 +650,7 @@ async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
 }
 
 async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     // `Cancelling` tanpa lease hidup berarti tidak ada worker yang akan
     // menuntaskannya; reaper yang menutupnya.
@@ -682,7 +682,7 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
 }
 
 async fn requeue_lost_leases(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     // Lease hilang saat `Running`: hasil eksekusi eksternalnya TIDAK DIKETAHUI
     // (I4) — bukan gagal, bukan sukses. Job dikembalikan ke antrean dengan
@@ -799,7 +799,7 @@ pub async fn persist_plan(
     contract_versions: &Value,
     capability_id: &str,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = sqlx::query(
         "UPDATE chat_jobs SET plan_version = $3, updated_at = now()
@@ -912,7 +912,7 @@ pub async fn complete_node(
     plan_version: i32,
     outcome: NodeOutcome<'_>,
 ) -> sqlx::Result<Option<Uuid>> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = sqlx::query_as::<_, (Uuid,)>(
         "UPDATE job_node_runs
@@ -1015,7 +1015,7 @@ pub async fn settle_failed(
     failure_code: &str,
     response: SettledResponse,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     const RESPONSE_VERSION: i32 = 1;
 

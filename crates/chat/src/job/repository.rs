@@ -63,7 +63,7 @@ pub async fn create_job(
     fingerprint: &str,
     idempotency_ttl_secs: i64,
 ) -> Result<Accepted, CreateError> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     // 1. Idempotency lebih dulu: retry tidak boleh sempat menyentuh state lain.
     match claim_idempotency(
@@ -375,7 +375,7 @@ pub async fn find(pool: &PgPool, job_id: Uuid) -> sqlx::Result<Option<Job>> {
 /// `WHERE lifecycle IN (...)` membuat job terminal tidak pernah dibuka kembali,
 /// dan cancel berulang menjadi no-op alih-alih transisi kedua.
 pub async fn request_cancel(pool: &PgPool, job_id: Uuid, actor_user_id: Uuid) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = sqlx::query(
         "UPDATE chat_jobs

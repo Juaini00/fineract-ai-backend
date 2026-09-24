@@ -7,6 +7,7 @@
 use redis::aio::ConnectionManager;
 use tracing::warn;
 
+use crate::commit_isolation::{self, ExternalCall};
 use crate::config::Config;
 
 /// Koneksi Redis opsional.
@@ -62,6 +63,7 @@ impl Notifier {
     /// tetap menemukan event itu lewat PostgreSQL. Yang dilarang adalah
     /// kehilangan yang tidak terlihat — karena itu ia tetap di-log.
     pub async fn publish(&self, channel: &str, payload: &str) {
+        commit_isolation::guard(ExternalCall::Redis);
         let Self::Live(manager) = self else {
             return;
         };

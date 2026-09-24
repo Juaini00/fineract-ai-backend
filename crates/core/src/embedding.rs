@@ -45,6 +45,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::Config;
+use crate::commit_isolation::{self, ExternalCall};
 
 #[derive(Debug, Clone, Copy)]
 pub enum InputKind {
@@ -116,6 +117,7 @@ impl EmbeddingClient {
     }
 
     pub async fn embed(&self, input: &[String], kind: InputKind) -> anyhow::Result<Vec<Vec<f32>>> {
+        commit_isolation::guard(ExternalCall::Embedding);
         ensure!(!input.is_empty(), "input embedding tidak boleh kosong");
         let key = self
             .api_key
