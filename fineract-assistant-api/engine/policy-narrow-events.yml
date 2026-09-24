@@ -1,0 +1,24 @@
+info:
+  name: "OVR-6.6 penyempitan sah — events"
+  type: http
+  seq: 40.1
+  description: |
+    Stream tertutup pada event terminal, jadi request ini juga menunggu job selesai.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_narrow_job}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const names = (String(res.getBody()).match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        test("OVR-6.6 (kontrol): penyempitan ke office berizin tetap dijalankan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names).to.include("node.status_changed");
+          expect(names[names.length - 1]).to.equal("job.completed");
+        });

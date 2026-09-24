@@ -1,0 +1,24 @@
+info:
+  name: "OVR-6.6 perintah tulis — response"
+  type: http
+  seq: 37.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_write_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        test("OVR-6.6 (write): penolakan dinyatakan sebagai limitation, tanpa lineage sumber", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("limitation");
+          expect(document.outcome).to.equal("BlockedByPolicy");
+          expect(document.blocks_json).to.have.lengthOf(1);
+          expect(document.blocks_json[0].block_id).to.equal("write_not_supported");
+          expect(document.blocks_json[0].type).to.equal("limitation");
+          expect(document.evidence_json.lineage === undefined || document.evidence_json.lineage.length === 0).to.equal(true);
+        });

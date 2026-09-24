@@ -1,0 +1,22 @@
+info:
+  name: session untuk penolakan kebijakan
+  type: http
+  seq: 35.5
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-58 OVR-6.6" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("policySession", res.getBody().data.id);

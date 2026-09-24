@@ -1,0 +1,23 @@
+info:
+  name: "OVR-6.6 perintah tulis — job state"
+  type: http
+  seq: 37.2
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_write_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6 (write): Completed + BlockedByPolicy + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("BlockedByPolicy");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("write_not_supported");
+          expect(job.plan_version).to.equal(null);
+        });

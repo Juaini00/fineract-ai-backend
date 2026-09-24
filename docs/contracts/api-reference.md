@@ -269,7 +269,10 @@ Header wajib: `Idempotency-Key`.
 ```
 
 `office_ids` opsional. Ia hanya **mempersempit** scope; ia tidak pernah
-memperluas izin. Kosong berarti seluruh office yang diizinkan.
+memperluas izin. Kosong berarti seluruh office yang diizinkan. Satu saja office
+di luar otorisasi membuat job ditolak utuh oleh Engine (`202` tetap diberikan,
+job selesai `BlockedByPolicy` dengan blok `office_scope_not_authorized`), bukan
+dipangkas diam-diam lalu dijawab atas sisanya.
 
 ```json
 {
@@ -518,6 +521,8 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `no_capability_matched` | Tidak ada capability yang disetujui mencakup permintaan | `request_echo` |
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
+| `write_not_supported` | Perintah mengubah data Fineract (hapus/ubah/tambah, SQL tulis/DDL). Jarvis read-only: ditolak sebelum retrieval dan query sumber. Job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null` (OVR-6.6) | `request_echo` |
+| `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
 | `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
 
 #### `evidence_json` — lineage

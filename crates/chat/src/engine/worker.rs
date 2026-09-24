@@ -29,6 +29,7 @@ use crate::{
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
         resolver,
         validate::{self, Validated},
+        write_intent,
     },
 };
 
@@ -184,6 +185,19 @@ async fn run_job(
 ) -> anyhow::Result<bool> {
     let pool = foundation.app_db().pool();
 
+    // OVR-6.6 — Jarvis read-only terhadap Fineract. Perintah mengubah data
+    // ditolak sebelum scope, retrieval, plan, dan query sumber apa pun; ia
+    // tidak boleh jatuh ke capability baca terdekat lalu dijawab (FIN-139).
+    if write_intent::is_write_request(&job.request_text) {
+        return settle_blocked(
+            foundation,
+            job,
+            WRITE_NOT_SUPPORTED,
+            "Jarvis is read-only: it never creates, changes or deletes data in Fineract, so this request was not run.",
+        )
+        .await;
+    }
+
     // Scope dari otorisasi, dipersempit oleh permintaan — tidak pernah
     // diperlebar olehnya (I7).
     let requested_offices = requested_office_ids(&job.scope_json);
@@ -199,6 +213,21 @@ async fn run_job(
             return settle_operational_failure(foundation, job, error.failure_code()).await;
         }
     };
+
+    // OVR-6.6 / I7 — office yang diminta tetapi tidak diizinkan adalah upaya
+    // MEMPERLEBAR scope. Ia ditolak eksplisit sebelum plan dan sebelum query
+    // sumber mana pun, bukan dibuang diam-diam lalu dijawab atas sisanya.
+    let widened = unauthorized_offices(&requested_offices, &authorized);
+    if !widened.is_empty() {
+        warn!(job_id = %job.id, offices = ?widened, "office di luar otorisasi diminta; ditolak");
+        return settle_blocked(
+            foundation,
+            job,
+            OFFICE_SCOPE_NOT_AUTHORIZED,
+            "The requested office scope includes offices you are not authorized to read, so Jarvis did not run any query.",
+        )
+        .await;
+    }
 
     // Jawaban klarifikasi yang sudah diterima dibaca lebih dulu: slot yang
     // sudah dijawab tidak pernah ditanyakan ulang (clarifications.md).
@@ -819,6 +848,41 @@ fn requested_office_ids(scope_json: &serde_json::Value) -> Vec<i64> {
         .unwrap_or_default()
 }
 
+/// Alasan penolakan scope yang melebar (OVR-6.6).
+const OFFICE_SCOPE_NOT_AUTHORIZED: &str = "office_scope_not_authorized";
+/// Alasan penolakan perintah tulis (OVR-6.6, FIN-139).
+const WRITE_NOT_SUPPORTED: &str = "write_not_supported";
+
+/// Tutup job dengan penolakan kebijakan: tanpa plan, tanpa node, tanpa query
+/// sumber, tanpa fakta memori.
+async fn settle_blocked(
+    foundation: &Foundation,
+    job: &ClaimedJob,
+    reason: &str,
+    explanation: &str,
+) -> anyhow::Result<bool> {
+    repository::settle_with_response(
+        foundation.app_db().pool(),
+        job.id,
+        job.session_id,
+        job.owner_user_id,
+        job.lease_token,
+        Validated::unchecked(blocked_response(reason, explanation, &job.request_text)),
+        &[],
+    )
+    .await
+    .map_err(Into::into)
+}
+
+/// Office yang diminta tetapi tidak ada di otorisasi pemanggil.
+fn unauthorized_offices(requested: &[i64], authorized: &[i64]) -> Vec<i64> {
+    requested
+        .iter()
+        .copied()
+        .filter(|office| !authorized.contains(office))
+        .collect()
+}
+
 fn node_provenance(plan: &Plan, row_count: usize) -> serde_json::Value {
     serde_json::json!({
         "capability_id": plan.capability_id,
@@ -857,6 +921,15 @@ fn limitation_response(reason: &str, explanation: &str, request_text: &str) -> S
         response_hash: hash_blocks(&blocks),
         evidence: serde_json::json!({}),
         blocks,
+    }
+}
+
+/// Penolakan kebijakan: bentuknya sama dengan limitation, outcome-nya
+/// `BlockedByPolicy` (engine.md: `Completed` + `BlockedByPolicy` ⇒ `Unknown`).
+fn blocked_response(reason: &str, explanation: &str, request_text: &str) -> SettledResponse {
+    SettledResponse {
+        outcome: "BlockedByPolicy",
+        ..limitation_response(reason, explanation, request_text)
     }
 }
 
@@ -907,6 +980,27 @@ mod tests {
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0]["type"], "limitation");
         assert!(!blocks[0]["body"].as_str().unwrap().is_empty());
+    }
+
+    /// OVR-6.6 — satu office di luar otorisasi cukup untuk menolak; subset
+    /// yang sah dan permintaan kosong (= seluruh otorisasi) tidak ditolak.
+    #[test]
+    fn any_office_outside_authorization_is_widening() {
+        assert_eq!(
+            unauthorized_offices(&[1, 999_999], &[1, 2, 3]),
+            vec![999_999]
+        );
+        assert!(unauthorized_offices(&[2, 3], &[1, 2, 3]).is_empty());
+        assert!(unauthorized_offices(&[], &[1, 2, 3]).is_empty());
+    }
+
+    #[test]
+    fn blocked_response_matches_engine_matrix() {
+        let response = blocked_response(OFFICE_SCOPE_NOT_AUTHORIZED, "ditolak", "apa pun");
+        assert_eq!(response.kind, "limitation");
+        assert_eq!(response.outcome, "BlockedByPolicy");
+        assert_eq!(response.completeness, "Unknown");
+        assert_eq!(response.completeness_reason, OFFICE_SCOPE_NOT_AUTHORIZED);
     }
 
     /// FIN-133 — handle hasil yang terkena row cap tidak boleh tampil

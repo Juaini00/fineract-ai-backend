@@ -13,6 +13,7 @@ pub mod repository;
 pub mod resolver;
 pub mod validate;
 pub mod worker;
+pub mod write_intent;
 
 use std::{sync::Arc, time::Duration};
 

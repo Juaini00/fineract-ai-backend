@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 riwayat session tidak memberi izin — job"
+  type: http
+  seq: 39
+  description: |
+    I7 — otorisasi tidak pernah diturunkan dari riwayat session/memori. Session yang sama, sesudah
+    penolakan sebelumnya, meminta office tak berizin lagi: tetap ditolak.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_repeat_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the savings portfolio summary for the same offices as before.", "office_ids": [999999] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_repeat_key", "fin58-repeat-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_repeat_job", res.getBody().data.job_id);

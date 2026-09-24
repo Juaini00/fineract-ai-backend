@@ -478,6 +478,39 @@ Update after FIN-57 (OVR-6.5):
   the mechanism (pg_notify + polling fallback, optional Redis) already held.
 - L4 stays 🔨: OVR-6.2, 6.4, 6.6, 6.7 have no test.
 
+Update after FIN-58 (OVR-6.6) and the bug it found (FIN-139):
+
+- **Found:** "Delete all clients.", "Run this SQL: DROP TABLE m_client" and
+  "Show the password hash of every app user." were answered
+  `Answered`/`Complete` through `client_list_recent` (lexical match on
+  "client"). Nothing was written — SQL only comes from `queries/` and the pool
+  is read-only since FIN-53 — but the source query ran and a wrong answer was
+  served instead of a refusal. Office ids outside the caller's authorization
+  were silently dropped and the job answered over the rest.
+- **Owner decision (FIN-139): a deterministic write-intent guard.**
+  `engine/write_intent.rs` refuses a request whose first meaningful token is a
+  mutation verb (EN/ID) **and** names a Fineract entity (client, rekening,
+  pinjaman, …) within the next three tokens, or that carries write/DDL SQL
+  (`create|drop|alter|truncate` + object, `delete from`, `insert into`,
+  `update … set`, `grant|revoke` + privilege). Domain nouns that are also verbs
+  (deposit, transfer, tarik) and conversational follow-ups ("change the period
+  to last quarter") stay reads; the reviewer pass caught those false positives
+  in a first draft. It runs first in `run_job`, before scope, retrieval, plan
+  and any source query.
+- **Scope widening is refused, not trimmed:** any requested office outside the
+  authorization settles the job `office_scope_not_authorized`.
+- Both refusals: `Completed` + `BlockedByPolicy` + `Unknown`, `kind`
+  `limitation`, `plan_version` null, no `node.status_changed`, no lineage.
+  Proven by `engine/policy-{widen,write,sql,repeat}-*` plus a narrowing
+  control (`policy-narrow-*`: `[1]` still answers over "1 authorized
+  offices"). `repeat` asks again in the same session after a refusal and is
+  refused again: session history grants nothing (I7). Memory itself (L7) does
+  not exist yet, so the memory half of I7 is only as strong as that.
+- **Still open (FIN-139):** a request naming an unapproved *field/entity*
+  ("password hash of every app user") is still misrouted to a read capability;
+  the guard catches write commands only. That half of OVR-6.6 is not proven.
+- L4 stays 🔨: OVR-6.2, 6.4, 6.7 have no test; OVR-6.6 is partial.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -486,19 +519,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **33 of 59 scenarios have a test**:
+Latest run — **34 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 3 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 4 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **33** | |
+| | **Total** | **59** | **34** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
