@@ -79,7 +79,7 @@ pub async fn open_form(
     let field_count = fields.as_array().map_or(0, Vec::len);
     let fully_resolved = field_count > 0 && auto_bound.len() == field_count;
 
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = if fully_resolved {
         // Langsung kembali mengantre: worker berikutnya merencanakan ulang
@@ -256,7 +256,7 @@ pub async fn skip(
     actor_user_id: Uuid,
     response: SkippedResponse,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     const RESPONSE_VERSION: i32 = 1;
 
@@ -535,7 +535,7 @@ pub async fn issue_options(
     page_cursor: &str,
     options: &[(String, Value, String, Value)],
 ) -> sqlx::Result<()> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     for (option_id, binding, label, attributes) in options {
         sqlx::query(
@@ -599,7 +599,7 @@ pub async fn accept_answers(
     answers: &[AcceptedAnswer],
     job_ttl_running_secs: i64,
 ) -> sqlx::Result<bool> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     // `WHERE state = 'open'` adalah penegaknya: dua pengiriman yang berlomba
     // hanya menghasilkan satu penerimaan, dan yang kalah menyentuh 0 baris.

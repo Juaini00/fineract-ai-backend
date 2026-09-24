@@ -1,0 +1,3 @@
+disallowed-methods = [
+    { path = "sqlx::Pool::begin", reason = "buka transaksi commit lewat foundation::commit_isolation::begin — instrumentation I1/OVR-6.7" },
+]

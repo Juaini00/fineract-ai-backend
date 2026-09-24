@@ -511,6 +511,43 @@ Update after FIN-58 (OVR-6.6) and the bug it found (FIN-139):
   the guard catches write commands only. That half of OVR-6.6 is not proven.
 - L4 stays 🔨: OVR-6.2, 6.4, 6.7 have no test; OVR-6.6 is partial.
 
+Update after FIN-59 (OVR-6.7):
+
+- **I1 is instrumented, not just stated.** `crates/core/src/commit_isolation.rs`:
+  every app commit transaction opens through `commit_isolation::begin`, which
+  marks the calling Tokio task (thread outside a task) as "inside a commit
+  transaction" until the returned window drops. `clippy.toml`
+  (`disallowed-methods = sqlx::Pool::begin`) makes that the only way to open
+  one, so a new T-block cannot silently skip the instrumentation. The external
+  choke points — `FineractDb::pool()`/`ping()` (every source query, office
+  scope, resolver, probe), `EmbeddingClient::embed` (the only HTTP client) and
+  `Notifier::publish` (Redis) — call `commit_isolation::guard`. A call inside
+  the caller's own window is counted, logged `error!` with the marker
+  `commit_isolation_violation`, and panics in debug builds. No LLM client
+  exists yet; one must call `guard` too. The marking is per task: a
+  transaction open in another task does not taint this one.
+- **Proof:** unit test
+  `ovr_6_7_external_call_is_refused_only_inside_the_callers_commit_window`
+  (outside → allowed, uncounted; other task's window → allowed; own window →
+  refused + counted; after commit → allowed; debug `guard` panics with the
+  marker). `scripts/integration-test.sh` now fails the whole run when the app
+  log of any stage contains the marker, so every full run asserts zero
+  violations across all exercised T-blocks (T1–T9, T11). Bruno
+  `engine/isolation-*` (`OVR-6.7: …`) runs one answered job through
+  T1→T2→T3→T4→T7 and asserts one event per transition, contiguous sequence
+  `1..N`, and `chat_jobs.last_event_sequence = N`.
+- **Exposure choice:** no route exposes the counter — `/health`'s shape is
+  fixed in `contracts/api-reference.md` and no doc backs a new surface, so the
+  log gate is the integration assertion.
+- **Audit/event atomicity** was checked, not changed: every transition writes
+  `append_event*` and `audit::insert` through the same `&mut tx`
+  (T1 `job::repository::create_job`, T2 `claim_next`, T3 `persist_plan`,
+  T4 `complete_node`, T5 `clarification::repository::open_form`, T6
+  `accept_answers`, T7 `settle_with_response`/`settle_failed`, T8 `skip`,
+  T9 `request_cancel`/`settle_cancelled`, T11 `finish_sweep_row`); both helpers
+  only accept a `Transaction`. T10 and T12 have no implementation yet.
+- L4 stays 🔨: OVR-6.2, 6.4 have no test; OVR-6.6 is partial.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -519,19 +556,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **34 of 59 scenarios have a test**:
+Latest run — **35 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 4 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 5 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **34** | |
+| | **Total** | **59** | **35** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

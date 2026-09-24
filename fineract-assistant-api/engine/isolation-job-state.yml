@@ -1,0 +1,24 @@
+info:
+  name: "OVR-6.7 isolasi commit — state job"
+  type: http
+  seq: 41.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{isolationJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("OVR-6.7: state terminal tercatat atomik dengan event-nya", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          // Penghitung event di `chat_jobs` dinaikkan di transaksi yang sama
+          // dengan INSERT `job_events`: keduanya wajib sama persis.
+          expect(job.last_event_sequence).to.equal(Number(bru.getVar("isolationEventCount")));
+        });

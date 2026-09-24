@@ -1,0 +1,44 @@
+info:
+  name: "OVR-6.7 isolasi commit — events"
+  type: http
+  seq: 41.2
+  description: |
+    Stream tertutup pada event terminal, jadi request ini juga menunggu job selesai.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{isolationJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const ids = (body.match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+        const names = (body.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+
+        test("OVR-6.7: job selesai tanpa pelanggaran isolasi (worker tidak panic di dalam transaksi)", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names[names.length - 1]).to.equal("job.completed");
+        });
+
+        test("OVR-6.7: setiap transisi T1/T2/T3/T4/T7 membawa tepat satu event dari transaksinya sendiri", function () {
+          expect(names).to.deep.equal([
+            "job.accepted",        // T1
+            "job.phase_changed",   // T2 klaim → Running
+            "job.phase_changed",   // T3 plan terverifikasi
+            "node.status_changed", // T4 node selesai
+            "job.completed",       // T7 response commit
+          ]);
+        });
+
+        test("OVR-6.7: sequence event rapat 1..N — dialokasikan di transaksi transisi, tanpa lubang", function () {
+          const expected = ids.map(function (_, index) { return index + 1; });
+          expect(ids).to.deep.equal(expected);
+        });
+        bru.setVar("isolationEventCount", ids.length);

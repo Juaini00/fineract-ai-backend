@@ -87,7 +87,7 @@ pub struct StoredChunk {
 /// Buat handle beserta chunk-nya. `None` berarti **fencing kalah** dan tidak
 /// ada apa pun yang ditulis.
 pub async fn create(pool: &PgPool, dataset: NewDataset<'_>) -> sqlx::Result<Option<Uuid>> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     // `SELECT … WHERE EXISTS` alih-alih `VALUES`: pemegang lease basi tidak
     // boleh meninggalkan handle yang tidak pernah dirujuk node mana pun.
@@ -293,7 +293,7 @@ async fn purge(pool: &PgPool, ids: &[Uuid]) -> sqlx::Result<u64> {
         return Ok(0);
     }
 
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     sqlx::query("DELETE FROM dataset_chunks WHERE dataset_id = ANY($1)")
         .bind(ids)

@@ -4,6 +4,7 @@
 //! Lihat docs/data/database-design.md untuk invarian yang berlaku lintas crate.
 
 pub mod auth;
+pub mod commit_isolation;
 pub mod config;
 pub mod db;
 pub mod embedding;

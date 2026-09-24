@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
+use crate::commit_isolation::{self, ExternalCall};
 use crate::config::Config;
 
 /// Pool ke PostgreSQL aplikasi: writable, sumber kebenaran durable.
@@ -50,7 +51,10 @@ impl AppDb {
 }
 
 impl FineractDb {
+    /// Satu-satunya jalan menuju pool Fineract, karena itu juga titik cek I1:
+    /// query sumber tidak pernah boleh berjalan saat transaksi commit terbuka.
     pub fn pool(&self) -> &PgPool {
+        commit_isolation::guard(ExternalCall::Fineract);
         &self.0
     }
 
@@ -76,7 +80,7 @@ impl FineractDb {
     }
 
     pub async fn ping(&self) -> anyhow::Result<()> {
-        sqlx::query("SELECT 1").execute(&self.0).await?;
+        sqlx::query("SELECT 1").execute(self.pool()).await?;
         Ok(())
     }
 }

@@ -31,6 +31,11 @@
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
+# Setelah tahap terakhir, log app seluruh tahap diperiksa untuk penanda
+# `commit_isolation_violation` (OVR-6.7, I1 — crates/core/src/commit_isolation.rs):
+# query Fineract, embedding, atau Redis saat transaksi commit terbuka. Satu
+# kemunculan menggagalkan run, meskipun seluruh assertion Bruno hijau.
+#
 # Pakai:
 #   scripts/integration-test.sh                 # seluruh tahap
 #   scripts/integration-test.sh auth            # satu folder (tahap intake)
@@ -264,3 +269,11 @@ if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
         echo "==> retrieval-healthy dilewati: EMBEDDING_API_KEY kosong; bukti out_of_scope tetap pending"
     fi
 fi
+
+# OVR-6.7 — nol pelanggaran isolasi commit di seluruh tahap yang dijalankan.
+if grep -q "commit_isolation_violation" "$LOG"; then
+    echo "OVR-6.7: panggilan eksternal saat transaksi commit terbuka (I1), lihat $LOG:" >&2
+    grep "commit_isolation_violation" "$LOG" >&2
+    exit 1
+fi
+echo "==> OVR-6.7: nol pelanggaran isolasi commit (I1) di $LOG"

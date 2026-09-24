@@ -1,0 +1,36 @@
+info:
+  name: "OVR-6.7 isolasi commit — job"
+  type: http
+  seq: 41.1
+  description: |
+    Satu job melewati T1 (accept) → T2 (klaim) → T3 (plan) → T4 (node + dataset)
+    → T7 (response commit), dengan query Fineract di antaranya. Setiap
+    transaksi dibuka lewat foundation::commit_isolation::begin; query Fineract,
+    embedding, dan Redis yang terjadi saat transaksi terbuka membuat app panic
+    (build debug) dan menulis `commit_isolation_violation` ke log —
+    scripts/integration-test.sh gagal bila penanda itu muncul di tahap mana pun.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{isolationIdemKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{isolationSessionId}}", "request_text": "Show the savings portfolio summary." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("isolationIdemKey", "fin59-isolation-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("OVR-6.7: 202 hanya setelah T1 commit — job.accepted sudah durable", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("isolationJobId", res.getBody().data.job_id);

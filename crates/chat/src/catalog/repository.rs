@@ -55,7 +55,7 @@ pub async fn upsert_version(
     status: &str,
     metadata: serde_json::Value,
 ) -> sqlx::Result<Uuid> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let existing = sqlx::query_scalar::<_, Uuid>(
         "SELECT id FROM knowledge_catalog_versions WHERE content_hash = $1",
@@ -185,7 +185,7 @@ pub async fn persist_embeddings(
     dimensions: usize,
     document_input_type: &str,
 ) -> sqlx::Result<()> {
-    let mut tx = pool.begin().await?;
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
     for (id, embedding) in rows {
         sqlx::query("UPDATE knowledge_index SET embedding = $2, embedding_model = $3, embedded_at = now() WHERE id = $1 AND embedding IS NULL")
             .bind(id)
