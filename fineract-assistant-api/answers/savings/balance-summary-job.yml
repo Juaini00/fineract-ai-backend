@@ -23,5 +23,15 @@ runtime:
         bru.setVar("answersKey", "fin52-savings_balance_summary-" + Date.now() + Math.random().toString(36).slice(2, 10));
     - type: tests
       code: |
-        expect(res.getStatus()).to.equal(202);
-        bru.setVar("answersJob", res.getBody().data.job_id);
+        const ack = res.getBody().data;
+        test("OVR-6.1: 202 hanya sesudah T1 — acknowledgement menunjuk job Queued dengan event durable", function () {
+          // T1 menulis job, event `job.accepted` (sequence 1), pesan, dan audit
+          // dalam SATU transaksi; 202 dikirim sesudah commit. Cursor 1 di sini
+          // hanya bisa ada bila event itu sudah tersimpan (diputar ulang di
+          // balance-summary-accepted.yml).
+          expect(res.getStatus()).to.equal(202);
+          expect(ack.lifecycle).to.equal("Queued");
+          expect(ack.event_cursor).to.equal(1);
+          expect(ack.session_id).to.equal(bru.getVar("answersSession"));
+        });
+        bru.setVar("answersJob", ack.job_id);

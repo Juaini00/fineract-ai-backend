@@ -1,0 +1,43 @@
+info:
+  name: savings_balance_summary events
+  type: http
+  seq: 1.25
+  description: |
+    OVR-6.1 — satu Engine dari T1 sampai T7. Replay penuh event job: event 1
+    adalah `job.accepted` (Queued) yang ditulis T1 sebelum 202, dan stream
+    berakhir pada `job.completed` yang merujuk response versi tervalidasi (T7).
+    Stream baru tertutup pada event terminal, jadi request ini juga menunggu
+    worker menyelesaikan job.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = String(res.getBody())
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => JSON.parse(line.slice(6)));
+
+        test("OVR-6.1: event 1 adalah penerimaan T1 — job durable Queued", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events[0].sequence).to.equal(1);
+          expect(events[0].event).to.equal("job.accepted");
+          expect(events[0].lifecycle).to.equal("Queued");
+        });
+
+        test("OVR-6.1: satu Engine — satu plan, tanpa klarifikasi, berakhir tepat sekali di job.completed", function () {
+          events.forEach((event, index) => expect(event.sequence).to.equal(index + 1));
+          const names = events.map((event) => event.event);
+          expect(names.filter((name) => name.startsWith("clarification."))).to.have.lengthOf(0);
+          expect(names.filter((name) => name === "job.accepted")).to.have.lengthOf(1);
+          const completed = events[events.length - 1];
+          expect(completed.event).to.equal("job.completed");
+          expect(new Set(events.map((e) => e.plan_version).filter((v) => v !== null)).size).to.equal(1);
+          expect(completed.response_version).to.equal(1);
+          bru.setVar("answersCompletedVersion", completed.response_version);
+        });

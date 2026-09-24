@@ -14,5 +14,13 @@ runtime:
       code: |
         const answers = require("./lib/answers.js");
         if (await answers.awaitResponse(bru, req, res)) {
-          answers.check(test, expect, "savings_balance_summary", res.getBody().data);
+          const document = res.getBody().data;
+          test("OVR-6.1: response tervalidasi selesai lewat T7 — versi 1, passed, Complete", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.response_version).to.equal(1);
+            expect(document.completeness).to.equal("Complete");
+            expect(Number(bru.getVar("answersCompletedVersion"))).to.equal(document.response_version);
+          });
+          // OVR-6.1: angka jawaban dihitung ulang dengan SQL langsung.
+          answers.check(test, expect, "savings_balance_summary", document);
         }

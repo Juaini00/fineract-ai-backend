@@ -428,6 +428,25 @@ Update after FIN-52 (L4 answer gate) and the bugs it found (FIN-132, FIN-133, FI
 - **L4 stays 🔨.** The "every capability in use matches direct SQL" half of the
   §3 gate holds. The seven OVR scenarios still have no test (FIN-53…FIN-59).
 
+Update after FIN-53 (OVR-6.1):
+
+- **The Fineract pool is read-only at the server, not by convention.** Every
+  session opens with `default_transaction_read_only=on`
+  (`core::db::FineractDb::connect`); a write fails with `cannot execute UPDATE
+  in a read-only transaction` even under the writable local `root` credential.
+  Before, "read-only" rested only on a separate credential that local setups
+  do not have. The query runs outside any application transaction
+  (`worker.rs` → `executor::execute`, I1).
+- **OVR-6.1 is proven at the HTTP surface** in the `answers` chain for
+  `savings_balance_summary` (worker on): the 202 acknowledgement is `Queued`
+  with `event_cursor` 1; the full replay starts with the durable T1 event
+  `job.accepted` (Queued), carries one plan and no clarification, and ends
+  exactly once in `job.completed` → response version 1, `validation_status`
+  `passed`, `Complete` (T7); the answer is recomputed by direct SQL
+  (`tests/answers/savings_balance_summary.sql`). It lives in `answers/`, not
+  `engine/`, because only that stage has the direct-SQL oracle.
+- L4 stays 🔨: OVR-6.2..6.7 (FIN-54…FIN-59) have no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -436,19 +455,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **30 of 59 scenarios have a test**:
+Latest run — **31 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 0 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 1 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **30** | |
+| | **Total** | **59** | **31** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
