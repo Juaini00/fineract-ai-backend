@@ -20,7 +20,10 @@
 #      LOCAL_DATASET_MAX_ROWS=1 (FIN-46): data lokal jauh di bawah cap
 #      produksi, jadi cabang `truncated=true` DS-8.1 hanya terjangkau lewat
 #      cap yang disempitkan. Tahap lain berjalan TANPA seam ini.
-#   5. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
+#   5. `answers` (FIN-52, gerbang L4) menjalankan setiap capability jawaban
+#      lewat jalur job dan mengadu jawabannya dengan SQL langsung yang dihitung
+#      ulang oleh scripts/answer-expectations.sh tepat sebelum tahap ini.
+#   6. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
@@ -29,6 +32,7 @@
 #   scripts/integration-test.sh auth            # satu folder (tahap intake)
 #   scripts/integration-test.sh engine          # tahap engine saja
 #   scripts/integration-test.sh dataset-capped  # tahap cap dataset saja
+#   scripts/integration-test.sh answers         # gerbang jawaban L4 saja
 #   PORT=3210 scripts/integration-test.sh       # port tertentu
 #   KEEP_RUNNING=1 scripts/integration-test.sh  # biarkan app terakhir hidup
 #
@@ -64,9 +68,12 @@ if [ "$#" -gt 0 ]; then
     ENGINE_FOLDERS=()
     RETRIEVAL_UNAVAILABLE_FOLDERS=()
     DATASET_CAPPED_FOLDERS=()
+    ANSWERS_FOLDERS=()
     RETRIEVAL_HEALTHY_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "dataset-capped" ]; then
+        if [ "$folder" = "answers" ]; then
+            ANSWERS_FOLDERS+=("$folder")
+        elif [ "$folder" = "dataset-capped" ]; then
             DATASET_CAPPED_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-unavailable" ]; then
             RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
@@ -82,6 +89,7 @@ else
     INTAKE_FOLDERS=(health auth chat)
     ENGINE_FOLDERS=(engine clarification resolver sse)
     DATASET_CAPPED_FOLDERS=(dataset-capped)
+    ANSWERS_FOLDERS=(answers)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
@@ -167,6 +175,7 @@ run_folders() {  # $1 = jeda ms, sisanya = folder
             --env-var "baseUrl=$BASE_URL" \
             --disable-cookies \
             --delay "$delay" \
+            ${BRU_SANDBOX:+--sandbox "$BRU_SANDBOX"} \
             --bail
     )
 }
@@ -204,6 +213,21 @@ if [ "${#DATASET_CAPPED_FOLDERS[@]}" -gt 0 ]; then
     start_app true LOCAL_DATASET_MAX_ROWS=1
     echo "==> bru run dataset-capped (cap retensi dataset disempitkan ke 1 baris)"
     run_folders 1500 "${DATASET_CAPPED_FOLDERS[@]}"
+fi
+
+if [ "${#ANSWERS_FOLDERS[@]}" -gt 0 ]; then
+    # Pembanding dihitung SEBELUM job dijalankan dan dengan tanggal yang sama
+    # (UTC) dengan `business_today` planner; Bruno memeriksa bahwa parameter
+    # yang benar-benar diikat job sama dengan yang diasumsikan SQL.
+    "$ROOT/scripts/answer-expectations.sh"
+    stop_app
+    start_app true
+    echo "==> bru run answers (jawaban job diadu dengan SQL langsung)"
+    # Sandbox `developer` (node vm), bukan QuickJS bawaan: modul pembanding
+    # yang di-`require` membuat runtime QuickJS bru 4.0.0 abort saat dibuang
+    # (`list_empty(&rt->gc_obj_list)`) SESUDAH test-nya lulus — kode keluar
+    # merah tanpa satu pun assertion gagal.
+    BRU_SANDBOX=developer run_folders 500 "${ANSWERS_FOLDERS[@]}"
 fi
 
 if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then

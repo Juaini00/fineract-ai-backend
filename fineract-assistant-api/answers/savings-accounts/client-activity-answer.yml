@@ -1,0 +1,30 @@
+info:
+  name: savings_client_activity answer
+  type: http
+  seq: 9.6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clientActivityJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_client_activity", document);
+          // FIN-133: limit.default unbounded + hard_cap=100 terdeklarasi ->
+          // baris dipotong ke 100; completeness Partial + limitation
+          // row_cap_reached hanya bila populasi transaksi klien 65 > 100.
+          answers.expectRowCap(
+            test,
+            expect,
+            "savings_client_activity",
+            document,
+            100,
+            answers.populationSize("savings_client_activity")
+          );
+        }

@@ -1,0 +1,31 @@
+info:
+  name: savings_deposit_maturity_by_client jawab klarifikasi
+  type: http
+  seq: 10.5
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{depositMaturityJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{depositMaturityKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{depositMaturityClarificationId}}",
+        "revision": {{depositMaturityRevision}},
+        "answers": { "client_id": "{{depositMaturityOptionId}}" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("jawaban klarifikasi durable, job yang sama kembali mengantre", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("depositMaturityJob"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

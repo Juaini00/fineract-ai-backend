@@ -1,0 +1,28 @@
+info:
+  name: client_random_sample answer
+  type: http
+  seq: 8.3
+  description: |
+    client_random_sample.sql adalah populasi PENUH nasabah aktif yang sah
+    (office_name tidak terikat dari teks bebas, jadi pool tidak menyempit).
+    FIN-133: limit.default unbounded + defaults.default_limit=5 terdeklarasi
+    -> nilai limit yang diikat job adalah 5 (bukan hard_cap 50 — ini bukan
+    disclosure, hanya ukuran jawaban yang diminta; completeness tidak
+    terpengaruh). checkSubset menguji setiap baris jawaban ada di populasi,
+    tanpa duplikat, dan jumlahnya persis `min(ukuran populasi, 5)` — dihitung
+    dari populasi SQL langsung saat run, bukan angka populasi hari ini yang
+    di-hard-code di sini. Urutannya sengaja acak sehingga tidak diadu posisi.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.checkSubset(test, expect, "client_random_sample", res.getBody().data, 5);
+        }

@@ -1,0 +1,27 @@
+info:
+  name: savings_charge_count_by_type job
+  type: http
+  seq: 4.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{chargeCountKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{chargeCountSession}}", "request_text": "Count savings charges of type Withdrawal fee." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("chargeCountKey", "fin52-savings_charge_count_by_type-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("chargeCountJob", res.getBody().data.job_id);

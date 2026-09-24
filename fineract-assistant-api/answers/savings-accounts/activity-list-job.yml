@@ -1,0 +1,27 @@
+info:
+  name: savings_activity_list job
+  type: http
+  seq: 6.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{activityListKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{activityListSession}}", "request_text": "Show all savings activity for authorized offices." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("activityListKey", "fin52-savings_activity_list-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("activityListJob", res.getBody().data.job_id);

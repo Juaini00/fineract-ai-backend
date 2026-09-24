@@ -1,0 +1,33 @@
+info:
+  name: savings_activity_list answer
+  type: http
+  seq: 6.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{activityListJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          // Blocker FIN-52: oracle memakai label enum yang benar (17=overdraft_interest,
+          // 18=withhold_tax), bukan CASE produksi yang salah — gate ini DIHARAPKAN
+          // MERAH sampai FIN-132 memperbaiki queries/savings/activity_list.sql.
+          answers.check(test, expect, "savings_activity_list", document);
+          // FIN-133: guards.max_limit=hard_cap=100 -> baris dipotong ke 100;
+          // completeness Partial + limitation row_cap_reached hanya bila populasi
+          // bulan berjalan > 100.
+          answers.expectRowCap(
+            test,
+            expect,
+            "savings_activity_list",
+            document,
+            100,
+            answers.populationSize("savings_activity_list")
+          );
+        }

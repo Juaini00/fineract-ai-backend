@@ -1,0 +1,32 @@
+info:
+  name: client_relationship_by_id job
+  type: http
+  seq: 14.2
+  description: |
+    "Continue with the selected client." adalah frasa yang mencocokkan
+    client_relationship_by_id (continuation: true, client_id via
+    authorized_data_probe) — bukan client_relationship_lookup, yang butuh
+    nama eksplisit di dalam teks.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{answersSession}}", "request_text": "Continue with the selected client." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("answersKey", "fin52-client_relationship_by_id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("answersJob", res.getBody().data.job_id);

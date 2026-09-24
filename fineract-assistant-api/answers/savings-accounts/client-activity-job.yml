@@ -1,0 +1,27 @@
+info:
+  name: savings_client_activity job
+  type: http
+  seq: 9.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{clientActivityKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{clientActivitySession}}", "request_text": "Show savings activity for a client." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("clientActivityKey", "fin52-savings_client_activity-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("clientActivityJob", res.getBody().data.job_id);

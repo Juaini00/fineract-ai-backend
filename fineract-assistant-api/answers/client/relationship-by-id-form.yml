@@ -1,0 +1,28 @@
+info:
+  name: client_relationship_by_id form
+  type: http
+  seq: 14.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const form = res.getBody().data;
+          test("client_relationship_by_id: form minta client_id via resolver client.identity", function () {
+            expect(form.state).to.equal("open");
+            expect(form.fields_json).to.have.lengthOf(1);
+            expect(form.fields_json[0].field_id).to.equal("client_id");
+            expect(form.fields_json[0].type).to.equal("single_choice");
+            expect(form.fields_json[0].resolver.dataset_id).to.equal("client.identity");
+            expect(form.fields_json[0].resolver.shape_id).to.equal("identity_candidates");
+          });
+          bru.setVar("answersClarificationId", form.clarification_id);
+          bru.setVar("answersClarificationRevision", form.revision);
+        }

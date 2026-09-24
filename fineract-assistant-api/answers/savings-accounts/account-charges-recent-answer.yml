@@ -1,0 +1,18 @@
+info:
+  name: savings_account_charges_recent answer
+  type: http
+  seq: 3.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{chargesRecentJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "savings_account_charges_recent", res.getBody().data);
+        }

@@ -1,0 +1,30 @@
+info:
+  name: savings_strictly_overdue_charges_clients answer
+  type: http
+  seq: 8.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{overdueChargesJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_strictly_overdue_charges_clients", document);
+          // FIN-133: hard_cap=10000 -> baris dipotong ke 10000; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi charge
+          // strictly overdue > 10000.
+          answers.expectRowCap(
+            test,
+            expect,
+            "savings_strictly_overdue_charges_clients",
+            document,
+            10000,
+            answers.populationSize("savings_strictly_overdue_charges_clients")
+          );
+        }

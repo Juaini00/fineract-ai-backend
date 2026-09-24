@@ -1,0 +1,18 @@
+info:
+  name: client_relationship_lookup answer
+  type: http
+  seq: 1.5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "client_relationship_lookup", res.getBody().data);
+        }

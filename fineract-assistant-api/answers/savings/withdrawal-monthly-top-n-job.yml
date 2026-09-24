@@ -1,0 +1,32 @@
+info:
+  name: savings_withdrawal_monthly_top_n job
+  type: http
+  seq: 9.2
+  description: |
+    FIN-52: request_text tidak menyebut N ("withdrawals", jamak) karena limit
+    yang diikat adalah default literal 10 (keputusan owner). "Top withdrawals
+    per month…" dirutekan retrieval ke client_activation_top_n_offices
+    (dicek langsung ke app), jadi dipakai "Largest withdrawals…".
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{answersKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{answersSession}}", "request_text": "Largest withdrawals per month in the last 12 months." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("answersKey", "fin52-savings_withdrawal_monthly_top_n-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("answersJob", res.getBody().data.job_id);

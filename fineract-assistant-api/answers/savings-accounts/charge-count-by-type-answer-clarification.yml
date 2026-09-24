@@ -1,0 +1,31 @@
+info:
+  name: savings_charge_count_by_type jawab klarifikasi
+  type: http
+  seq: 4.4
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{chargeCountJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{chargeCountKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{chargeCountClarificationId}}",
+        "revision": {{chargeCountRevision}},
+        "answers": { "charge_name": "Withdrawal fee" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("jawaban klarifikasi durable, job yang sama kembali mengantre", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("chargeCountJob"));
+          expect(res.getBody().data.lifecycle).to.equal("Queued");
+        });

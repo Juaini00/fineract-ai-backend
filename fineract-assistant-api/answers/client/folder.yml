@@ -1,0 +1,26 @@
+info:
+  name: client
+  seq: 2
+  description: |
+    FIN-52 (L4.0). Setiap capability approved_mvp di knowledge/capabilities/client/
+    dijalankan lewat jalur job sungguhan (POST /chat/jobs → worker → GET
+    .../response), lalu jawabannya diadu dengan SQL langsung yang ditulis
+    terpisah (tests/answers/client_*.sql).
+
+    Skipped: `client_identity_resolve` (knowledge/capabilities/client/identity_resolve.yaml,
+    baris 1-12). `kind: resolver`, `continuation: true`; komentar file (baris
+    5-11) menyatakan capability ini hanya menjadi target probe — compiler
+    menempelkan id-nya pada node ResolveEntity setiap kali sebuah parameter
+    mendeklarasikan `authorized_data_probe` terhadap shape `client.identity
+    identity_candidates`, dan ia "tidak pernah ditanyakan langsung". Ia
+    memang tereksekusi — sebagai SQL di balik halaman opsi resolver — tetapi
+    tidak pernah menjadi `evidence_json.lineage[0].capability_id` sebuah job
+    yang selesai, jadi bukan answer node: tidak ada
+    tests/answers/client_identity_resolve.sql dan tidak ada request "answer"
+    berdiri sendiri untuknya di sini. client-relationship-by-id-options.yml di
+    bawah (resolver_ref: "client.identity_resolve") HANYA membuktikan bahwa
+    klien 65 terpublikasi di halaman opsi kedua (cursor=25) — bukan bukti
+    bahwa baris, label, filter status, atau urutan resolver ini benar; itu
+    bukan side-effect proof kebenaran resolver, hanya bukti keberadaan satu
+    opsi. Kebenaran resolver itu sendiri diverifikasi terpisah lewat
+    PREPARE/EXECUTE langsung di knowledge/VERIFICATION.md.

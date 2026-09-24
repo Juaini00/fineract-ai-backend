@@ -1,0 +1,25 @@
+info:
+  name: clients_with_account_counts answer
+  type: http
+  seq: 9.3
+  description: |
+    queries/datasets/client/portfolio_counts.source.sql tidak punya ORDER BY
+    (nit FIN-52). sortBy: ["client_id"] menyortir kedua sisi sebelum
+    dibandingkan, supaya urutan hasil planner (plan luck) tidak membuat gate
+    ini flaky.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "clients_with_account_counts", res.getBody().data, {
+            sortBy: ["client_id"],
+          });
+        }

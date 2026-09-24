@@ -1,0 +1,18 @@
+info:
+  name: savings_charges_by_type answer
+  type: http
+  seq: 5.5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{chargesByTypeJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "savings_charges_by_type", res.getBody().data);
+        }

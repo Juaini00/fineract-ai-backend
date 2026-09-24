@@ -1,0 +1,27 @@
+info:
+  name: savings_account_terms_lookup job
+  type: http
+  seq: 2.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{acctTermsKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{acctTermsSession}}", "request_text": "What interest rate applies to savings account Branch 001000000001?" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("acctTermsKey", "fin52-savings_account_terms_lookup-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("acctTermsJob", res.getBody().data.job_id);

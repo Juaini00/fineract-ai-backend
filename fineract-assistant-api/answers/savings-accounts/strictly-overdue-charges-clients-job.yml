@@ -1,0 +1,27 @@
+info:
+  name: savings_strictly_overdue_charges_clients job
+  type: http
+  seq: 8.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{overdueChargesKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{overdueChargesSession}}", "request_text": "Which strictly overdue charges require collection?" }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("overdueChargesKey", "fin52-savings_strictly_overdue_charges_clients-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("overdueChargesJob", res.getBody().data.job_id);

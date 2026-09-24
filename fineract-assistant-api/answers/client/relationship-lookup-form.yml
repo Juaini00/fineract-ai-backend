@@ -1,0 +1,26 @@
+info:
+  name: client_relationship_lookup form
+  type: http
+  seq: 1.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const form = res.getBody().data;
+          test("client_relationship_lookup: form minta search bertipe text", function () {
+            expect(form.state).to.equal("open");
+            expect(form.fields_json).to.have.lengthOf(1);
+            expect(form.fields_json[0].field_id).to.equal("search");
+            expect(form.fields_json[0].type).to.equal("text");
+          });
+          bru.setVar("answersClarificationId", form.clarification_id);
+          bru.setVar("answersClarificationRevision", form.revision);
+        }

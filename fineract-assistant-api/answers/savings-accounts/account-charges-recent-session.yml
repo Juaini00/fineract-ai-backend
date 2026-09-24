@@ -1,0 +1,22 @@
+info:
+  name: savings_account_charges_recent session
+  type: http
+  seq: 3.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-52 savings_account_charges_recent" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("chargesRecentSession", res.getBody().data.id);

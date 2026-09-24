@@ -1,0 +1,30 @@
+info:
+  name: client_summary_by_office answer
+  type: http
+  seq: 11.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_summary_by_office", document);
+          // FIN-133: hard_cap=10000 -> baris dipotong ke 10000; completeness
+          // Partial + limitation row_cap_reached hanya bila populasi office
+          // berpenduduk nasabah > 10000.
+          answers.expectRowCap(
+            test,
+            expect,
+            "client_summary_by_office",
+            document,
+            10000,
+            answers.populationSize("client_summary_by_office")
+          );
+        }

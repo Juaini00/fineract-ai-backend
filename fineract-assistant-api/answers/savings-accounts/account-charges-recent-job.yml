@@ -1,0 +1,27 @@
+info:
+  name: savings_account_charges_recent job
+  type: http
+  seq: 3.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{chargesRecentKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{chargesRecentSession}}", "request_text": "Show the most recently created savings account charges." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("chargesRecentKey", "fin52-savings_account_charges_recent-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("chargesRecentJob", res.getBody().data.job_id);

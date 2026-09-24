@@ -1,0 +1,26 @@
+info:
+  name: client_relationship_by_id halaman opsi client_id
+  type: http
+  seq: 14.4
+  description: |
+    Klien 65 (Jasmin Dao) berada di peringkat ke-30 dari 43 kandidat terurut
+    id menaik (30 klien punya id <= 65 dari total 43 dalam scope kantor
+    terotorisasi), sehingga muncul di halaman kedua (cursor=25, row_cap 25) —
+    sama seperti savings_products_by_client.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{answersJob}}/clarification/options?field_id=client_id&cursor=25"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        const option = page.options.find(function (o) { return String(o.option_id) === "65"; });
+        test("klien 65 ada di halaman opsi kedua", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(option, "client_id=65 tidak ditemukan di cursor=25").to.not.equal(undefined);
+        });
+        bru.setVar("answersOptionId", option && option.option_id);
