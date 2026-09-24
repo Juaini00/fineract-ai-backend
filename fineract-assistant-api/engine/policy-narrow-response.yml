@@ -1,0 +1,22 @@
+info:
+  name: "OVR-6.6 penyempitan sah — response"
+  type: http
+  seq: 40.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        test("OVR-6.6 (kontrol): scope menyempit ke 1 office, dijawab — tidak pernah melebar", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("analysis");
+          expect(document.outcome).to.equal("Answered");
+          const scope = document.evidence_json.lineage[0].parameters.find(function (p) { return p.name === "office_ids"; });
+          expect(scope.value).to.equal("1 authorized offices");
+        });

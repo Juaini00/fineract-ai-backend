@@ -1,0 +1,23 @@
+info:
+  name: "OVR-6.6 office di luar otorisasi — job state"
+  type: http
+  seq: 36.2
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_widen_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6 (widen): Completed + BlockedByPolicy + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("BlockedByPolicy");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("office_scope_not_authorized");
+          expect(job.plan_version).to.equal(null);
+        });

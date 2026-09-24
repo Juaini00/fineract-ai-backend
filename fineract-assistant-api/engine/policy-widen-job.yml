@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 office di luar otorisasi — job"
+  type: http
+  seq: 36
+  description: |
+    Office 999999 tidak ada dalam otorisasi pemanggil. Meminta office di luar otorisasi adalah upaya
+    MEMPERLEBAR scope (I7); ditolak eksplisit, bukan dibuang diam-diam lalu dijawab atas sisanya.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_widen_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the savings portfolio summary.", "office_ids": [1, 999999] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_widen_key", "fin58-widen-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_widen_job", res.getBody().data.job_id);
