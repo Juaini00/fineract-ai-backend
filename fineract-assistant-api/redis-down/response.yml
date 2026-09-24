@@ -1,0 +1,24 @@
+info:
+  name: job selesai walau redis mati dan klien terputus
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{redisDownJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{redisDownToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("OVR-6.5: job tetap berjalan sampai response tervalidasi", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("analysis");
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+        }

@@ -1,0 +1,20 @@
+info:
+  name: redis benar-benar tidak terjangkau
+  type: http
+  seq: 2
+http:
+  method: get
+  url: "{{baseUrl}}/health"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const data = res.getBody().data;
+        test("OVR-6.5: outage nyata — redis unavailable, PostgreSQL tetap sehat", function () {
+          // `unavailable` = diaktifkan tetapi tidak dapat dihubungi; bukan
+          // `disabled`. Tanpa ini seluruh folder bisa lulus terhadap Redis
+          // yang sebenarnya hidup.
+          expect(res.getStatus()).to.equal(200);
+          expect(data.redis).to.equal("unavailable");
+          expect(data.app_database).to.equal("ok");
+        });

@@ -1,0 +1,32 @@
+info:
+  name: replay event dari PostgreSQL saat redis mati
+  type: http
+  seq: 7
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{redisDownJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{redisDownToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = String(res.getBody())
+          .split("\n")
+          .filter(function (line) { return line.startsWith("data: "); })
+          .map(function (line) { return JSON.parse(line.slice(6)); });
+        const names = events.map(function (event) { return event.event; });
+
+        test("OVR-6.5: replay durable = snapshot — 1..last_event_sequence tanpa lubang", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("redisDownLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.5: state yang direkonstruksi dari replay sama dengan snapshot", function () {
+          expect(names[0]).to.equal("job.accepted");
+          expect(names[names.length - 1]).to.equal("job.completed");
+          expect(names).to.not.include("job.cancelled");
+          expect(events[events.length - 1].response_version).to.equal(Number(bru.getVar("redisDownResponseVersion")));
+        });

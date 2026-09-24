@@ -463,6 +463,21 @@ Update after FIN-55 (OVR-6.3):
   (FIN-75, L7), as for SSE-5.
 - L4 stays 🔨: OVR-6.2, 6.4..6.7 have no test.
 
+Update after FIN-57 (OVR-6.5):
+
+- **OVR-6.5 is proven at the HTTP surface** by a new `redis-down` stage in
+  `scripts/integration-test.sh`: the worker runs with `REDIS_URL` pointing at a
+  port that never listens, so Redis is enabled but unreachable (`/health`
+  `redis: "unavailable"` is asserted — a real outage, not
+  `REDIS_ENABLED=false`). The client opens `GET /events`, reads the first frame
+  and disconnects while the job is still nonterminal (asserted, so the proof
+  cannot pass vacuously). The job still completes (`Completed`/`Answered`,
+  response `passed`/`Complete`), is never `Cancelling`/`Cancelled`, and a
+  replay from PostgreSQL returns exactly `1..last_event_sequence` ending in
+  `job.completed` with the snapshot's `final_response_version`. No code change:
+  the mechanism (pg_notify + polling fallback, optional Redis) already held.
+- L4 stays 🔨: OVR-6.2, 6.4, 6.6, 6.7 have no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -471,19 +486,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **32 of 59 scenarios have a test**:
+Latest run — **33 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 2 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 3 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **32** | |
+| | **Total** | **59** | **33** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

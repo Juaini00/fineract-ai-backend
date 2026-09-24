@@ -23,7 +23,11 @@
 #   5. `answers` (FIN-52, gerbang L4) menjalankan setiap capability jawaban
 #      lewat jalur job dan mengadu jawabannya dengan SQL langsung yang dihitung
 #      ulang oleh scripts/answer-expectations.sh tepat sebelum tahap ini.
-#   6. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
+#   6. `redis-down` (FIN-57, OVR-6.5) menjalankan worker dengan REDIS_URL ke
+#      port yang tidak mendengarkan: Redis diaktifkan tetapi tidak terjangkau.
+#      Job wajib tetap selesai, event pulih dari PostgreSQL, dan klien yang
+#      memutus stream tidak membatalkan job.
+#   7. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
@@ -69,10 +73,13 @@ if [ "$#" -gt 0 ]; then
     RETRIEVAL_UNAVAILABLE_FOLDERS=()
     DATASET_CAPPED_FOLDERS=()
     ANSWERS_FOLDERS=()
+    REDIS_DOWN_FOLDERS=()
     RETRIEVAL_HEALTHY_FOLDERS=()
     for folder in "$@"; do
         if [ "$folder" = "answers" ]; then
             ANSWERS_FOLDERS+=("$folder")
+        elif [ "$folder" = "redis-down" ]; then
+            REDIS_DOWN_FOLDERS+=("$folder")
         elif [ "$folder" = "dataset-capped" ]; then
             DATASET_CAPPED_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-unavailable" ]; then
@@ -90,6 +97,7 @@ else
     ENGINE_FOLDERS=(engine clarification resolver sse)
     DATASET_CAPPED_FOLDERS=(dataset-capped)
     ANSWERS_FOLDERS=(answers)
+    REDIS_DOWN_FOLDERS=(redis-down)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
@@ -228,6 +236,15 @@ if [ "${#ANSWERS_FOLDERS[@]}" -gt 0 ]; then
     # (`list_empty(&rt->gc_obj_list)`) SESUDAH test-nya lulus — kode keluar
     # merah tanpa satu pun assertion gagal.
     BRU_SANDBOX=developer run_folders 500 "${ANSWERS_FOLDERS[@]}"
+fi
+
+if [ "${#REDIS_DOWN_FOLDERS[@]}" -gt 0 ]; then
+    stop_app
+    # Port 1 tidak pernah mendengarkan: koneksi ditolak seketika, jadi
+    # Notifier berstatus `unavailable` (diaktifkan, tidak terjangkau).
+    start_app true REDIS_ENABLED=true REDIS_URL=redis://127.0.0.1:1/0
+    echo "==> bru run redis-down (Redis tidak terjangkau; disconnect bukan cancel)"
+    BRU_SANDBOX=developer run_folders 500 "${REDIS_DOWN_FOLDERS[@]}"
 fi
 
 if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then

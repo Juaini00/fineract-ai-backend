@@ -1,0 +1,59 @@
+info:
+  name: job dibuat lalu stream diputus sebelum selesai
+  type: http
+  seq: 4
+  description: |
+    Sesudah 202, request ini membuka `GET /events`, membaca frame pertama,
+    lalu MEMUTUS koneksi selagi job belum terminal (worker polling ±1 detik).
+    Frame yang sudah diterima dicatat supaya test menolak bukti vacuous: bila
+    job ternyata sudah terminal saat diputus, test ini gagal, bukan lulus.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{redisDownToken}}"
+    - name: Idempotency-Key
+      value: "{{redisDownKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{redisDownSession}}", "request_text": "Show the savings portfolio summary." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("redisDownKey", "fin57-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        const axios = require("axios");
+        const jobId = res.getBody().data.job_id;
+        bru.setVar("redisDownJob", jobId);
+
+        const controller = new AbortController();
+        const stream = await axios.get(req.getUrl().replace(/\/chat\/jobs$/, "/chat/jobs/" + jobId + "/events"), {
+          headers: { authorization: "Bearer " + bru.getVar("redisDownToken") },
+          responseType: "stream",
+          signal: controller.signal,
+        });
+        const firstChunk = await new Promise(function (resolve, reject) {
+          stream.data.once("data", function (chunk) { resolve(String(chunk)); });
+          stream.data.once("error", reject);
+        });
+        controller.abort();
+        stream.data.destroy();
+
+        const seen = (firstChunk.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+
+        test("OVR-6.5: klien memutus stream selagi job belum terminal", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(stream.status).to.equal(200);
+          expect(seen).to.include("job.accepted");
+          ["job.completed", "job.failed", "job.cancelled", "job.expired"].forEach(function (name) {
+            expect(seen, "job sudah terminal sebelum disconnect — bukti vacuous").to.not.include(name);
+          });
+        });
