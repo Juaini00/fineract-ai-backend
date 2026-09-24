@@ -22,3 +22,13 @@ runtime:
           expect(job.outcome).to.equal(null);
           expect(job.completeness).to.equal(null);
         });
+
+        test("OVR-6.3: informasi kurang menangguhkan job YANG SAMA, bukan mengakhirinya", function () {
+          expect(job.id).to.equal(bru.getVar("clarifyJobId"));
+          expect(job.lifecycle).to.equal("WaitingForUser");
+          expect(job.terminal_at).to.equal(null);
+          expect(job.last_event_sequence).to.be.above(1);
+        });
+        // Cursor snapshot saat tertangguh: titik reconnect yang dipakai
+        // job-reconnect-event.yml sesudah job selesai.
+        bru.setVar("clarifyWaitCursor", job.last_event_sequence);

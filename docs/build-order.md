@@ -447,6 +447,22 @@ Update after FIN-53 (OVR-6.1):
   `engine/`, because only that stage has the direct-SQL oracle.
 - L4 stays 🔨: OVR-6.2..6.7 (FIN-54…FIN-59) have no test.
 
+Update after FIN-55 (OVR-6.3):
+
+- **OVR-6.3 is proven at the HTTP surface** by the `clarification` chain
+  (worker on), with no code change — the mechanism already held; it lacked a
+  test naming the scenario. The job suspends to `WaitingForUser` with the same
+  `job_id` and no `terminal_at`; a refresh returns the durable form
+  byte-for-byte; a valid answer resumes the same job to a `passed`/`Complete`
+  response; the full replay holds `job.accepted` → `clarification.required` →
+  `clarification.accepted` → `job.resumed` → `job.completed` in order on one
+  contiguous cursor; and a reconnect (`job-reconnect-event.yml`) with
+  `Last-Event-ID` = the snapshot cursor taken while suspended returns exactly
+  the tail of the full replay — nothing lost, nothing duplicated.
+- Single clarification stage only; the multi-stage half belongs to CLR-3
+  (FIN-75, L7), as for SSE-5.
+- L4 stays 🔨: OVR-6.2, 6.4..6.7 have no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -455,19 +471,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **31 of 59 scenarios have a test**:
+Latest run — **32 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 1 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 2 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **31** | |
+| | **Total** | **59** | **32** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

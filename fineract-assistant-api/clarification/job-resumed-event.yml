@@ -31,6 +31,20 @@ runtime:
           return Number(line.slice(4));
         });
 
+        // Replay penuh disimpan untuk pembuktian reconnect lossless (OVR-6.3).
+        bru.setVar("clarifyFullIds", JSON.stringify(ids));
+        bru.setVar("clarifyFullNames", JSON.stringify(names));
+
+        test("OVR-6.3: replay memuat setiap transisi suspend -> jawab -> resume -> selesai, berurutan", function () {
+          const order = ["job.accepted", "clarification.required", "clarification.accepted", "job.resumed", "job.completed"];
+          const positions = order.map(function (name) { return names.indexOf(name); });
+          positions.forEach(function (position) { expect(position).to.be.at.least(0); });
+          for (let i = 1; i < positions.length; i++) {
+            expect(positions[i]).to.be.above(positions[i - 1]);
+          }
+          ids.forEach(function (id, index) { expect(id).to.equal(index + 1); });
+        });
+
         test("job.resumed ada, tepat satu kali", function () {
           expect(res.getStatus()).to.equal(200);
           expect(names.filter(function (n) { return n === "job.resumed"; })).to.have.lengthOf(1);
