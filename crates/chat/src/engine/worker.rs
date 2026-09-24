@@ -54,6 +54,9 @@ pub async fn run(
     };
     let worker = worker_identity();
     let poll = Duration::from_millis(config.worker_poll_interval_ms);
+    let mut crash = CrashSeam {
+        remaining: config.local_crash_after_external_call.unwrap_or(0),
+    };
 
     info!(%worker, "worker berjalan");
 
@@ -78,6 +81,7 @@ pub async fn run(
                     &embedding,
                     &worker,
                     job,
+                    &mut crash,
                 )
                 .await
                 {
@@ -104,6 +108,22 @@ pub async fn run(
     info!(%worker, "worker berhenti");
 }
 
+/// Seam `LOCAL_CRASH_AFTER_EXTERNAL_CALL` (FIN-56; config menolaknya di luar
+/// `APP_ENV=local`). `remaining` = berapa panggilan sumber lagi yang
+/// ditinggalkan; nol di luar test, sehingga [`CrashSeam::fire`] tidak pernah
+/// benar.
+struct CrashSeam {
+    remaining: u32,
+}
+
+impl CrashSeam {
+    fn fire(&mut self) -> bool {
+        let fire = self.remaining > 0;
+        self.remaining = self.remaining.saturating_sub(1);
+        fire
+    }
+}
+
 async fn process(
     foundation: &Foundation,
     catalog: &Catalog,
@@ -111,6 +131,7 @@ async fn process(
     embedding: &EmbeddingClient,
     worker: &str,
     job: ClaimedJob,
+    crash: &mut CrashSeam,
 ) -> anyhow::Result<()> {
     let pool = foundation.app_db().pool().clone();
     let config = foundation.config();
@@ -130,7 +151,15 @@ async fn process(
     let settled = if repository::cancel_requested(&pool, job.id).await? {
         repository::settle_cancelled(&pool, job.id, job.session_id, job.lease_token).await?
     } else {
-        run_job(foundation, catalog, catalog_version_id, embedding, &job).await?
+        run_job(
+            foundation,
+            catalog,
+            catalog_version_id,
+            embedding,
+            &job,
+            crash,
+        )
+        .await?
     };
 
     fenced.cancel();
@@ -182,6 +211,7 @@ async fn run_job(
     catalog_version_id: Uuid,
     embedding: &EmbeddingClient,
     job: &ClaimedJob,
+    crash: &mut CrashSeam,
 ) -> anyhow::Result<bool> {
     let pool = foundation.app_db().pool();
 
@@ -314,12 +344,64 @@ async fn run_job(
     )
     .await?;
 
-    if !persisted {
-        return Ok(false);
+    match persisted {
+        repository::PlanPersisted::Persisted | repository::PlanPersisted::Adopted => {}
+        repository::PlanPersisted::Fenced => return Ok(false),
+        // D4 — plan versi ini milik attempt sebelumnya; menjalankan node di
+        // bawahnya dengan graph/katalog lain berarti ledger berbohong tentang
+        // apa yang dieksekusi. Re-plan (`plan_version` baru) belum ada.
+        repository::PlanPersisted::Changed => {
+            warn!(job_id = %job.id, "plan berubah saat recovery; node tidak dijalankan");
+            return settle_failed_with(
+                foundation,
+                job,
+                PLAN_CHANGED_ON_RECOVERY,
+                "The analysis plan changed while this request was being recovered, so the \
+                 approved source query was not run again and no figure is reported.",
+            )
+            .await;
+        }
     }
+
+    // Admisi TEPAT sebelum query dikirim: sejak baris ini `Running`, lease
+    // yang hilang berarti outcome-nya tidak pasti (I4), dan reaper
+    // menandainya `Abandoned`, bukan `Failed`.
+    let attempt = match repository::admit_node(pool, job.id, job.lease_token, PLAN_VERSION).await? {
+        repository::Admission::Admitted(attempt) => attempt,
+        repository::Admission::Fenced => return Ok(false),
+        // Lease hilang sesudah T4 dan sebelum T7: output node sudah durable.
+        // Output `Completed` tidak dijalankan ulang (engine.md), dan reuse
+        // untuk menyusun response darinya belum ada — tutup eksplisit,
+        // jangan kembalikan ke antrean tanpa ujung.
+        repository::Admission::NothingRunnable => {
+            warn!(job_id = %job.id, "node sudah Completed; tidak dijalankan ulang");
+            return settle_failed_with(
+                foundation,
+                job,
+                COMPLETED_NODE_NOT_RERUN,
+                "The approved source query completed, but the worker was lost before the \
+                     answer was committed. A completed query is not run again, and building \
+                     the answer from its stored result is not supported yet, so no figure is \
+                     reported.",
+            )
+            .await;
+        }
+    };
 
     // Di luar transaksi mana pun (I1).
     let executed = executor::execute(foundation.fineract_db(), &plan).await;
+
+    // OVR-6.4 — query sudah kembali, T4 belum commit. Seam lokal meninggalkan
+    // attempt di titik ini persis seperti worker yang mati: heartbeat berhenti
+    // (lihat `process`) dan tidak ada yang ditulis.
+    if crash.fire() {
+        warn!(
+            job_id = %job.id,
+            attempt,
+            "LOCAL_CRASH_AFTER_EXTERNAL_CALL: attempt ditinggalkan sesudah query, sebelum T4"
+        );
+        return Ok(false);
+    }
 
     match executed {
         Ok(mut result) => {
@@ -353,6 +435,7 @@ async fn run_job(
                 job.session_id,
                 job.lease_token,
                 PLAN_VERSION,
+                attempt,
                 NodeOutcome {
                     status: "Completed",
                     completeness: Some(if row_cap.is_some() {
@@ -473,6 +556,7 @@ async fn run_job(
                 job.session_id,
                 job.lease_token,
                 PLAN_VERSION,
+                attempt,
                 NodeOutcome {
                     status: "Failed",
                     // Hasilnya TIDAK DIKETAHUI, bukan nol (I4).
@@ -824,35 +908,70 @@ async fn settle_operational_failure(
     job: &ClaimedJob,
     failure_code: &str,
 ) -> anyhow::Result<bool> {
-    let blocks = serde_json::json!([compose::block(
+    settle_failed_with(
+        foundation,
+        job,
         failure_code,
-        "limitation",
-        &[],
-        serde_json::json!({
-            "title": "Request not answered",
-            "body": "The approved source query did not complete, so no figure is reported. \
-                     The outcome of the attempt is unknown, not zero.",
-        }),
-    )]);
+        "The approved source query did not complete, so no figure is reported. \
+         The outcome of the attempt is unknown, not zero.",
+    )
+    .await
+}
 
+async fn settle_failed_with(
+    foundation: &Foundation,
+    job: &ClaimedJob,
+    failure_code: &str,
+    body: &str,
+) -> anyhow::Result<bool> {
     repository::settle_failed(
         foundation.app_db().pool(),
         job.id,
         job.session_id,
         job.lease_token,
         failure_code,
-        SettledResponse {
-            kind: "limitation",
-            outcome: "OperationalFailure",
-            completeness: "Unknown",
-            completeness_reason: failure_code.to_string(),
-            response_hash: hash_blocks(&blocks),
-            evidence: serde_json::json!({}),
-            blocks,
-        },
+        operational_failure_response(failure_code, body),
     )
     .await
     .map_err(Into::into)
+}
+
+/// Response yang disajikan reaper saat attempt tak pasti mencapai
+/// `NODE_ATTEMPT_CAP` (OVR-6.4, engine.md langkah 5): menyatakan bahwa query
+/// mungkin sudah berjalan, bukan bahwa ia gagal.
+pub fn attempts_exhausted_response(node_attempt_cap: i32) -> SettledResponse {
+    operational_failure_response(
+        repository::NODE_ATTEMPT_CAP_REACHED,
+        &format!(
+            "The approved source query was attempted {node_attempt_cap} times and the \
+             outcome of every attempt is unknown, so no figure is reported and it is not \
+             retried again. Unknown is not zero."
+        ),
+    )
+}
+
+/// `Failed` + `OperationalFailure` + `Unknown` (engine.md): tidak ada klaim
+/// atas data sumber, dan sebabnya dinyatakan pada satu blok `limitation`.
+fn operational_failure_response(failure_code: &str, body: &str) -> SettledResponse {
+    let blocks = serde_json::json!([compose::block(
+        failure_code,
+        "limitation",
+        &[],
+        serde_json::json!({
+            "title": "Request not answered",
+            "body": body,
+        }),
+    )]);
+
+    SettledResponse {
+        kind: "limitation",
+        outcome: "OperationalFailure",
+        completeness: "Unknown",
+        completeness_reason: failure_code.to_string(),
+        response_hash: hash_blocks(&blocks),
+        evidence: serde_json::json!({}),
+        blocks,
+    }
 }
 
 /// Penyempitan office yang diminta saat job diterima (snapshot `scope_json`).
@@ -870,6 +989,12 @@ const OFFICE_SCOPE_NOT_AUTHORIZED: &str = "office_scope_not_authorized";
 const WRITE_NOT_SUPPORTED: &str = "write_not_supported";
 /// Alasan penolakan permukaan yang tidak disetujui (OVR-6.6, FIN-139).
 const SURFACE_NOT_APPROVED: &str = "surface_not_approved";
+/// Plan versi aktif yang diverifikasi ulang saat recovery tidak lagi identik
+/// dengan yang tersimpan (D4); re-plan belum ada, jadi job tidak dijawab.
+const PLAN_CHANGED_ON_RECOVERY: &str = "plan_changed_on_recovery";
+/// Lease hilang sesudah node `Completed` tetapi sebelum response commit.
+/// Output itu tidak dijalankan ulang, dan reuse-nya belum ada (engine.md).
+const COMPLETED_NODE_NOT_RERUN: &str = "completed_node_not_rerun";
 
 /// Tutup job dengan penolakan kebijakan: tanpa plan, tanpa node, tanpa query
 /// sumber, tanpa fakta memori.

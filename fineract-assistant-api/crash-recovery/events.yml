@@ -1,0 +1,62 @@
+info:
+  name: replay menyatakan attempt tak pasti dan pemulihannya
+  type: http
+  seq: 6
+  description: |
+    Permukaan publik state attempt adalah frame `node.status_changed`
+    (`node_attempt` + `status`) pada replay PostgreSQL.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = String(res.getBody())
+          .split("\n")
+          .filter(function (line) { return line.startsWith("data: "); })
+          .map(function (line) { return JSON.parse(line.slice(6)); });
+        const names = events.map(function (event) { return event.event; });
+        const nodes = events.filter(function (event) { return event.event === "node.status_changed"; });
+        const notices = events.filter(function (event) { return event.event === "job.notice"; });
+        const indexOf = function (predicate) { return events.findIndex(predicate); };
+
+        test("OVR-6.4: replay utuh 1..last_event_sequence", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("crashLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.4: attempt 1 Abandoned — tidak pasti, bukan Failed dan bukan Completed", function () {
+          const first = nodes.filter(function (event) { return event.node_attempt === 1; });
+          expect(first).to.have.lengthOf(1);
+          expect(first[0].status).to.equal("Abandoned");
+          expect(first[0].node_id).to.equal("main");
+          expect(first[0].plan_version).to.equal(1);
+          nodes.forEach(function (event) { expect(event.status).to.not.equal("Failed"); });
+        });
+
+        test("OVR-6.4: retry bounded — attempt baru untuk node yang sama, bukan membuka attempt lama", function () {
+          expect(nodes.map(function (event) { return [event.node_attempt, event.status]; }))
+            .to.deep.equal([[1, "Abandoned"], [2, "Completed"]]);
+          // NODE_ATTEMPT_CAP = 3 (runtime.md §1).
+          nodes.forEach(function (event) { expect(event.node_attempt).to.be.at.most(3); });
+          expect(notices).to.have.lengthOf(1);
+          expect(notices[0].by).to.equal("reaper");
+          expect(notices[0].retry).to.deep.equal([{ node_id: "main", attempt: 2 }]);
+        });
+
+        test("OVR-6.4: urutan Abandoned → retry → attempt 2 Completed → job.completed", function () {
+          const abandoned = indexOf(function (e) { return e.event === "node.status_changed" && e.node_attempt === 1; });
+          const retry = indexOf(function (e) { return e.event === "job.notice"; });
+          const completed = indexOf(function (e) { return e.event === "node.status_changed" && e.node_attempt === 2; });
+          expect(abandoned).to.be.above(-1);
+          expect(retry).to.be.above(abandoned);
+          expect(completed).to.be.above(retry);
+          expect(names[names.length - 1]).to.equal("job.completed");
+          expect(names).to.not.include("job.failed");
+          expect(names.filter(function (n) { return n === "job.completed"; })).to.have.lengthOf(1);
+        });

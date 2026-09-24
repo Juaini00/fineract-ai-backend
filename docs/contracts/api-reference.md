@@ -525,6 +525,9 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `surface_not_approved` | Permintaan menyebut permukaan yang tidak disetujui: field rahasia (`secret_never_expose`), tabel di luar cakupan (`excluded_tables` area data-scope), atau intent yang dinyatakan tidak didukung domain (`unsupported_intents`) — kosakatanya dari `knowledge/`. Ditolak sebelum retrieval dan query sumber, bukan dipetakan ke capability baca terdekat; job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null`. Teks penjelasannya tidak menyebut istilah yang cocok (tidak membocorkan schema yang dibatasi) (OVR-6.6) | `request_echo` |
 | `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
 | `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
+| `node_attempt_cap_reached` | Setiap attempt query sumber yang diizinkan (`NODE_ATTEMPT_CAP`, default 3) terputus sesudah query dikirim dan sebelum hasilnya durable. Hasilnya **tidak diketahui** — bukan gagal, bukan nol — dan tidak diulang lagi. Job `Failed` + `OperationalFailure` + `Unknown`, `failure_code` sama (OVR-6.4) | — |
+| `plan_changed_on_recovery` | Job diklaim ulang sesudah lease hilang, tetapi plan yang diverifikasi ulang tidak identik dengan plan versi aktif yang tersimpan (graph atau katalog berubah). Node tidak dijalankan di bawah plan yang bukan miliknya, dan re-plan belum ada. Job `Failed` + `OperationalFailure` + `Unknown` | — |
+| `completed_node_not_rerun` | Lease worker hilang **sesudah** node selesai dan sebelum response commit. Output node yang `Completed` tidak dijalankan ulang, dan menyusun jawaban dari output tersimpan belum didukung — job ditutup, tidak dikembalikan ke antrean tanpa ujung. Job `Failed` + `OperationalFailure` + `Unknown` | — |
 
 #### `evidence_json` — lineage
 
@@ -908,6 +911,38 @@ level atas dan **tidak pernah** menimpa field envelope.
 | `job.cancelled` | Pembatalan selesai | ✅ |
 | `job.expired` | Kedaluwarsa selesai | ✅ |
 
+### Attempt node dan recovery (OVR-6.4)
+
+`node.status_changed` membawa `node_id`, `node_attempt` dan `plan_version` pada
+envelope, dan `status` di level atas. `status` yang dipancarkan hari ini:
+`Completed`/`Failed` (worker, T4, beserta `rows_returned`) dan `Abandoned`
+(reaper, T11). Admisi ke `Running` ditulis ke ledger tanpa event.
+
+`Abandoned` berarti worker atau lease-nya hilang **sesudah** query sumber
+dikirim dan **sebelum** hasilnya commit: hasilnya **tidak diketahui**. Ia bukan
+`Failed`, dan frontend tidak boleh menampilkannya sebagai kegagalan. Attempt
+itu tidak dibuka lagi; node yang sama mendapat attempt baru
+(`node_attempt` + 1) dan pengulangannya diumumkan lewat `job.notice`:
+
+```text
+event: job.notice
+data: {…,"node_id":null,"node_attempt":null,…,"by":"reaper","retry":[{"node_id":"main","attempt":2}]}
+```
+
+`job.notice` dari reaper tanpa `retry` berarti job dikembalikan ke antrean
+tanpa attempt yang terputus (lease hilang sebelum query dikirim). Paling banyak
+`NODE_ATTEMPT_CAP` (3) attempt per node; bila attempt terakhir juga `Abandoned`,
+job berakhir `job.failed` dengan `failure_code: "node_attempt_cap_reached"`.
+Jarvis **tidak** menjanjikan exactly-once: query yang terputus mungkin sudah
+berjalan di Fineract (read-only, jadi mengulang aman) dan tetap dihitung pada
+budget job (`query_count`).
+
+Di `APP_ENV=local` saja, env `LOCAL_CRASH_AFTER_EXTERNAL_CALL=<n>` (FIN-56,
+pola seam FIN-44/FIN-46) membuat worker meninggalkan `n` panggilan sumber
+pertama prosesnya tepat sesudah query kembali dan sebelum T4 — heartbeat
+berhenti dan tidak ada yang ditulis, seperti worker yang mati di titik itu.
+Startup ditolak bila ia di-set di luar `local`, atau bernilai `0`.
+
 ### Fase publik
 
 `queued`, `understanding`, `mapping_knowledge`, `planning`, `validating`,
@@ -918,7 +953,9 @@ Fase yang benar-benar dipancarkan hari ini: `understanding` (saat worker
 mengklaim) dan `planning` (saat plan terverifikasi). Fase lain menyusul bersama
 tahap yang memancarkannya. Frontend wajib menganggap daftar fase sebagai
 terbuka: fase yang tidak dikenal ditampilkan sebagai kemajuan generik, bukan
-error.
+error. Klaim ulang sesudah recovery (OVR-6.4) memancarkan `understanding` dan
+`planning` sekali lagi, karena pekerjaan itu memang diulang: plan versi yang
+sama diverifikasi ulang, bukan plan baru.
 
 Jangan mengubah jumlah node menjadi persentase waktu — re-plan dapat mengubah
 jumlahnya.

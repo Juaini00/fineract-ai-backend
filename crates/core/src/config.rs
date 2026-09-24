@@ -129,6 +129,12 @@ pub struct Config {
     pub reaper_interval_secs: u64,
     #[serde(default = "default_job_ttl_running_secs")]
     pub job_ttl_running_secs: i64,
+    /// Batas attempt satu logical node bila outcome-nya **tidak pasti**
+    /// (`Abandoned`, runtime.md §1): tiga = percobaan awal + dua pemulihan.
+    /// Kegagalan deterministik (`Failed`) tidak pernah diulang, berapa pun
+    /// angka ini (`NODE_ATTEMPT_CAP_DETERMINISTIC=1`).
+    #[serde(default = "default_node_attempt_cap")]
+    pub node_attempt_cap: i32,
     /// Batas tunggu jawaban klarifikasi (runtime.md §2). Dibatasi dua sisi:
     /// terlalu pendek meng-`Expired` percakapan sah, terlalu panjang mengunci
     /// session semalaman karena satu job nonterminal per session (#13).
@@ -161,6 +167,13 @@ pub struct Config {
     /// pernah melebarkan cap produksi; di luar `local` startup ditolak.
     #[serde(default)]
     pub local_dataset_max_rows: Option<usize>,
+    /// Seam KHUSUS `local` (FIN-56, pola FIN-44/FIN-46): N panggilan sumber
+    /// pertama proses ini ditinggalkan TEPAT sesudah query kembali dan sebelum
+    /// T4 commit — heartbeat berhenti, tidak ada yang ditulis — seperti worker
+    /// yang mati di titik itu. Membuat OVR-6.4 dapat dibuktikan di permukaan
+    /// HTTP tanpa membunuh proses. Di luar `local` startup ditolak.
+    #[serde(default)]
+    pub local_crash_after_external_call: Option<u32>,
 
     // ---- Event dan SSE (runtime.md §5) ----
     /// Jeda baca PostgreSQL saat tidak ada notifikasi. Ini **fallback yang
@@ -367,6 +380,26 @@ impl Config {
             }
         }
 
+        // Cap nol berarti node tidak pernah boleh berjalan; negatif tidak
+        // bermakna. Keduanya konfigurasi rusak, bukan kebijakan.
+        if self.node_attempt_cap < 1 {
+            anyhow::bail!("NODE_ATTEMPT_CAP wajib minimal 1");
+        }
+
+        // Seam crash yang lolos keluar local berarti production diam-diam
+        // membuang hasil query: gagal keras, jangan diabaikan.
+        if let Some(crashes) = self.local_crash_after_external_call {
+            if self.app_env != AppEnv::Local {
+                anyhow::bail!(
+                    "LOCAL_CRASH_AFTER_EXTERNAL_CALL hanya sah di APP_ENV=local, bukan {:?}",
+                    self.app_env
+                );
+            }
+            if crashes == 0 {
+                anyhow::bail!("LOCAL_CRASH_AFTER_EXTERNAL_CALL wajib lebih besar dari nol");
+            }
+        }
+
         Ok(())
     }
 }
@@ -415,6 +448,9 @@ fn default_reaper_interval_secs() -> u64 {
 }
 fn default_job_ttl_running_secs() -> i64 {
     1_800
+}
+fn default_node_attempt_cap() -> i32 {
+    3
 }
 fn default_clarification_wait_limit_secs() -> i64 {
     7_200
@@ -644,5 +680,17 @@ mod tests {
 
         let error = build(entries).unwrap_err().to_string();
         assert!(error.contains("LOCAL_DATASET_MAX_ROWS"), "{error}");
+    }
+
+    #[test]
+    fn local_crash_seam_refuses_to_start_outside_local() {
+        let mut entries = minimal();
+        entries.push(("app_env", "staging".into()));
+        entries.push(("jwt_access_secret", "produksi-access".into()));
+        entries.push(("jwt_refresh_secret", "produksi-refresh".into()));
+        entries.push(("local_crash_after_external_call", "1".into()));
+
+        let error = build(entries).unwrap_err().to_string();
+        assert!(error.contains("LOCAL_CRASH_AFTER_EXTERNAL_CALL"), "{error}");
     }
 }

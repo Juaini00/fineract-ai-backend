@@ -2,8 +2,9 @@
 //!
 //! Ia tidak pernah menyimpulkan panggilan eksternal berhasil atau gagal —
 //! lease yang hilang berarti **tidak diketahui** (I4). Yang dilakukan hanya
-//! mengembalikan job ke antrean, menutup pembatalan yang tidak bertuan, dan
-//! menghormati batas waktu.
+//! menandai attempt yang terputus `Abandoned` dan mengulangnya dalam batas
+//! `NODE_ATTEMPT_CAP`, menutup pembatalan yang tidak bertuan, dan menghormati
+//! batas waktu.
 
 use std::time::Duration;
 
@@ -12,11 +13,14 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-use crate::engine::{dataset, repository};
+use crate::engine::{dataset, repository, worker};
 
 pub async fn run(foundation: Foundation, interval: Duration, shutdown: CancellationToken) {
     let identity = format!("reaper/{}", std::process::id());
-    info!(%identity, ?interval, "reaper berjalan");
+    let node_attempt_cap = foundation.config().node_attempt_cap;
+    // Disusun sekali: isinya hanya bergantung pada cap, bukan pada job.
+    let exhausted = worker::attempts_exhausted_response(node_attempt_cap);
+    info!(%identity, ?interval, node_attempt_cap, "reaper berjalan");
 
     loop {
         tokio::select! {
@@ -24,11 +28,19 @@ pub async fn run(foundation: Foundation, interval: Duration, shutdown: Cancellat
             _ = sleep(interval) => {}
         }
 
-        match repository::sweep(foundation.app_db().pool(), &identity).await {
+        match repository::sweep(
+            foundation.app_db().pool(),
+            &identity,
+            node_attempt_cap,
+            &exhausted,
+        )
+        .await
+        {
             Ok(sweep) if sweep.is_empty() => {}
             Ok(sweep) => info!(
                 expired = sweep.expired,
                 requeued = sweep.requeued,
+                exhausted = sweep.exhausted,
                 cancelled = sweep.cancelled,
                 "reaper menyelesaikan job tertinggal"
             ),
