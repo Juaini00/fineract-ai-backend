@@ -1,0 +1,11 @@
+info:
+  name: redis-down
+  seq: 13
+  description: |
+    OVR-6.5 (FIN-57) — Redis mati atau klien terputus: job tetap berjalan dan
+    state/event tidak hilang; klien mengambil snapshot/cursor dari PostgreSQL
+    lalu replay. Disconnect bukan cancel.
+
+    Runner menyalakan app dengan worker menyala dan `REDIS_URL` menunjuk port
+    yang tidak mendengarkan (Redis diaktifkan tetapi tidak terjangkau), sehingga
+    yang diuji adalah outage nyata — bukan `REDIS_ENABLED=false`.
