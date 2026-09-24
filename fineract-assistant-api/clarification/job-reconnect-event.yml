@@ -1,0 +1,47 @@
+info:
+  name: reconnect dari cursor saat tertangguh tidak kehilangan transisi
+  type: http
+  seq: 11.5
+  description: |
+    OVR-6.3 — klien yang terputus saat job `WaitingForUser` menyambung ulang
+    dengan `Last-Event-ID` = `last_event_sequence` snapshot waktu itu
+    (job-waiting.yml). Replay wajib dimulai tepat sesudah cursor itu dan sama
+    persis dengan ekor replay penuh (job-resumed-event.yml): tidak ada event
+    hilang, tidak ada duplikat, tidak ada reset sequence saat resume.
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clarifyJobId}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{clarifyToken}}"
+    - name: Last-Event-ID
+      value: "{{clarifyWaitCursor}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const body = String(res.getBody());
+        const ids = (body.match(/^id: (\d+)$/gm) || []).map(function (line) {
+          return Number(line.slice(4));
+        });
+        const names = (body.match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        const cursor = Number(bru.getVar("clarifyWaitCursor"));
+        const fullIds = JSON.parse(bru.getVar("clarifyFullIds"));
+        const fullNames = JSON.parse(bru.getVar("clarifyFullNames"));
+
+        test("OVR-6.3: reconnect dari cursor tertangguh = ekor replay penuh, tanpa kehilangan transisi", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(ids[0]).to.equal(cursor + 1);
+          expect(ids).to.deep.equal(fullIds.slice(cursor));
+          expect(names).to.deep.equal(fullNames.slice(cursor));
+        });
+
+        test("OVR-6.3: resume terlihat di stream sambungan dan berakhir terminal", function () {
+          expect(names).to.include("clarification.accepted");
+          expect(names).to.include("job.resumed");
+          expect(names[names.length - 1]).to.equal("job.completed");
+        });

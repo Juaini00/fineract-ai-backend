@@ -25,4 +25,10 @@ runtime:
           expect(doc.response_hash).to.have.lengthOf(64);
         });
 
+        test("OVR-6.3: jawaban valid melanjutkan job sampai response tervalidasi", function () {
+          const doc = res.getBody().data;
+          expect(doc.validation_status).to.equal("passed");
+          expect(doc.completeness).to.equal("Complete");
+        });
+
         bru.setVar("clarifyResponseBody", JSON.stringify(res.getBody().data));
