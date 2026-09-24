@@ -12,8 +12,12 @@ use std::{
 
 use sha2::{Digest, Sha256};
 
-use crate::catalog::model::{
-    Capability, Dataset, DatasetShape, QueryManifest, SafetyPolicy, SensitivityClasses,
+use crate::catalog::{
+    model::{
+        Capability, DataScopeArea, Dataset, DatasetShape, Domain, QueryManifest, SafetyPolicy,
+        SensitivityClasses,
+    },
+    surface::Surfaces,
 };
 
 /// Katalog yang sudah dimuat, belum divalidasi.
@@ -25,6 +29,9 @@ pub struct Catalog {
     pub safety_policy: SafetyPolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
+    /// Kosakata permukaan yang tidak disetujui, diturunkan dari knowledge
+    /// (OVR-6.6, FIN-139). Lihat `catalog::surface`.
+    pub unapproved_surfaces: Surfaces,
     /// Isi setiap file SQL di `queries/`, dikunci path relatif terhadap root repo.
     pub sql_files: BTreeMap<String, String>,
     pub content_hash: String,
@@ -53,6 +60,9 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     let mut safety_policy = SafetyPolicy::default();
     let mut sensitivity_classes = BTreeSet::new();
     let mut sql_files = BTreeMap::new();
+    let mut secret_fields = Vec::new();
+    let mut areas: Vec<DataScopeArea> = Vec::new();
+    let mut domains: Vec<Domain> = Vec::new();
 
     // Diurutkan: hash tidak boleh bergantung pada urutan pembacaan direktori.
     let mut yaml_paths = collect(knowledge_root, &["yaml", "yml"])?;
@@ -84,7 +94,12 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
             }
         } else if relative.ends_with("columns/sensitivity.yaml") {
             match serde_yaml::from_str::<SensitivityClasses>(&text) {
-                Ok(declared) => sensitivity_classes.extend(declared.classes.into_keys()),
+                Ok(declared) => {
+                    if let Some(secret) = declared.classes.get(SECRET_CLASS) {
+                        secret_fields.clone_from(&secret.examples);
+                    }
+                    sensitivity_classes.extend(declared.classes.into_keys());
+                }
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if relative.ends_with("policies/query_safety.yaml") {
@@ -92,10 +107,20 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
                 Ok(policy) => safety_policy = policy,
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
+        } else if relative.contains("/data-scope/areas/") {
+            match serde_yaml::from_str::<DataScopeArea>(&text) {
+                Ok(area) => areas.push(area),
+                Err(error) => unreadable.push((relative, error.to_string())),
+            }
+        } else if under("domains") {
+            match serde_yaml::from_str::<Domain>(&text) {
+                Ok(domain) => domains.push(domain),
+                Err(error) => unreadable.push((relative, error.to_string())),
+            }
         }
-        // Berkas lain (domains, schema, metrics, parameters) ikut
-        // dihitung ke dalam content_hash tetapi belum punya validator sendiri;
-        // cakupannya dinyatakan eksplisit oleh `coverage()`.
+        // Berkas lain (schema, metrics, parameters) ikut dihitung ke dalam
+        // content_hash tetapi belum punya validator sendiri; cakupannya
+        // dinyatakan eksplisit oleh `coverage()`.
     }
 
     for path in &sql_paths {
@@ -105,17 +130,29 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         sql_files.insert(relative, text);
     }
 
+    let unapproved_surfaces = Surfaces::build(
+        &secret_fields,
+        &areas,
+        &domains,
+        capabilities.iter().map(|loaded| &loaded.entry),
+    );
+
     Ok(Catalog {
         capabilities,
         queries,
         datasets,
         safety_policy,
         sensitivity_classes,
+        unapproved_surfaces,
         sql_files,
         content_hash: hex::encode(hasher.finalize()),
         unreadable,
     })
 }
+
+/// Kelas sensitivitas yang field-nya tidak pernah boleh diminta
+/// (`policies/pii.yaml`: "secret_never_expose fields must never be returned").
+const SECRET_CLASS: &str = "secret_never_expose";
 
 /// Resolver yang disetujui untuk sebuah shape dataset: manifest query yang
 /// membungkusnya, entity yang memberi id/label opsi, dan shape itu sendiri.

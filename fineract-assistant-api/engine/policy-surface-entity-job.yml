@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 entitas di luar cakupan — job"
+  type: http
+  seq: 38.8
+  description: |
+    Tanpa field rahasia: yang disebut hanya entitasnya — tabel `m_appuser` (area deferred
+    audit_users_operations), ditulis "app users". Tetap ditolak sebelum retrieval.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_surface_entity_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "List all app users.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_surface_entity_key", "fin139-surface-entity-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_surface_entity_job", res.getBody().data.job_id);

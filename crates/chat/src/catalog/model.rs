@@ -183,12 +183,40 @@ pub struct QueryGuards {
 
 /// `knowledge/schema/fineract/columns/sensitivity.yaml`.
 ///
-/// Hanya nama kelasnya yang dipakai validator: check file itu sendiri berbunyi
-/// "every query output field must declare one class listed here".
+/// Nama kelas dipakai validator: check file itu sendiri berbunyi "every query
+/// output field must declare one class listed here". `examples` kelas
+/// `secret_never_expose` adalah kosakata field rahasia guard permukaan
+/// (FIN-139).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct SensitivityClasses {
     #[serde(default)]
-    pub classes: BTreeMap<String, serde_yaml::Value>,
+    pub classes: BTreeMap<String, SensitivityClass>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SensitivityClass {
+    #[serde(default)]
+    pub examples: Vec<String>,
+}
+
+/// `knowledge/data-scope/areas/*.yaml` — hanya yang dibaca guard permukaan.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DataScopeArea {
+    pub id: String,
+    #[serde(default)]
+    pub excluded_tables: Vec<String>,
+}
+
+/// `knowledge/domains/*.yaml` — hanya yang dibaca guard permukaan.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Domain {
+    pub id: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub data_areas: Vec<String>,
+    #[serde(default)]
+    pub unsupported_intents: Vec<String>,
 }
 
 /// `knowledge/policies/query_safety.yaml`.

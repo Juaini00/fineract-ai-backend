@@ -1,0 +1,25 @@
+info:
+  name: "OVR-6.6 field rahasia — response"
+  type: http
+  seq: 38.7
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_surface_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        test("OVR-6.6 (surface): penolakan dinyatakan sebagai limitation, tanpa lineage sumber", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("limitation");
+          expect(document.outcome).to.equal("BlockedByPolicy");
+          expect(document.completeness).to.equal("Unknown");
+          expect(document.blocks_json).to.have.lengthOf(1);
+          expect(document.blocks_json[0].block_id).to.equal("surface_not_approved");
+          expect(document.blocks_json[0].type).to.equal("limitation");
+          expect(document.evidence_json.lineage === undefined || document.evidence_json.lineage.length === 0).to.equal(true);
+        });

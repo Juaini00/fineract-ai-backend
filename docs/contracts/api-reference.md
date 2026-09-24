@@ -522,6 +522,7 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
 | `write_not_supported` | Perintah mengubah data Fineract (hapus/ubah/tambah, SQL tulis/DDL). Jarvis read-only: ditolak sebelum retrieval dan query sumber. Job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null` (OVR-6.6) | `request_echo` |
+| `surface_not_approved` | Permintaan menyebut permukaan yang tidak disetujui: field rahasia (`secret_never_expose`), tabel di luar cakupan (`excluded_tables` area data-scope), atau intent yang dinyatakan tidak didukung domain (`unsupported_intents`) — kosakatanya dari `knowledge/`. Ditolak sebelum retrieval dan query sumber, bukan dipetakan ke capability baca terdekat; job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null`. Teks penjelasannya tidak menyebut istilah yang cocok (tidak membocorkan schema yang dibatasi) (OVR-6.6) | `request_echo` |
 | `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
 | `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
 
