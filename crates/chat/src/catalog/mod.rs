@@ -9,6 +9,7 @@ pub mod loader;
 pub mod model;
 pub mod probe;
 pub mod repository;
+pub mod surface;
 pub mod validate;
 
 use std::path::Path;

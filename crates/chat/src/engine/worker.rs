@@ -198,6 +198,22 @@ async fn run_job(
         .await;
     }
 
+    // OVR-6.6 — permintaan atas permukaan yang tidak disetujui (field rahasia,
+    // tabel di luar cakupan, intent yang dinyatakan tidak didukung domain)
+    // ditolak di sini, sebelum retrieval sempat memetakannya ke capability
+    // baca terdekat (unsupported_requests.yaml `hard_reject_maps_to_policy`).
+    // Kosakatanya dari knowledge; lihat `catalog::surface` (FIN-139).
+    if let Some(term) = catalog.unapproved_surfaces.find(&job.request_text) {
+        warn!(job_id = %job.id, source = term.source, term = %term.name, "permukaan tidak disetujui diminta; ditolak");
+        return settle_blocked(
+            foundation,
+            job,
+            SURFACE_NOT_APPROVED,
+            "This request asks for data outside what Jarvis is approved to report on, so no query was run.",
+        )
+        .await;
+    }
+
     // Scope dari otorisasi, dipersempit oleh permintaan — tidak pernah
     // diperlebar olehnya (I7).
     let requested_offices = requested_office_ids(&job.scope_json);
@@ -852,6 +868,8 @@ fn requested_office_ids(scope_json: &serde_json::Value) -> Vec<i64> {
 const OFFICE_SCOPE_NOT_AUTHORIZED: &str = "office_scope_not_authorized";
 /// Alasan penolakan perintah tulis (OVR-6.6, FIN-139).
 const WRITE_NOT_SUPPORTED: &str = "write_not_supported";
+/// Alasan penolakan permukaan yang tidak disetujui (OVR-6.6, FIN-139).
+const SURFACE_NOT_APPROVED: &str = "surface_not_approved";
 
 /// Tutup job dengan penolakan kebijakan: tanpa plan, tanpa node, tanpa query
 /// sumber, tanpa fakta memori.

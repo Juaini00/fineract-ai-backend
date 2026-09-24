@@ -732,6 +732,7 @@ mod tests {
             datasets: Vec::new(),
             safety_policy: Default::default(),
             sensitivity_classes: Default::default(),
+            unapproved_surfaces: Default::default(),
             sql_files: Default::default(),
             content_hash: String::new(),
             unreadable: Vec::new(),

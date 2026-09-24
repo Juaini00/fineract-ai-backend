@@ -548,6 +548,40 @@ Update after FIN-59 (OVR-6.7):
   only accept a `Transaction`. T10 and T12 have no implementation yet.
 - L4 stays 🔨: OVR-6.2, 6.4 have no test; OVR-6.6 is partial.
 
+Update after FIN-139 (OVR-6.6 unapproved surface):
+
+- **OVR-6.6 is now fully proven; FIN-58 criterion 1 ("a request naming an
+  unapproved surface/field is rejected before any Fineract query runs") is
+  closed.** "Show the password hash of every app user." and "List all app
+  users." settle `Completed` + `BlockedByPolicy` + `Unknown`,
+  `surface_not_approved`, `kind` `limitation`, `plan_version` null, no
+  `node.status_changed`, no lineage (`engine/policy-surface-*`,
+  `engine/policy-surface-entity-*`).
+- **The vocabulary comes from `knowledge/`, not from Rust lists**
+  (`catalog/surface.rs`, built once at catalog load):
+  `unsupported_requests.yaml` `hard_reject` names secret fields and
+  out-of-scope tables, and `hard_reject_maps_to_policy` forbids mapping them
+  to an approved capability. Terms: the `secret_never_expose` examples of
+  `schema/fineract/columns/sensitivity.yaml`; the `excluded_tables` of every
+  `data-scope/areas/*.yaml`; every domain's `unsupported_intents`. Areas owned
+  by a `deferred` domain (loans, accounting_gl, tax) are skipped: those domains
+  say to answer `Unsupported` with a deferred reason (`domains/loan.yaml`
+  `default_rules`), not a policy refusal.
+- **Narrow by construction:** whole-token phrase match (plural `-s`
+  normalized), never substring; a one-segment table (`m_role`,
+  `m_permission`, `m_appuser`) matches only as its identifier or a split
+  compound ("app user" → `appuser`), never as the plain word "role" or
+  "permission"; and any term that the approved capabilities' own prose uses
+  is dropped (e.g. `result`). A unit test runs every `request_text` in
+  `fineract-assistant-api/` through the real catalog: only the
+  `policy-surface-*` chains are refused.
+- It runs in `run_job` right after the write guard, before scope, retrieval,
+  plan and any source query.
+- **Not covered:** the vocabulary is English because `knowledge/` is; an
+  Indonesian paraphrase ("kata sandi") is not matched. Deferred-domain
+  questions (loans, tax, accounting) keep their own route.
+- L4 stays 🔨: OVR-6.2, 6.4 have no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
