@@ -582,6 +582,60 @@ Update after FIN-139 (OVR-6.6 unapproved surface):
   questions (loans, tax, accounting) keep their own route.
 - L4 stays 🔨: OVR-6.2, 6.4 have no test.
 
+Update after FIN-56 (OVR-6.4):
+
+- **Found (by reading the code, then fixed):** lease-loss recovery requeued
+  the job but never touched the node ledger. The node run was never `Running`
+  (T3 wrote `Runnable`, T4 wrote the terminal status directly), so no attempt
+  could ever become `Abandoned`; `attempt` was hard-coded to 1; the re-claimed
+  worker re-inserted plan version 1 and failed on `job_plans_version_uniq`;
+  and because `process` returned that error before cancelling the heartbeat,
+  the orphaned heartbeat kept the lease alive, so the reaper never saw the job
+  again and it sat `Running` until the 30-minute TTL expired it.
+- **Now (engine.md "Recovery attempt tak pasti"):** the worker admits the
+  attempt (`Runnable` → `Running`, fenced) right before the source query. The
+  reaper (T11) locks each job whose lease expired while `Running`, marks its
+  `Running` attempt `Abandoned` (`completeness` `Unknown`, no `failure_code`,
+  event `node.status_changed` + audit `node.abandoned`), inserts attempt + 1
+  `Runnable`, requeues the job and announces the retry on `job.notice`
+  (`retry: [{node_id, attempt}]`). The re-claimed worker re-verifies the plan
+  and **adopts** the stored plan version when graph and contract/catalog are
+  identical (`plan.adopted`); if they differ it refuses to run the node
+  (`plan_changed_on_recovery`, D4 — re-plan does not exist yet). An attempt
+  that ends `Abandoned` still counts toward `query_count` (budget absolute
+  across attempts, K9). If the lease was lost after T4 but before T7, the node
+  is already `Completed`; it is not rerun ("persisted completed outputs are not
+  rerun") and output reuse does not exist, so the re-claimed worker settles
+  `completed_node_not_rerun` instead of requeueing forever.
+- **Bound (`NODE_ATTEMPT_CAP`, now read by config, default 3):** once attempt
+  3 is `Abandoned` the reaper does not retry again; the job settles `Failed` +
+  `OperationalFailure` + `Unknown` with `failure_code`/reason
+  `node_attempt_cap_reached` and a `limitation` response that says the outcome
+  is unknown, not zero. Three attempts follows runtime.md §1 ("Tiga = percobaan
+  awal + dua pemulihan", and its revision trigger names "attempt 3"). engine.md
+  step (4) writes the condition as `attempt + 1 < NODE_ATTEMPT_CAP`, which with
+  1-based attempts (`migration/carry-over.md` #2: "attempt (mulai 1)") would
+  allow only two — the owner should reconcile the formula in a `docs:` commit.
+- **OVR-6.4 is proven at the HTTP surface** by two new stages. The
+  owner-approved seam pattern (FIN-44/FIN-46) gives
+  `LOCAL_CRASH_AFTER_EXTERNAL_CALL=<n>` (honoured only when `APP_ENV=local`;
+  startup fails elsewhere or at 0): the first `n` source calls of the process
+  are abandoned right after the query returns and before T4 — heartbeat
+  stopped, nothing written — as if the worker died there. The stages run with
+  lease 6 s / heartbeat 2 s / reaper 2 s. `crash-recovery` (n = 1): replay shows
+  attempt 1 `Abandoned`, then the retry notice, then attempt 2 `Completed`, one
+  `job.completed`; the job is `Completed`/`Answered` on plan version 1 with no
+  `failure_code`. `crash-exhausted` (n = 3): attempts 1–3 `Abandoned`, exactly
+  two retries, no attempt 4, one `job.failed` `node_attempt_cap_reached`.
+- Not proven by a test: the `completed_node_not_rerun` and
+  `plan_changed_on_recovery` branches (no seam reaches them). Still open: a
+  worker **error** (not a crash) returns before the heartbeat is cancelled, so
+  the lease stays alive until the TTL expires the job; a crash **before**
+  admission requeues without a bound because every claim recomputes
+  `expires_at` (K3); and `Running` attempts of jobs settled `Expired` or
+  `Cancelled` by the reaper stay `Running` in the ledger.
+- L4 stays 🔨: OVR-6.2 has no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -590,19 +644,19 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **35 of 59 scenarios have a test**:
+Latest run — **36 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 5 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **35** | |
+| | **Total** | **59** | **36** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

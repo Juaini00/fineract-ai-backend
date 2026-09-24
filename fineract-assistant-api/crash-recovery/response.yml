@@ -1,0 +1,28 @@
+info:
+  name: attempt pemulihan menjawab
+  type: http
+  seq: 4
+  description: |
+    Response baru ada sesudah reaper menandai attempt 1 `Abandoned` dan worker
+    menjalankan attempt 2 — polling sampai durable (batas waktu, bukan jumlah).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("OVR-6.4: attempt pemulihan menghasilkan jawaban tervalidasi, bukan kegagalan", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("analysis");
+            expect(document.outcome).to.equal("Answered");
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+        }

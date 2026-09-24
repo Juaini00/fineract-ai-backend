@@ -1,0 +1,24 @@
+info:
+  name: snapshot job sesudah recovery
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.4: crash sesudah query tidak membuat job Failed — Completed/Answered pada plan yang sama", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.failure_code).to.equal(null);
+          // Recovery mengulang node di plan yang SAMA; tidak ada plan kedua.
+          expect(job.plan_version).to.equal(1);
+        });
+        bru.setVar("crashLastSequence", job.last_event_sequence);

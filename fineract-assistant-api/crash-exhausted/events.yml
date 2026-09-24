@@ -1,0 +1,51 @@
+info:
+  name: replay menyatakan setiap attempt tak pasti dan batasnya
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{exhaustedJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{exhaustedToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = String(res.getBody())
+          .split("\n")
+          .filter(function (line) { return line.startsWith("data: "); })
+          .map(function (line) { return JSON.parse(line.slice(6)); });
+        const names = events.map(function (event) { return event.event; });
+        const nodes = events.filter(function (event) { return event.event === "node.status_changed"; });
+        const notices = events.filter(function (event) { return event.event === "job.notice"; });
+
+        test("OVR-6.4: replay utuh 1..last_event_sequence", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("exhaustedLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.4: setiap attempt yang terputus Abandoned — tidak satu pun disimpulkan Failed atau Completed", function () {
+          expect(nodes.map(function (event) { return [event.node_attempt, event.status]; }))
+            .to.deep.equal([[1, "Abandoned"], [2, "Abandoned"], [3, "Abandoned"]]);
+          nodes.forEach(function (event) {
+            expect(event.node_id).to.equal("main");
+            expect(event.plan_version).to.equal(1);
+          });
+        });
+
+        test("OVR-6.4: retry bounded — tepat dua pemulihan, tidak ada attempt ke-4 (NODE_ATTEMPT_CAP = 3)", function () {
+          expect(notices.map(function (event) { return event.retry; }))
+            .to.deep.equal([[{ node_id: "main", attempt: 2 }], [{ node_id: "main", attempt: 3 }]]);
+          nodes.forEach(function (event) { expect(event.node_attempt).to.be.at.most(3); });
+        });
+
+        test("OVR-6.4: berakhir tepat sekali di job.failed dengan alasan yang dinyatakan", function () {
+          const terminal = events[events.length - 1];
+          expect(terminal.event).to.equal("job.failed");
+          expect(terminal.failure_code).to.equal("node_attempt_cap_reached");
+          expect(terminal.response_version).to.equal(1);
+          expect(names).to.not.include("job.completed");
+          expect(names.filter(function (n) { return n === "job.failed"; })).to.have.lengthOf(1);
+        });

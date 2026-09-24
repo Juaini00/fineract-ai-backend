@@ -1,0 +1,33 @@
+info:
+  name: cap tercapai menyatakan ketidakpastian
+  type: http
+  seq: 4
+  description: |
+    Tiga attempt tak pasti ≈ tiga siklus lease + reaper; polling sampai
+    response durable.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{exhaustedJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{exhaustedToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("OVR-6.4: cap tercapai → limitation OperationalFailure/Unknown, bukan jawaban", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("limitation");
+            expect(document.outcome).to.equal("OperationalFailure");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.completeness_reason).to.equal("node_attempt_cap_reached");
+            expect(document.blocks_json).to.have.lengthOf(1);
+            expect(document.blocks_json[0].block_id).to.equal("node_attempt_cap_reached");
+            expect(document.blocks_json[0].type).to.equal("limitation");
+            // Tidak pasti ≠ nol: tidak ada angka yang dilaporkan.
+            expect(document.blocks_json[0].body).to.contain("unknown");
+          });
+        }

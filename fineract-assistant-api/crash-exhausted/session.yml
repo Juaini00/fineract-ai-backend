@@ -1,0 +1,22 @@
+info:
+  name: session untuk attempt yang habis
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{exhaustedToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-56 attempts exhausted" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("exhaustedSession", res.getBody().data.id);

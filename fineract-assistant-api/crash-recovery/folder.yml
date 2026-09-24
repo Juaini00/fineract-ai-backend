@@ -1,0 +1,15 @@
+info:
+  name: crash-recovery
+  seq: 14
+  description: |
+    OVR-6.4 (FIN-56) — crash setelah external call: query sumber sudah kembali
+    tetapi T4 belum commit. Recovery memperlakukan outcome attempt itu sebagai
+    tidak pasti (`Abandoned`, bukan `Failed`), lalu mengulang logical node yang
+    sama sebagai attempt baru dalam batas `NODE_ATTEMPT_CAP`.
+
+    Runner menyalakan worker dengan seam lokal
+    `LOCAL_CRASH_AFTER_EXTERNAL_CALL=1` (hanya sah di APP_ENV=local; pola
+    FIN-44/FIN-46): panggilan sumber PERTAMA proses ini ditinggalkan tepat
+    sesudah query kembali — heartbeat berhenti, tidak ada yang ditulis — seperti
+    worker yang mati di titik itu. Lease diperpendek (6 s) supaya reaper
+    menemukannya dalam hitungan detik, bukan satu menit.

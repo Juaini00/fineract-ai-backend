@@ -1,0 +1,25 @@
+info:
+  name: snapshot job sesudah cap tercapai
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{exhaustedJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{exhaustedToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.4: retry bounded — cap menutup job Failed/OperationalFailure/Unknown, tidak pernah Completed", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Failed");
+          expect(job.outcome).to.equal("OperationalFailure");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.failure_code).to.equal("node_attempt_cap_reached");
+          expect(job.terminal_at).to.not.equal(null);
+          expect(job.plan_version).to.equal(1);
+        });
+        bru.setVar("exhaustedLastSequence", job.last_event_sequence);

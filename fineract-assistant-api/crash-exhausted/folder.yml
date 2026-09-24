@@ -1,0 +1,11 @@
+info:
+  name: crash-exhausted
+  seq: 15
+  description: |
+    OVR-6.4 (FIN-56) — sisi "bounded" retry policy. Runner menyalakan worker
+    dengan `LOCAL_CRASH_AFTER_EXTERNAL_CALL=3` (= `NODE_ATTEMPT_CAP`, runtime.md
+    §1): setiap attempt ditinggalkan sesudah query kembali. Sesudah attempt ke-3
+    `Abandoned`, reaper TIDAK mengulang lagi; job ditutup `Failed` +
+    `OperationalFailure` + `Unknown` dengan alasan yang dinyatakan (engine.md
+    "Recovery attempt tak pasti" langkah 5) — tidak pernah `Completed`, tidak
+    pernah berputar tanpa batas.

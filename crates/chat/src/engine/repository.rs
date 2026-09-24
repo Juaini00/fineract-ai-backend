@@ -591,6 +591,9 @@ pub async fn settle_cancelled(
 pub struct ReaperSweep {
     pub expired: u64,
     pub requeued: u64,
+    /// Job yang attempt tak pastinya mencapai `NODE_ATTEMPT_CAP` dan karena
+    /// itu ditutup `Failed`, bukan diulang lagi.
+    pub exhausted: u64,
     pub cancelled: u64,
 }
 
@@ -600,20 +603,35 @@ impl ReaperSweep {
     }
 }
 
+/// `failure_code` job yang attempt tak pastinya habis (engine.md "Recovery
+/// attempt tak pasti" langkah 5).
+pub const NODE_ATTEMPT_CAP_REACHED: &str = "node_attempt_cap_reached";
+
 /// T11 — satu putaran recovery.
 ///
 /// Urutannya penting: kedaluwarsa diperiksa **sebelum** requeue, supaya job
-/// yang selalu mematikan worker-nya tidak berputar selamanya. Batasnya adalah
-/// `expires_at` yang ditetapkan saat klaim.
-pub async fn sweep(pool: &PgPool, worker: &str) -> sqlx::Result<ReaperSweep> {
+/// yang selalu mematikan worker-nya tidak berputar selamanya. Attempt yang
+/// sudah menyentuh sumber dibatasi `node_attempt_cap`; TTL (`expires_at`)
+/// tetap jaring terakhir untuk sisanya.
+///
+/// `exhausted` adalah response yang disajikan saat cap tercapai. Ia disusun
+/// pemanggil karena komposisi blok bukan urusan repository.
+pub async fn sweep(
+    pool: &PgPool,
+    worker: &str,
+    node_attempt_cap: i32,
+    exhausted: &SettledResponse,
+) -> sqlx::Result<ReaperSweep> {
     // Urutan ini bukan gaya penulisan: kedaluwarsa dulu, baru requeue.
     let expired = settle_expired(pool, worker).await?;
     let cancelled = settle_abandoned_cancelling(pool, worker).await?;
-    let requeued = requeue_lost_leases(pool, worker).await?;
+    let (requeued, exhausted) =
+        recover_lost_leases(pool, worker, node_attempt_cap, exhausted).await?;
 
     Ok(ReaperSweep {
         expired,
         requeued,
+        exhausted,
         cancelled,
     })
 }
@@ -681,42 +699,237 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
     Ok(jobs.len() as u64)
 }
 
-async fn requeue_lost_leases(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
+/// Attempt yang ditandai `Abandoned` oleh reaper.
+#[derive(Debug, FromRow)]
+struct AbandonedAttempt {
+    plan_version: i32,
+    node_id: String,
+    node_kind: String,
+    attempt: i32,
+}
+
+/// Lease hilang saat `Running` (engine.md, "Recovery attempt tak pasti").
+///
+/// Hasil external call yang mungkin sudah berjalan TIDAK DIKETAHUI (I4) —
+/// bukan gagal, bukan sukses. Attempt `Running` ditutup `Abandoned`, lalu
+/// logical node mendapat attempt baru selama cap belum tercapai; baris attempt
+/// lama tidak pernah dibuka lagi. Job tanpa attempt `Running` (lease hilang
+/// sebelum admisi) dikembalikan ke antrean tanpa menyimpulkan apa pun.
+/// `expires_at` sengaja dibiarkan: TTL tetap membatasi seluruh percobaan.
+async fn recover_lost_leases(
+    pool: &PgPool,
+    worker: &str,
+    node_attempt_cap: i32,
+    exhausted: &SettledResponse,
+) -> sqlx::Result<(u64, u64)> {
     let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
-    // Lease hilang saat `Running`: hasil eksekusi eksternalnya TIDAK DIKETAHUI
-    // (I4) — bukan gagal, bukan sukses. Job dikembalikan ke antrean dengan
-    // lease dikosongkan; `expires_at` sengaja dibiarkan apa adanya supaya
-    // percobaan ulang tetap terbatas oleh TTL yang sama.
+    // (1) Kunci job dan pastikan lease MASIH kedaluwarsa di bawah kunci itu:
+    // renewal yang commit lebih dulu membuat job tidak terpilih, dan renewal
+    // yang datang sesudahnya menemukan token yang sudah dikosongkan.
     let jobs = sqlx::query_as::<_, (Uuid, Uuid)>(
-        "UPDATE chat_jobs
-         SET lifecycle = 'Queued',
-             lease_owner = NULL,
-             lease_token = NULL,
-             lease_expires_at = NULL,
-             updated_at = now()
+        "SELECT id, session_id FROM chat_jobs
          WHERE lifecycle = 'Running'
            AND lease_expires_at IS NOT NULL
            AND lease_expires_at < now()
-         RETURNING id, session_id",
+         FOR UPDATE SKIP LOCKED",
     )
     .fetch_all(&mut *tx)
     .await?;
 
-    for (job_id, session_id) in &jobs {
-        finish_sweep_row(
+    let (mut requeued, mut exhausted_jobs) = (0, 0);
+
+    for (job_id, session_id) in jobs {
+        // (2)+(3) `Running` → `Abandoned`, tanpa menyimpulkan hasilnya.
+        let abandoned = abandon_running_attempts(&mut tx, job_id, session_id, worker).await?;
+        // Budget absolut lintas attempt (K9): query yang mungkin sudah
+        // berjalan tetap memakai kuota, walau hasilnya tidak pernah durable.
+        let spent = abandoned.len() as i32;
+
+        // (5) Cap tercapai: selesaikan menurut fail-policy, jangan ulang lagi.
+        if abandoned
+            .iter()
+            .any(|attempt| attempt.attempt >= node_attempt_cap)
+        {
+            settle_attempts_exhausted(&mut tx, job_id, session_id, worker, spent, exhausted)
+                .await?;
+            exhausted_jobs += 1;
+            continue;
+        }
+
+        // (4) Logical node masih diperlukan: attempt baru. Plan satu node
+        // tidak punya fan-in, jadi attempt itu langsung `Runnable`.
+        let mut retry = Vec::with_capacity(abandoned.len());
+        for attempt in &abandoned {
+            sqlx::query(
+                "INSERT INTO job_node_runs
+                    (job_id, plan_version, node_id, node_kind, attempt, status)
+                 VALUES ($1, $2, $3, $4, $5, 'Runnable')",
+            )
+            .bind(job_id)
+            .bind(attempt.plan_version)
+            .bind(&attempt.node_id)
+            .bind(&attempt.node_kind)
+            .bind(attempt.attempt + 1)
+            .execute(&mut *tx)
+            .await?;
+            retry.push(serde_json::json!({
+                "node_id": attempt.node_id,
+                "attempt": attempt.attempt + 1,
+            }));
+        }
+
+        sqlx::query(
+            "UPDATE chat_jobs
+             SET lifecycle = 'Queued',
+                 lease_owner = NULL,
+                 lease_token = NULL,
+                 lease_expires_at = NULL,
+                 query_count = query_count + $2,
+                 updated_at = now()
+             WHERE id = $1",
+        )
+        .bind(job_id)
+        .bind(spent)
+        .execute(&mut *tx)
+        .await?;
+
+        // `job.notice` = retry (sse.md). `retry` hanya ada bila ada attempt
+        // yang diulang; lease yang hilang sebelum admisi tidak mengulang apa pun.
+        let mut notice = serde_json::json!({ "by": "reaper" });
+        if !retry.is_empty() {
+            notice["retry"] = Value::Array(retry.clone());
+        }
+        append_event(&mut tx, job_id, "job.notice", Some(notice)).await?;
+
+        audit::insert(
             &mut tx,
-            *job_id,
-            *session_id,
-            worker,
-            "job.notice",
-            "job.lease_lost",
+            AuditEvent {
+                actor_kind: "reaper",
+                job_id: Some(job_id),
+                session_id: Some(session_id),
+                stage: "settle",
+                action: "job.lease_lost",
+                result: "ok",
+                detail_json: Some(serde_json::json!({ "reaper": worker, "retry": retry })),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        requeued += 1;
+    }
+
+    tx.commit().await?;
+    Ok((requeued, exhausted_jobs))
+}
+
+/// Tutup setiap attempt `Running` job ini sebagai `Abandoned` + event + audit.
+///
+/// `completeness = 'Unknown'`: hasilnya tidak diketahui, bukan nol dan bukan
+/// gagal. `failure_code` sengaja kosong — tidak ada kegagalan yang diketahui.
+async fn abandon_running_attempts(
+    tx: &mut Transaction<'_, Postgres>,
+    job_id: Uuid,
+    session_id: Uuid,
+    worker: &str,
+) -> sqlx::Result<Vec<AbandonedAttempt>> {
+    let abandoned = sqlx::query_as::<_, AbandonedAttempt>(
+        "UPDATE job_node_runs
+         SET status = 'Abandoned', completeness = 'Unknown', finished_at = now()
+         WHERE job_id = $1 AND status = 'Running'
+         RETURNING plan_version, node_id, node_kind, attempt",
+    )
+    .bind(job_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    for attempt in &abandoned {
+        append_event_ref(
+            tx,
+            job_id,
+            "node.status_changed",
+            EventRef {
+                plan_version: Some(attempt.plan_version),
+                node_id: Some(&attempt.node_id),
+                node_attempt: Some(attempt.attempt),
+                ..Default::default()
+            },
+            Some(serde_json::json!({ "status": "Abandoned" })),
+        )
+        .await?;
+
+        audit::insert(
+            tx,
+            AuditEvent {
+                actor_kind: "reaper",
+                job_id: Some(job_id),
+                session_id: Some(session_id),
+                stage: "node_execute",
+                action: "node.abandoned",
+                result: "ok",
+                detail_json: Some(serde_json::json!({
+                    "reaper": worker,
+                    "plan_version": attempt.plan_version,
+                    "node_id": attempt.node_id,
+                    "attempt": attempt.attempt,
+                })),
+                ..Default::default()
+            },
         )
         .await?;
     }
 
-    tx.commit().await?;
-    Ok(jobs.len() as u64)
+    Ok(abandoned)
+}
+
+/// Cap attempt tak pasti tercapai: `Failed` + `OperationalFailure` +
+/// `Unknown` (engine.md: satu-satunya pasangan sah untuk `Failed`), dengan
+/// response `limitation` yang sama bentuknya dengan kegagalan operasional
+/// worker. Tidak pernah `Completed`: tidak ada hasil yang durable.
+async fn settle_attempts_exhausted(
+    tx: &mut Transaction<'_, Postgres>,
+    job_id: Uuid,
+    session_id: Uuid,
+    worker: &str,
+    spent: i32,
+    response: &SettledResponse,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE chat_jobs
+         SET lifecycle = 'Failed',
+             outcome = 'OperationalFailure',
+             completeness = $3,
+             completeness_reason = $4,
+             failure_code = $5,
+             final_response_version = $6,
+             terminal_at = now(),
+             expires_at = NULL,
+             lease_owner = NULL,
+             lease_token = NULL,
+             lease_expires_at = NULL,
+             query_count = query_count + $2,
+             updated_at = now()
+         WHERE id = $1",
+    )
+    .bind(job_id)
+    .bind(spent)
+    .bind(response.completeness)
+    .bind(&response.completeness_reason)
+    .bind(NODE_ATTEMPT_CAP_REACHED)
+    .bind(FAILED_RESPONSE_VERSION)
+    .execute(&mut **tx)
+    .await?;
+
+    record_failure(
+        tx,
+        job_id,
+        session_id,
+        FailureActor::Reaper(worker),
+        NODE_ATTEMPT_CAP_REACHED,
+        response,
+    )
+    .await
 }
 
 async fn finish_sweep_row(
@@ -782,12 +995,35 @@ pub async fn find_response(
     .await
 }
 
+/// Hasil T3 bagi worker.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PlanPersisted {
+    /// Fencing kalah; tidak ada yang ditulis.
+    Fenced,
+    /// Plan baru beserta attempt pertamanya ditulis.
+    Persisted,
+    /// Versi plan ini sudah durable dari klaim sebelumnya (job dikembalikan
+    /// ke antrean oleh reaper, T11) dan verifikasi ulang menghasilkan plan
+    /// yang identik: attempt yang sudah ada di ledger yang dijalankan, bukan
+    /// plan kedua dengan versi yang sama.
+    Adopted,
+    /// Versi plan ini sudah durable, tetapi verifikasi ulang menghasilkan
+    /// graph atau kontrak/katalog lain. Node tidak boleh berjalan di bawah plan
+    /// yang bukan miliknya (D4), dan re-plan ke `plan_version` baru belum ada.
+    Changed,
+}
+
 /// T3 — plan terverifikasi dipersist.
 ///
 /// `contract_versions_json` menyimpan `catalog_version_id` + `content_hash`,
 /// bukan teks versi: di sistem lama kolom versi literal selalu berisi "local",
 /// dan investigasi "prosa kontrak mana yang dilihat planner" karena itu tidak
 /// pernah terjawab (migrasi 3).
+///
+/// Job yang diklaim ulang sesudah lease hilang sudah punya plan versi ini.
+/// Menulisnya kedua kali melanggar UNIQUE `(job_id, plan_version)`; menimpanya
+/// menghapus bukti plan mana yang dipakai attempt sebelumnya. Karena itu plan
+/// yang baru diverifikasi hanya DIADOPSI bila identik ([`PlanPersisted`]).
 pub async fn persist_plan(
     pool: &PgPool,
     job_id: Uuid,
@@ -798,7 +1034,7 @@ pub async fn persist_plan(
     graph_hash: &str,
     contract_versions: &Value,
     capability_id: &str,
-) -> sqlx::Result<bool> {
+) -> sqlx::Result<PlanPersisted> {
     let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let updated = sqlx::query(
@@ -814,31 +1050,53 @@ pub async fn persist_plan(
 
     if updated == 0 {
         tx.rollback().await?;
-        return Ok(false);
+        return Ok(PlanPersisted::Fenced);
     }
 
-    sqlx::query(
-        "INSERT INTO job_plans
-            (job_id, plan_version, graph_json, graph_hash, contract_versions_json, verified_at)
-         VALUES ($1, $2, $3, $4, $5, now())",
+    let existing = sqlx::query_scalar::<_, bool>(
+        "SELECT graph_hash = $3 AND contract_versions_json = $4
+         FROM job_plans WHERE job_id = $1 AND plan_version = $2",
     )
     .bind(job_id)
     .bind(plan_version)
-    .bind(graph_json)
     .bind(graph_hash)
     .bind(contract_versions)
-    .execute(&mut *tx)
+    .fetch_optional(&mut *tx)
     .await?;
 
-    sqlx::query(
-        "INSERT INTO job_node_runs
-            (job_id, plan_version, node_id, node_kind, attempt, status, started_at)
-         VALUES ($1, $2, 'main', 'CuratedQuery', 1, 'Runnable', now())",
-    )
-    .bind(job_id)
-    .bind(plan_version)
-    .execute(&mut *tx)
-    .await?;
+    let persisted = match existing {
+        Some(true) => PlanPersisted::Adopted,
+        Some(false) => {
+            tx.rollback().await?;
+            return Ok(PlanPersisted::Changed);
+        }
+        None => {
+            sqlx::query(
+                "INSERT INTO job_plans
+                    (job_id, plan_version, graph_json, graph_hash, contract_versions_json, verified_at)
+                 VALUES ($1, $2, $3, $4, $5, now())",
+            )
+            .bind(job_id)
+            .bind(plan_version)
+            .bind(graph_json)
+            .bind(graph_hash)
+            .bind(contract_versions)
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query(
+                "INSERT INTO job_node_runs
+                    (job_id, plan_version, node_id, node_kind, attempt, status, started_at)
+                 VALUES ($1, $2, 'main', 'CuratedQuery', 1, 'Runnable', now())",
+            )
+            .bind(job_id)
+            .bind(plan_version)
+            .execute(&mut *tx)
+            .await?;
+
+            PlanPersisted::Persisted
+        }
+    };
 
     append_event_ref(
         &mut tx,
@@ -856,7 +1114,11 @@ pub async fn persist_plan(
             job_id: Some(job_id),
             session_id: Some(session_id),
             stage: "plan_verify",
-            action: "plan.persisted",
+            action: if persisted == PlanPersisted::Adopted {
+                "plan.adopted"
+            } else {
+                "plan.persisted"
+            },
             result: "ok",
             detail_json: Some(serde_json::json!({
                 "plan_version": plan_version,
@@ -869,7 +1131,60 @@ pub async fn persist_plan(
     .await?;
 
     tx.commit().await?;
-    Ok(true)
+    Ok(persisted)
+}
+
+/// Hasil admisi node.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Admission {
+    /// Attempt ini sekarang `Running`.
+    Admitted(i32),
+    /// Fencing kalah; tidak ada yang ditulis.
+    Fenced,
+    /// Lease masih milik worker ini, tetapi tidak ada attempt `Runnable`:
+    /// node sudah `Completed` oleh attempt sebelumnya (lease hilang sesudah
+    /// T4, sebelum T7).
+    NothingRunnable,
+}
+
+/// Admisi node: attempt `Runnable` menjadi `Running` TEPAT sebelum external
+/// call dikirim.
+///
+/// Inilah yang membuat ketidakpastian dapat dinyatakan (I4): reaper hanya
+/// menandai `Abandoned` attempt yang `Running` — yang mungkin sudah menyentuh
+/// sumber. Attempt yang belum diadmisikan tetap `Runnable`; ia tidak pernah
+/// berjalan, jadi tidak ada yang tidak pasti tentangnya.
+pub async fn admit_node(
+    pool: &PgPool,
+    job_id: Uuid,
+    lease_token: Uuid,
+    plan_version: i32,
+) -> sqlx::Result<Admission> {
+    // Satu statement: pemeriksaan pagar dan admisi melihat snapshot yang sama.
+    let (held, attempt) = sqlx::query_as::<_, (bool, Option<i32>)>(
+        "WITH held AS (
+             SELECT id FROM chat_jobs
+             WHERE id = $1 AND lease_token = $3 AND lifecycle = 'Running'
+         ), admitted AS (
+             UPDATE job_node_runs
+             SET status = 'Running', started_at = now()
+             WHERE job_id IN (SELECT id FROM held)
+               AND plan_version = $2 AND node_id = 'main' AND status = 'Runnable'
+             RETURNING attempt
+         )
+         SELECT EXISTS (SELECT 1 FROM held), (SELECT attempt FROM admitted)",
+    )
+    .bind(job_id)
+    .bind(plan_version)
+    .bind(lease_token)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(match (held, attempt) {
+        (_, Some(attempt)) => Admission::Admitted(attempt),
+        (false, None) => Admission::Fenced,
+        (true, None) => Admission::NothingRunnable,
+    })
 }
 
 /// Hasil satu node yang akan dipersist lewat T4.
@@ -910,6 +1225,7 @@ pub async fn complete_node(
     session_id: Uuid,
     lease_token: Uuid,
     plan_version: i32,
+    attempt: i32,
     outcome: NodeOutcome<'_>,
 ) -> sqlx::Result<Option<Uuid>> {
     let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
@@ -927,7 +1243,10 @@ pub async fn complete_node(
              input_binding_json = $11,
              input_binding_hash = $12,
              finished_at = now()
-         WHERE job_id = $1 AND plan_version = $2 AND node_id = 'main' AND attempt = 1
+         -- Hanya attempt yang diadmisikan proses ini dan masih `Running`:
+         -- attempt terminal (mis. `Abandoned` oleh reaper) tidak dibuka lagi.
+         WHERE job_id = $1 AND plan_version = $2 AND node_id = 'main'
+           AND attempt = $14 AND status = 'Running'
            AND EXISTS (
                SELECT 1 FROM chat_jobs
                WHERE id = $1 AND lease_token = $3 AND lifecycle = 'Running'
@@ -952,6 +1271,7 @@ pub async fn complete_node(
         outcome.input_binding_json.to_string().as_bytes(),
     )))
     .bind(outcome.completeness_reason)
+    .bind(attempt)
     .fetch_optional(&mut *tx)
     .await?;
 
@@ -961,7 +1281,9 @@ pub async fn complete_node(
     };
 
     // Budget dihitung pada baris job, bukan disimpulkan dari jumlah baris
-    // ledger: attempt yang Abandoned tetap memakai kuota.
+    // ledger. Attempt yang `Abandoned` tidak pernah sampai ke sini; kuotanya
+    // dicatat reaper saat menandainya (T11), karena query-nya mungkin sudah
+    // berjalan.
     sqlx::query(
         "UPDATE chat_jobs SET query_count = query_count + 1, updated_at = now() WHERE id = $1",
     )
@@ -976,7 +1298,7 @@ pub async fn complete_node(
         EventRef {
             plan_version: Some(plan_version),
             node_id: Some("main"),
-            node_attempt: Some(1),
+            node_attempt: Some(attempt),
             ..Default::default()
         },
         Some(serde_json::json!({
@@ -1006,6 +1328,16 @@ pub async fn complete_node(
     Ok(Some(node_run_id))
 }
 
+/// Versi response kegagalan operasional: tidak ada validator, jadi tidak ada
+/// versi yang ditolak mendahuluinya.
+const FAILED_RESPONSE_VERSION: i32 = 1;
+
+/// Siapa yang memindahkan job ke `Failed` — menentukan baris audit-nya.
+enum FailureActor<'a> {
+    Worker,
+    Reaper(&'a str),
+}
+
 /// Selesaikan job sebagai kegagalan operasional (T7 jalur gagal).
 pub async fn settle_failed(
     pool: &PgPool,
@@ -1016,8 +1348,6 @@ pub async fn settle_failed(
     response: SettledResponse,
 ) -> sqlx::Result<bool> {
     let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
-
-    const RESPONSE_VERSION: i32 = 1;
 
     let updated = sqlx::query(
         "UPDATE chat_jobs
@@ -1040,7 +1370,7 @@ pub async fn settle_failed(
     .bind(failure_code)
     .bind(response.completeness)
     .bind(&response.completeness_reason)
-    .bind(RESPONSE_VERSION)
+    .bind(FAILED_RESPONSE_VERSION)
     .execute(&mut *tx)
     .await?
     .rows_affected();
@@ -1050,6 +1380,30 @@ pub async fn settle_failed(
         return Ok(false);
     }
 
+    record_failure(
+        &mut tx,
+        job_id,
+        session_id,
+        FailureActor::Worker,
+        failure_code,
+        &response,
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Sisa T7 jalur gagal sesudah job dipindahkan ke `Failed` pada transaksi
+/// yang sama: response, pesan assistant, event terminal, dan audit.
+async fn record_failure(
+    tx: &mut Transaction<'_, Postgres>,
+    job_id: Uuid,
+    session_id: Uuid,
+    actor: FailureActor<'_>,
+    failure_code: &str,
+    response: &SettledResponse,
+) -> sqlx::Result<()> {
     // Response tetap ditulis: pengguna berhak tahu APA yang gagal, dan
     // investigasi berhak melihat dokumen yang dilihat pengguna.
     sqlx::query(
@@ -1059,14 +1413,14 @@ pub async fn settle_failed(
          VALUES ($1, $2, $3, 'OperationalFailure', $4, $5, $6, $7, 'passed', $8, now())",
     )
     .bind(job_id)
-    .bind(RESPONSE_VERSION)
+    .bind(FAILED_RESPONSE_VERSION)
     .bind(response.kind)
     .bind(response.completeness)
     .bind(&response.completeness_reason)
     .bind(&response.blocks)
     .bind(&response.evidence)
     .bind(&response.response_hash)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await?;
 
     sqlx::query(
@@ -1075,38 +1429,48 @@ pub async fn settle_failed(
     )
     .bind(session_id)
     .bind(job_id)
-    .bind(RESPONSE_VERSION)
-    .execute(&mut *tx)
+    .bind(FAILED_RESPONSE_VERSION)
+    .execute(&mut **tx)
     .await?;
 
     append_event_ref(
-        &mut tx,
+        tx,
         job_id,
         "job.failed",
-        EventRef { response_version: Some(RESPONSE_VERSION), ..Default::default() },
+        EventRef {
+            response_version: Some(FAILED_RESPONSE_VERSION),
+            ..Default::default()
+        },
         Some(serde_json::json!({ "failure_code": failure_code })),
     )
     .await?;
 
+    let (actor_kind, stage, detail_json) = match actor {
+        FailureActor::Worker => ("worker", "commit", None),
+        FailureActor::Reaper(reaper) => (
+            "reaper",
+            "settle",
+            Some(serde_json::json!({ "reaper": reaper })),
+        ),
+    };
+
     audit::insert(
-        &mut tx,
+        tx,
         AuditEvent {
-            actor_kind: "worker",
+            actor_kind,
             job_id: Some(job_id),
             session_id: Some(session_id),
-            stage: "commit",
+            stage,
             action: "job.failed",
             result: "failed",
             failure_code: Some(failure_code),
             job_outcome: Some("OperationalFailure"),
             job_completeness: Some(response.completeness),
+            detail_json,
             ..Default::default()
         },
     )
-    .await?;
-
-    tx.commit().await?;
-    Ok(true)
+    .await
 }
 
 /// Id versi katalog yang tercatat untuk sebuah `content_hash`.

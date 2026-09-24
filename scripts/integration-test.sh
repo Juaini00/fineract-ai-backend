@@ -27,7 +27,12 @@
 #      port yang tidak mendengarkan: Redis diaktifkan tetapi tidak terjangkau.
 #      Job wajib tetap selesai, event pulih dari PostgreSQL, dan klien yang
 #      memutus stream tidak membatalkan job.
-#   7. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
+#   7. `crash-recovery` dan `crash-exhausted` (FIN-56, OVR-6.4) menjalankan
+#      worker dengan seam lokal LOCAL_CRASH_AFTER_EXTERNAL_CALL: N panggilan
+#      sumber pertama ditinggalkan sesudah query kembali dan sebelum T4 —
+#      seperti worker yang mati di titik itu. Satu crash harus pulih lewat
+#      attempt baru; crash sebanyak NODE_ATTEMPT_CAP harus berhenti di cap.
+#   8. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
 #
@@ -72,6 +77,13 @@ if [ -n "${LOCAL_DATASET_MAX_ROWS+x}" ]; then
     exit 1
 fi
 
+# Seam crash (FIN-56) sama: hanya milik tahap crash-*. Terbaca di tahap lain,
+# ia diam-diam membuang hasil query pertama setiap app yang dinyalakan.
+if [ -n "${LOCAL_CRASH_AFTER_EXTERNAL_CALL+x}" ]; then
+    echo "LOCAL_CRASH_AFTER_EXTERNAL_CALL tidak boleh di-set di .env/environment; runner menyetelnya hanya untuk tahap crash-*" >&2
+    exit 1
+fi
+
 if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
@@ -79,12 +91,15 @@ if [ "$#" -gt 0 ]; then
     DATASET_CAPPED_FOLDERS=()
     ANSWERS_FOLDERS=()
     REDIS_DOWN_FOLDERS=()
+    CRASH_FOLDERS=()
     RETRIEVAL_HEALTHY_FOLDERS=()
     for folder in "$@"; do
         if [ "$folder" = "answers" ]; then
             ANSWERS_FOLDERS+=("$folder")
         elif [ "$folder" = "redis-down" ]; then
             REDIS_DOWN_FOLDERS+=("$folder")
+        elif [ "$folder" = "crash-recovery" ] || [ "$folder" = "crash-exhausted" ]; then
+            CRASH_FOLDERS+=("$folder")
         elif [ "$folder" = "dataset-capped" ]; then
             DATASET_CAPPED_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-unavailable" ]; then
@@ -103,6 +118,7 @@ else
     DATASET_CAPPED_FOLDERS=(dataset-capped)
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)
+    CRASH_FOLDERS=(crash-recovery crash-exhausted)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
@@ -250,6 +266,28 @@ if [ "${#REDIS_DOWN_FOLDERS[@]}" -gt 0 ]; then
     start_app true REDIS_ENABLED=true REDIS_URL=redis://127.0.0.1:1/0
     echo "==> bru run redis-down (Redis tidak terjangkau; disconnect bukan cancel)"
     BRU_SANDBOX=developer run_folders 500 "${REDIS_DOWN_FOLDERS[@]}"
+fi
+
+if [ "${#CRASH_FOLDERS[@]}" -gt 0 ]; then
+    # Lease 6 s / heartbeat 2 s / reaper 2 s supaya attempt yang ditinggalkan
+    # ditemukan dalam hitungan detik, bukan satu menit. K1 (heartbeat × 3 ≤
+    # lease, ditegakkan config) dan K2 (reaper ≤ lease / 2) tetap terpenuhi.
+    for folder in "${CRASH_FOLDERS[@]}"; do
+        case "$folder" in
+            crash-recovery) crashes=1 ;;
+            # = NODE_ATTEMPT_CAP (runtime.md §1): setiap attempt yang diizinkan
+            # ditinggalkan, jadi yang teruji adalah batasnya, bukan pemulihannya.
+            crash-exhausted) crashes=3 ;;
+        esac
+        stop_app
+        start_app true \
+            LOCAL_CRASH_AFTER_EXTERNAL_CALL="$crashes" \
+            WORKER_LEASE_DURATION_SECS=6 \
+            WORKER_LEASE_HEARTBEAT_INTERVAL_SECS=2 \
+            REAPER_INTERVAL_SECS=2
+        echo "==> bru run $folder (worker ditinggalkan sesudah query sumber, $crashes kali)"
+        BRU_SANDBOX=developer run_folders 500 "$folder"
+    done
 fi
 
 if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then
