@@ -5,7 +5,9 @@
 //! Keduanya tidak pernah ditukar — karena itu tipenya dibedakan, bukan sekadar
 //! dua `PgPool` yang bentuknya identik.
 
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::str::FromStr;
+
+use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
 use crate::config::Config;
 
@@ -25,7 +27,11 @@ impl AppDb {
 
     pub async fn connect(config: &Config) -> anyhow::Result<Self> {
         Ok(Self(
-            connect(&config.app_database_url, config.app_database_max_connections).await?,
+            connect(
+                &config.app_database_url,
+                config.app_database_max_connections,
+            )
+            .await?,
         ))
     }
 
@@ -54,11 +60,18 @@ impl FineractDb {
     /// yang sedang mati tidak boleh menahan boot — job yang membutuhkannya akan
     /// gagal dengan sebab yang jelas dan `/health` melaporkannya, sedangkan
     /// gagal boot hanya menyembunyikan seluruh sistem di balik satu dependency.
+    ///
+    /// Setiap sesi dibuka dengan `default_transaction_read_only=on`: read-only
+    /// ditegakkan server, bukan hanya diandalkan pada kredensial terpisah —
+    /// kredensial lokal (`root`) writable, dan statement tulis apa pun kini
+    /// gagal dengan `cannot execute … in a read-only transaction` (OVR-6.1).
     pub fn connect(config: &Config) -> anyhow::Result<Self> {
+        let options = PgConnectOptions::from_str(&config.fineract_database_url)?
+            .options([("default_transaction_read_only", "on")]);
         Ok(Self(
             PgPoolOptions::new()
                 .max_connections(config.fineract_database_max_connections)
-                .connect_lazy(&config.fineract_database_url)?,
+                .connect_lazy_with(options),
         ))
     }
 
