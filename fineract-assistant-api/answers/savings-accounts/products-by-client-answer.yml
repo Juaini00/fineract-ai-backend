@@ -17,7 +17,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           answers.check(test, expect, "savings_products_by_client", res.getBody().data, {
             sortBy: ["savings_product_id"],
           });

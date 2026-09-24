@@ -6,7 +6,8 @@
 // ini mengubah dokumen response menjadi baris yang sama bentuknya lalu
 // membandingkan keduanya — bukan "angkanya ada", tetapi "angkanya benar".
 
-const MAX_POLLS = 60;
+const POLL_SLEEP_MS = 1000;
+const POLL_DEADLINE_MS = 90000;
 
 function expected() {
   // Dibaca saat dipakai, bukan saat modul dimuat: request yang tidak memakai
@@ -107,15 +108,23 @@ function sortRows(rows, sortBy) {
 // supaya nama poll dan nama request TIDAK PERNAH bisa berbeda (lihat bug
 // FIN-52: account-identity-lookup-answer.yml pernah memakai nama tanpa
 // suffix " (TIDAK TERJANGKAU)" sehingga bru.setNextRequest gagal diam-diam).
-function awaitResponse(bru, req, res) {
+//
+// Batasnya WAKTU, bukan jumlah poll: `bru.setNextRequest` mengulang request
+// tanpa jeda `--delay`, sehingga 60 poll habis dalam ±2 detik sementara resume
+// sesudah klarifikasi bisa menunggu job lain di worker tunggal (±8 detik).
+// Tiap poll tidur POLL_SLEEP_MS; menyerah sesudah POLL_DEADLINE_MS.
+async function awaitResponse(bru, req, res) {
   if (res.getStatus() !== 404) return true;
   const requestName = req.getName();
-  const key = "answersPolls_" + requestName.replace(/[^A-Za-z0-9_.-]/g, "_");
-  const polls = Number(bru.getVar(key) || 0);
-  if (polls >= MAX_POLLS) {
-    throw new Error(requestName + ": response tidak pernah tersedia");
+  const key = "answersPollStart_" + requestName.replace(/[^A-Za-z0-9_.-]/g, "_");
+  const started = Number(bru.getVar(key) || 0) || Date.now();
+  bru.setVar(key, started);
+  if (Date.now() - started > POLL_DEADLINE_MS) {
+    throw new Error(
+      `${requestName}: response tidak tersedia dalam ${POLL_DEADLINE_MS / 1000} detik`
+    );
   }
-  bru.setVar(key, polls + 1);
+  await new Promise((resolve) => setTimeout(resolve, POLL_SLEEP_MS));
   bru.setNextRequest(requestName);
   return false;
 }

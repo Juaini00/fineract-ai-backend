@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           answers.check(test, expect, "savings_client_activity", document);
           // FIN-133: limit.default unbounded + hard_cap=100 terdeklarasi ->

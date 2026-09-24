@@ -13,6 +13,6 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           answers.check(test, expect, "savings_deposit_monthly_breakdown", res.getBody().data);
         }

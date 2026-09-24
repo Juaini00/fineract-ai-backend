@@ -17,7 +17,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const page = res.getBody().data;
           const option = page.options.find(function (o) { return String(o.option_id) === "65"; });
           test("klien 65 ada di halaman opsi kedua", function () {

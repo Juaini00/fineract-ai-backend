@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           answers.check(test, expect, "organization_office_hierarchy_tree", document);
           // FIN-133: hard_cap=500 -> baris dipotong ke 500; completeness

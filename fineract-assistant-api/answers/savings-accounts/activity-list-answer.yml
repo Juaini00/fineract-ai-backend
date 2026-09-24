@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           // Blocker FIN-52: oracle memakai label enum yang benar (17=overdraft_interest,
           // 18=withhold_tax), bukan CASE produksi yang salah — gate ini DIHARAPKAN

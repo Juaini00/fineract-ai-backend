@@ -18,7 +18,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           answers.check(test, expect, "clients_with_account_counts", res.getBody().data, {
             sortBy: ["client_id"],
           });

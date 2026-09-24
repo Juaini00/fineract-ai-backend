@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const form = res.getBody().data;
           test("form klarifikasi terbuka untuk slot client_id", function () {
             expect(res.getStatus()).to.equal(200);

@@ -23,6 +23,6 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           answers.checkSubset(test, expect, "client_random_sample", res.getBody().data, 5);
         }

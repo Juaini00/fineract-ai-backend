@@ -27,7 +27,7 @@ runtime:
     - type: tests
       code: |
         const answers = require("./lib/answers.js");
-        if (answers.awaitResponse(bru, req, res)) {
+        if (await answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           test("FIN-52 savings_account_terms_lookup: TIDAK TERJANGKAU — account_number transient_sensitive_input tanpa resolver (K1, bug katalog)", function () {
             expect(res.getStatus()).to.equal(200);
