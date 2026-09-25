@@ -1,0 +1,23 @@
+info:
+  name: "FIN-147 dua jawaban satu session — events 1"
+  type: http
+  seq: 41.2
+  description: |
+    Stream tertutup pada event terminal, jadi request ini juga menunggu job selesai.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{supersede_job_1}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const names = (String(res.getBody()).match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        test("FIN-147: jawaban 1 dalam session yang sama berakhir job.completed", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names[names.length - 1]).to.equal("job.completed");
+        });

@@ -1039,6 +1039,34 @@ Update after FIN-137 (savings_account_identity_lookup / savings_account_terms_lo
   (`contracts/clarifications.md:11`, `:108`) — CLR-7 stays untested (FIN-79,
   L7). The test names that first claimed it were corrected in a follow-up.
 
+Update after FIN-147 (L4 bug — second answer in one session failed at T7):
+
+- **Symptom:** `engine/policy-narrow-events` went red on `main` once FIN-140's
+  control chain answered in the same `policySession` first. Any session's
+  second answered job that promotes an `ActiveScope` (or a `ResolvedEntity`
+  with the same key) failed: T7 rolled back → worker error → lease reaped →
+  `completed_node_not_rerun` → `Failed`. Other chains used a fresh session per
+  answer, so nothing caught it.
+- **Root cause:** `engine::repository::promote` superseded the old valid row
+  with `superseded_by_id = <new id>` **before** inserting that id;
+  `session_memory_superseded_by_id_fkey` is not deferrable, so it failed
+  immediately. Inserting first is rejected by the partial unique indexes
+  (`session_memory_one_active_scope`, `session_memory_entity_uniq`).
+- **Fix (no schema change, same T7 transaction):** supersede the old valid
+  row(s) without the pointer (`RETURNING id`; `invalidation_complete` is
+  satisfied by `invalidated_at` + `superseded_by_newer`) → `INSERT` the new
+  fact → set `superseded_by_id` on exactly those rows. History is preserved
+  and linked as `memory-context.md` §3 requires; the new fact's `session_seq`
+  is still allocated under the `chat_sessions` row lock (I3), so no stale
+  promotion can overtake a newer valid fact.
+- **Regression proof:** Bruno chain `engine/supersede-*` (own session:
+  `office_ids: []`, then `[1]`; the second job must be `Completed` +
+  `Answered`). The pre-fix statement order was reproduced as an FK violation
+  in a rolled-back SQL transaction against the shared DB.
+- **Not built (L7, MEM-7.6 / FIN-86):** invalidating `PriorResult` rows as
+  `scope_changed` when the scope changes — `promote` still skips
+  `PriorResult` entirely. This ticket moves no scenario ID in §5.1.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

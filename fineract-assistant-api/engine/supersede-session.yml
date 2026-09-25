@@ -1,0 +1,22 @@
+info:
+  name: "FIN-147 dua jawaban satu session — session"
+  type: http
+  seq: 41
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-147 supersede ActiveScope" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("supersedeSession", res.getBody().data.id);
