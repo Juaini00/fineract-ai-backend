@@ -18,7 +18,7 @@ runtime:
         const answers = require("./lib/answers.js");
         if (await answers.awaitResponse(bru, req, res)) {
           const form = res.getBody().data;
-          test("FIN-137 CLR-7: form klarifikasi terbuka untuk slot savings_account_id (resolver, bukan teks bebas)", function () {
+          test("FIN-137: form klarifikasi terbuka untuk slot savings_account_id (resolver, bukan teks bebas)", function () {
             expect(res.getStatus()).to.equal(200);
             expect(form.state).to.equal("open");
             expect(form.fields_json[0].field_id).to.equal("savings_account_id");
