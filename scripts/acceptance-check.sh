@@ -38,6 +38,17 @@ OWNER = {
     'AC':   ['L8'],
 }
 
+# Pengecualian per ID (docs/build-order.md §5.1). Keputusan owner 2026-09-25:
+# OVR-6.2 (multi-node fan-in) dimiliki L8 bersama plan multi-node (FIN-99),
+# karena gerbang L4 tidak boleh bergantung pada pekerjaan L8 yang sendiri
+# menunggu L7 (siklus).
+OWNER_BY_ID = {
+    'OVR-6.2': ['L8'],
+}
+
+def owners(sid):
+    return OWNER_BY_ID.get(sid, OWNER.get(sid.split('-')[0], []))
+
 def walk(root, suffixes):
     for base, _, files in os.walk(root):
         if '/target' in base or '/node_modules' in base:
@@ -91,7 +102,8 @@ for sid in declared:
 for pre in sorted(by_prefix):
     ids = by_prefix[pre]
     have = [s for s in ids if s in referenced]
-    print(f"    {pre:<5} {len(have):>2}/{len(ids):<2} bertest   ({', '.join(OWNER.get(pre, ['?']))})")
+    moved = ', '.join(f"{s} → {'/'.join(OWNER_BY_ID[s])}" for s in sorted(ids, key=sort_key) if s in OWNER_BY_ID)
+    print(f"    {pre:<5} {len(have):>2}/{len(ids):<2} bertest   ({', '.join(OWNER.get(pre, ['?']))}{'; ' + moved if moved else ''})")
 print(f"==> cakupan: {len(covered)}/{len(declared)} skenario punya test")
 
 if uncovered:
@@ -133,7 +145,7 @@ if not status:
 for layer, mark in sorted(status.items()):
     if mark != '✅':
         continue
-    missing = [s for s in uncovered if layer in OWNER.get(s.split('-')[0], [])]
+    missing = [s for s in uncovered if layer in owners(s)]
     if missing:
         failures += 1
         print(f"GAGAL: {layer} ditandai ✅ tetapi skenarionya tanpa test: {', '.join(sorted(missing, key=sort_key))}")
