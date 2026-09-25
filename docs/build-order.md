@@ -794,6 +794,58 @@ scenario ID):
   bug — `planner::semantic_capability`'s retrieval_miss/out_of_scope mapping
   (FIN-42) is unchanged and untouched.
 
+Update after FIN-60/62/64 (L5.1/L5.3/L5.5, Lane C — live document conformance):
+
+- **L5 stays 🔨.** RESP-8.1..8.6/8.8/8.10 (the seven scenarios a live path
+  actually emits today) are now proven to *conform*, not just to have a unit
+  test, at the HTTP surface — the gap `build-order.md` flagged after `d3a1535`
+  ("has a test" is coverage, not conformance). RESP-8.7 (chart downgrade) and
+  RESP-8.9 (expired dataset table) still have no live emitter — that is
+  FIN-61/63/65, still out of scope — so the ceiling `d3a1535`'s update already
+  named is unchanged. §5.1's count stays **36/59**: no new scenario ID was
+  added, these three tickets raised existing RESP scenarios from
+  unit-tested to HTTP-proven.
+- **FIN-60 (§1–§2 block shape/vocabulary).** A shared assertion helper
+  (`fineract-assistant-api/lib/response_shape.js`, `assertBlockShape`) checks
+  every block of a served document carries `block_id` + `type` ∈ the 9-type
+  vocabulary + `schema_version`, that `derived_from` on data-presenting blocks
+  resolves to `evidence_json.lineage`, and that no `provenance`/`metrics`
+  block is ever emitted. Wired into the four document kinds a live job
+  actually produces: `table` (`engine/answered-response.yml`,
+  `savings_balance_summary`), `metric` (`retrieval-vector/response.yml`,
+  `savings_deposit_total` — `grouping: none` → one row → one `metric` block
+  per column), `limitation` (`engine/policy-surface-response.yml`,
+  OVR-6.6 `BlockedByPolicy`), and `note` (`resolver/autobind-response.yml`,
+  auto-bind disclosure). All four already conformed — no compose/validate bug
+  found. "A type outside the vocabulary is rejected" stays proven once, at
+  `validate.rs:727` (`resp_8_10_a_type_outside_the_vocabulary_is_rejected`);
+  nothing duplicates it at HTTP. **Stale doc note for the owner (not
+  edited, Rule 3):** `responses.md:5-11`'s status box still lists `metrics`
+  and `provenance` as emitted, contradicting its own §2 and the `d3a1535`
+  fix this update's live assertions now also prove at HTTP.
+- **FIN-62 (RESP-8.8, PII off).** Live assertions on the existing row-cap
+  chain (`savings_client_activity`/`savings.activity_by_client`, whose
+  `client_display_name` output field is `sensitivity: pii`, run with the
+  runtime default PII-off — no settings mutated, `runtime.md:118`): the job's
+  `scope_json.pii.enabled` is `false` (new `engine/row-cap-job-state.yml`),
+  the served `table` block omits the column and declares it in
+  `withheld_columns`, a `limitation` block `pii_withheld` states the
+  withholding, and the retained dataset's rows (new
+  `engine/row-cap-dataset-rows.yml`) never stored the column either (I5,
+  fail-closed at `worker.rs:446-455`). `never_return` columns
+  (`knowledge/policies/pii.yaml`) are asserted absent on both the table and
+  the dataset rows.
+- **FIN-64 (RESP-8.10, unknown block type skipped).** `validate.rs:722-727`
+  is the right server-side proof — referenced, not duplicated. The
+  client-compatibility rule (clients must skip an unknown `type` without
+  failing render; mandatory information — limitation, auto-bind, withheld
+  PII — never lives only in a new type) was already written into
+  `api-reference.md` §5 ("Bentuk blok": *"Blok yang tidak dikenal wajib
+  diabaikan, bukan menggagalkan render…"*) — no doc edit needed. FIN-60's
+  vocabulary assertion (types ⊆ 9, on every live document) and FIN-62's
+  `limitation`-states-withholding assertion are the live half of this
+  scenario.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
