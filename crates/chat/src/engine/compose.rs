@@ -10,6 +10,8 @@
 //! data, dan kosakata yang tertutup pada sembilan tipe. Lineage tidak menjadi
 //! blok — ia hidup di `evidence_json` (#10).
 
+use std::collections::BTreeMap;
+
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -255,6 +257,49 @@ pub fn expired_dataset_table(
                      the summary figures remain valid as of the stated date.",
         }),
     )
+}
+
+/// Dataset handle yang dirujuk blok `table` berhandle (lihat `table_block`).
+pub fn table_dataset_ids(blocks: &Value) -> Vec<Uuid> {
+    blocks
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter(|block| block.get("type").and_then(Value::as_str) == Some("table"))
+        .filter_map(|block| block.get("dataset_id")?.as_str()?.parse().ok())
+        .collect()
+}
+
+/// RESP-8.9 — saat response DIBACA, blok `table` yang handle-nya sudah tidak
+/// hidup diganti [`expired_dataset_table`]. `dead` memetakan handle yang mati ke
+/// `(handle_state, as_of)`. Dokumen tersimpan tidak berubah; yang berubah adalah
+/// kebenaran rujukannya, dan itu dinyatakan, tidak didiamkan (I5). `row_count`
+/// ikut sebagai angka ringkas yang tetap berlaku pada `as_of`.
+pub fn disclose_dead_handles(blocks: Value, dead: &BTreeMap<Uuid, (String, Value)>) -> Value {
+    let Value::Array(blocks) = blocks else {
+        return blocks;
+    };
+
+    blocks
+        .into_iter()
+        .map(|table| {
+            let Some(id) = table_dataset_ids(&Value::Array(vec![table.clone()])).pop() else {
+                return table;
+            };
+            let Some((handle_state, as_of)) = dead.get(&id) else {
+                return table;
+            };
+
+            let block_id = table
+                .get("block_id")
+                .and_then(Value::as_str)
+                .unwrap_or("result");
+            let mut expired = expired_dataset_table(block_id, id, handle_state, as_of);
+            expired["row_count"] = table.get("row_count").cloned().unwrap_or(Value::Null);
+            expired
+        })
+        .collect()
 }
 
 /// Susun response dari baris hasil.
@@ -1252,5 +1297,30 @@ mod tests {
         );
         assert_eq!(summary["value"], "1500.00");
         assert_eq!(summary["period"], as_of);
+    }
+
+    /// RESP-8.9 — rujukan tabel berhandle yang mati diganti saat dibaca;
+    /// tabel inline dan handle hidup tidak disentuh.
+    #[test]
+    fn resp_8_9_a_dead_handle_table_is_disclosed_when_the_response_is_read() {
+        let large: Vec<_> = (0..=INLINE_MAX_ROWS as i64)
+            .map(|i| row("1.00", i))
+            .collect();
+        let backed = analysis(&plan(), &large, 5, false, &[], node(), &dataset(), None).blocks;
+        let id = dataset().dataset_id;
+        assert_eq!(table_dataset_ids(&backed), vec![id]);
+
+        let live = disclose_dead_handles(backed.clone(), &BTreeMap::new());
+        assert_eq!(live, backed);
+
+        let dead = BTreeMap::from([(id, ("purged".to_string(), json!("2026-09-25T00:00:00Z")))]);
+        let served = disclose_dead_handles(backed, &dead);
+        let table = &served[0];
+        assert_eq!(table["detail_available"], false);
+        assert_eq!(table["handle_state"], "purged");
+        assert_eq!(table["row_count"], INLINE_MAX_ROWS + 1);
+        assert_eq!(table["as_of"], "2026-09-25T00:00:00Z");
+        assert!(table["rows"].is_null());
+        assert_shape(&served);
     }
 }

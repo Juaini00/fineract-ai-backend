@@ -517,6 +517,29 @@ batas itu, blok `table` **tidak memuat `rows`** — barisnya dibaca berhalaman l
 `cursor: null` berarti mulai dari baris pertama; halaman berikutnya memakai
 `next_cursor` dari respons `/rows`.
 
+**Tabel atas handle yang sudah mati** (FIN-63, RESP-8.9, dataset-lifecycle §7).
+Status handle diperiksa **saat response dibaca**. Bila dataset yang dirujuk tabel
+berhandle sudah `expired`/`purged`, blok itu disajikan sebagai pernyataan bahwa
+detail tidak lagi tersedia — bukan nol baris — dan angka ringkasnya tetap terbaca
+dengan `as_of` (titik snapshot dataset). Dokumen tersimpan tidak berubah; tabel
+inline tidak terpengaruh. Pertanyaan lanjutan menjadi retrieval baru (K13).
+
+```json
+{
+  "block_id": "result",
+  "type": "table",
+  "schema_version": 1,
+  "derived_from": [{ "dataset_id": "3c1e9a52-7d4b-4f0e-9b61-2a8f5c0d7e44" }],
+  "rows": null,
+  "columns": null,
+  "row_count": 450,
+  "detail_available": false,
+  "handle_state": "purged",
+  "as_of": "2026-09-25T10:04:11.201Z",
+  "body": "Row-level detail for this dataset is no longer available; the summary figures remain valid as of the stated date."
+}
+```
+
 **`chart_spec`** (FIN-65, responses.md §2 dan §7) — hanya untuk capability yang
 mendeklarasikan `chart: { kind: time_series }` di katalog; tidak pernah dipicu
 frasa pengguna. Sumbu waktu diambil dari **grain query yang dideklarasikan**

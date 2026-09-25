@@ -1,5 +1,7 @@
 //! Kebijakan baca dataset: otorisasi ulang tiap baca (I7) dan paginasi stabil (§4).
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use foundation::{error::ApiError, state::Foundation};
 use serde::Serialize;
@@ -142,6 +144,43 @@ pub async fn read(
         purged_at: handle.purged_at,
         unavailable_reason: unavailable_reason(state),
     })
+}
+
+/// RESP-8.9 — handle yang dirujuk blok `table` sebuah response dan sudah tidak
+/// hidup, beserta `as_of` snapshot-nya, supaya pembaca response menyatakannya.
+/// Tidak ada otorisasi ulang di sini: yang dibaca hanya status handle milik job
+/// yang kepemilikannya sudah diperiksa pemanggil, bukan barisnya.
+pub async fn dead_handles(
+    foundation: &Foundation,
+    dataset_ids: &[Uuid],
+) -> Result<BTreeMap<Uuid, (String, Value)>, ApiError> {
+    let mut dead = BTreeMap::new();
+
+    for &dataset_id in dataset_ids {
+        let Some(handle) = repository::find(foundation.app_db().pool(), dataset_id)
+            .await
+            .map_err(anyhow::Error::from)?
+        else {
+            continue;
+        };
+        let state = HandleState::from_status(&handle.status);
+        if state.is_readable() {
+            continue;
+        }
+
+        let as_of = handle
+            .provenance_json
+            .get("as_of")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let state = serde_json::to_value(state)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_default();
+        dead.insert(dataset_id, (state, as_of));
+    }
+
+    Ok(dead)
 }
 
 /// Seam lokal (FIN-44, keputusan owner): purge handle milik pemanggil sekarang,
