@@ -308,7 +308,9 @@ if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then
     stop_app
     start_app true EMBEDDING_API_KEY=
     echo "==> bru run retrieval-unavailable (embedding sengaja dinonaktifkan)"
-    run_folders 1500 "${RETRIEVAL_UNAVAILABLE_FOLDERS[@]}"
+    # FIN-138 — response.yml poll lewat lib/poll.js (setTimeout); sandbox
+    # quickjs default tidak mengenal setTimeout, sama seperti crash-*/answers/redis-down.
+    BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_UNAVAILABLE_FOLDERS[@]}"
 fi
 
 if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
@@ -316,7 +318,9 @@ if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
     if [ -n "${EMBEDDING_API_KEY:-}" ]; then
         start_app true
         echo "==> bru run retrieval-healthy (embedding terkonfigurasi dan terindeks)"
-        run_folders 1500 "${RETRIEVAL_HEALTHY_FOLDERS[@]}"
+        # FIN-138 — lihat catatan sandbox di atas: response.yml di sini menunggu
+        # panggilan embedding eksternal lewat lib/poll.js (setTimeout).
+        BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_HEALTHY_FOLDERS[@]}"
     else
         echo "==> retrieval-healthy dilewati: EMBEDDING_API_KEY kosong; bukti out_of_scope tetap pending"
     fi
