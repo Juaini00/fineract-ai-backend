@@ -24,6 +24,7 @@ examples:
 - Top 3 withdrawals per month this year.
 - Rank the biggest savings withdrawal per month, highest first.
 - Penarikan terbesar setiap bulan tahun ini.
+- Peringkat bulanan.
 defaults:
   exclude_reversed: true
   default_limit: 1

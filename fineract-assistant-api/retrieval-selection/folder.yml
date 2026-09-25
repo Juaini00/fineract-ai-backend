@@ -20,3 +20,13 @@ info:
     bahasa Inggris, dan contoh bahasa Indonesia yang sudah ada di manifest
     (`Penarikan tabungan per bulan dari Januari sampai September.`) sebagai
     bukti jalur non-Inggris tidak meregresi.
+
+    FIN-148 — frasa peringkat singkat bahasa Indonesia ("Peringkat penarikan
+    tabungan terbesar tiap bulan.") kalah dari `savings_withdrawal_total`
+    karena kata "peringkat" tidak pernah muncul di contoh Indonesia manapun
+    pada manifest `savings_withdrawal_monthly_top_n` — celah kosakata katalog,
+    bukan kelemahan skorer. Dibuktikan dengan menambah contoh
+    `Peringkat bulanan.` pada manifest (satu kasus, dipilih setelah beberapa
+    kandidat frasa lain terbukti menggeser tie leksikal pre-existing dengan
+    capability tetangga — lihat crates/app/fixtures/fin142_held_out.json
+    untuk kasus generalisasi tambahan).

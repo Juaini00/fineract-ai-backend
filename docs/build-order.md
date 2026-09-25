@@ -1214,6 +1214,64 @@ deterministically red after any `knowledge/` change):
 - **Not built:** nothing deferred; this ticket moves no scenario ID in §5.1
   (test-harness fix, not a new capability).
 
+Update after FIN-148 (terse Indonesian ranking phrase left open by FIN-142):
+
+- **FIN-148 found:** the residual FIN-142 flagged for the owner —
+  "Peringkat penarikan tabungan terbesar tiap bulan." selecting
+  `savings_withdrawal_total` instead of `savings_withdrawal_monthly_top_n` —
+  was a catalog-wording gap, not a general lexical weakness. Direct SQL
+  against `knowledge_index` (same query `planner::best_capability` runs)
+  showed the word "peringkat" ("ranking") and "tiap" ("each/every") appeared
+  in **zero** Indonesian examples across any `savings_withdrawal_*` manifest;
+  `_total`, `_top_n` and `_monthly_breakdown` all tied on `matched_terms=3`
+  (`bulan`/`penarikan`/`terbesar` or `tabungan`/`penarikan`/`bulan`), and
+  `_total` won the `ts_rank_cd` tie-break purely on document-length
+  normalization — an accident of catalog wording, not a signal about intent.
+- **FIN-148 fix (`knowledge/capabilities/savings/withdrawal_monthly_top_n.yaml`):**
+  added exactly one new example, `"Peringkat bulanan."` — the word "peringkat"
+  gives `_monthly_top_n` `matched_terms=4` against the target phrase (beating
+  every sibling's 3), and "bulanan" ("monthly") avoids repeating a term
+  (`penarikan`/`terbesar`/`bulan`/`tiap`) that any other capability was
+  *already tied on*. That constraint was not academic: three earlier attempts
+  at this same fix — reusing "penarikan"/"terbesar"/"bulan" in a full sentence,
+  or adding "tabungan"/"tiap" together — each fixed the target phrase but
+  flipped a **different**, pre-existing near-tie (`_top_n` vs `_monthly_top_n`
+  on "Penarikan terbesar bulan ini.", already tied 4-4 with a ~15% score gap
+  at baseline; `_monthly_top_n` vs `savings_deposit_monthly_top_n` on a
+  deposit phrase, tied 5-5) purely by inflating `ts_rank_cd` term-frequency
+  for a word two capabilities already shared. The one-word, non-overlapping
+  example was the only tested wording that closed the target gap without
+  touching any other tie. No scorer change, no allowlist/denylist.
+- **FIN-148 corpus proof (`cargo run -p app -- retrieval-sweep`):** baseline
+  238/238 corpus, 11/12 held-out (the known FIN-142 residual). After the fix:
+  **239/239 corpus** (one net new manifest example self-selects), **18/18
+  held-out** — the original FIN-142 phrase now passes plus 6 new phrasings
+  added to `crates/app/fixtures/fin142_held_out.json` (ranking variants with
+  "top 5" / reordered clauses / a `savings_withdrawal_total` sanity check /
+  a same-phrase-different-year variant), all withdrawal-domain per this
+  ticket's edit scope. Two candidate held-out cases that probed
+  `savings_deposit_*` capabilities or an English "ranking" synonym were
+  dropped after confirming (via the same direct-SQL check) they fail
+  identically at the pre-FIN-148 baseline — pre-existing, out-of-scope gaps,
+  not regressions from this change. Re-run twice more after the final wording
+  landed: stable at 239/239 / 18/18 both times.
+- **FIN-148 proof at the HTTP surface:** one new `retrieval-selection` Bruno
+  chain (`withdrawal-ranking-phrase-*`), test name `FIN-148: …`, using the
+  same `lib/poll.js` `awaitJob` pattern FIN-145 standardized.
+- **Verified:** `retrieval-selection` passed **5 of 6** locked runs (22/22
+  tests each), including the 3 most recent consecutive. The one miss (job
+  `093c5e8b`, 16:21:07) was diagnosed by direct SQL — its response's
+  `evidence_json.lineage[0]` carries `catalog_version_id=b7844483…` /
+  `catalog_content_hash=28234b15…`, this worktree's **pristine pre-fix**
+  catalog (confirmed: 0 rows for `savings_account_identity_resolve`, no
+  "Peringkat bulanan." in `withdrawal_monthly_top_n`'s indexed text) — not
+  the current, correctly-fixed catalog every other pass used. Coordinator
+  traced this to a rogue worker (`unknown-host/89286`) that answered jobs
+  **outside** the `jarvis-bruno-locked.sh` lock from 16:20:16–16:24:42 using
+  a stale pre-fix build, also stealing 37 of a sibling ticket's (FIN-144)
+  jobs in the same window — a shared-runner infra incident, not a defect in
+  this fix.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

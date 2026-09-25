@@ -46,5 +46,29 @@
   {
     "text": "Setoran tabungan terbesar tiap bulan, top 3.",
     "expected": "savings_deposit_monthly_top_n"
+  },
+  {
+    "text": "Peringkat penarikan tabungan tiap bulan, yang terbesar dahulu.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Peringkat penarikan tabungan terbesar per bulan.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Peringkat bulanan penarikan tabungan.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Berapa total penarikan tabungan bulan ini?",
+    "expected": "savings_withdrawal_total"
+  },
+  {
+    "text": "Peringkat penarikan tabungan tiap bulan tahun 2026.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Peringkat penarikan tabungan terbesar tiap bulan, top 5.",
+    "expected": "savings_withdrawal_monthly_top_n"
   }
 ]
