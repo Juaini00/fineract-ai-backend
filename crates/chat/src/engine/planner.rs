@@ -92,6 +92,17 @@ pub struct Plan {
     /// Nilai yang disebut teks tetapi tidak diterapkan (FIN-135) — wajib
     /// diungkap dengan default yang benar-benar dipakai.
     pub unapplied_params: Vec<UnappliedParam>,
+    /// Chart yang dideklarasikan capability (responses.md §7), dengan dimensi
+    /// waktu dari grain query — `None` bila capability tidak mendeklarasikannya.
+    pub chart: Option<Chart>,
+}
+
+/// Bentuk data yang dibutuhkan chart `time_series`: sumbu waktu dari grain yang
+/// dideklarasikan (L1.5), dan kolom grain lain sebagai seri.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chart {
+    pub time_dimension: String,
+    pub series: Vec<String>,
 }
 
 impl Plan {
@@ -251,6 +262,25 @@ impl Unplannable {
     }
 }
 
+/// Chart hanya bila capability mendeklarasikannya DAN grain query memuat
+/// dimensi waktu. Validator katalog menolak deklarasi tanpa grain waktu; di sini
+/// kombinasi itu tetap tidak menghasilkan chart (fail closed).
+fn chart(capability: &Capability, query: &QueryManifest) -> Option<Chart> {
+    capability.chart.as_ref()?;
+    let time_dimension = query.time_dimension()?.to_string();
+    let series = query
+        .grain
+        .iter()
+        .filter(|column| **column != time_dimension)
+        .cloned()
+        .collect();
+
+    Some(Chart {
+        time_dimension,
+        series,
+    })
+}
+
 /// Susun rencana untuk sebuah permintaan.
 pub async fn plan(
     pool: &PgPool,
@@ -373,6 +403,7 @@ pub async fn plan(
         parameters,
         deterministic_binds,
         unapplied_params,
+        chart: chart(capability, query),
         sql,
         sql_file,
     }))
@@ -1106,6 +1137,7 @@ mod tests {
             request_shape: None,
             guards: BTreeMap::new(),
             defaults: BTreeMap::new(),
+            chart: None,
         }
     }
 

@@ -176,6 +176,7 @@ mod tests {
             graph_hash: "graph".into(),
             deterministic_binds: Vec::new(),
             unapplied_params: Vec::new(),
+            chart: None,
         }
     }
 

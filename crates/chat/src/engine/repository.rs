@@ -220,8 +220,8 @@ pub async fn ledger(
     job_id: Uuid,
     plan_version: i32,
 ) -> sqlx::Result<validate::Ledger> {
-    let rows = sqlx::query_as::<_, (Uuid, Option<String>, Option<Value>)>(
-        "SELECT id, completeness, input_binding_json
+    let rows = sqlx::query_as::<_, (Uuid, Option<String>, Option<Value>, Option<Value>)>(
+        "SELECT id, completeness, input_binding_json, output_json
          FROM job_node_runs
          WHERE job_id = $1 AND plan_version = $2 AND status <> 'Pending'",
     )
@@ -233,8 +233,9 @@ pub async fn ledger(
     let mut contributors = BTreeMap::new();
     let mut auto_bound = BTreeSet::new();
     let mut parameters = Vec::new();
+    let mut outputs = BTreeMap::new();
 
-    for (node_run_id, completeness, binding) in rows {
+    for (node_run_id, completeness, binding, output) in rows {
         // Node yang sudah berjalan tanpa `completeness` adalah kontributor yang
         // tidak menyatakan apa pun — `Unknown`, bukan dilewati (I4).
         //
@@ -261,9 +262,28 @@ pub async fn ledger(
         {
             parameters.extend(bound.iter().cloned());
         }
+
+        // §7 — baris yang tersimpan menjadi bahan pemeriksaan bentuk chart.
+        let stored_rows = output
+            .as_ref()
+            .and_then(|output| output.get("rows"))
+            .and_then(Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .filter_map(|row| row.as_object().cloned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        outputs.insert(node_run_id.to_string(), stored_rows);
     }
 
-    Ok(validate::Ledger { contributors, auto_bound, derivations: Vec::new(), parameters })
+    Ok(validate::Ledger {
+        contributors,
+        auto_bound,
+        derivations: Vec::new(),
+        parameters,
+        outputs,
+    })
 }
 
 /// Promosikan fakta session di dalam transaksi commit (memory-context.md §3).

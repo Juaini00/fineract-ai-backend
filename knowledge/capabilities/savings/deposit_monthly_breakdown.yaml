@@ -25,6 +25,8 @@ examples:
 - Show savings deposits per month for this year.
 - Month-by-month deposit breakdown.
 - Berapa setoran tabungan per bulan dari Januari sampai September.
+chart:
+  kind: time_series
 defaults:
   exclude_reversed: true
 guards:

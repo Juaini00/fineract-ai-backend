@@ -1344,6 +1344,38 @@ the harness fixes FIN-138/145/146/149/150):
   (`action='job.claimed'`, `detail_json->>'worker'`) and the catalog hash in
   `job_plans.contract_versions_json`.
 
+Update after FIN-65/61/63 (L5.6, Lane C — `chart_spec` and dataset-backed
+`table` wired into the served path; RESP-8.7 / RESP-8.9 proven at HTTP):
+
+- **FIN-65 (emission).** Owner decision 2026-09-25: a chart is **declared per
+  capability** in `knowledge/` — `chart: { kind: time_series }` — never
+  triggered by user phrasing. The time axis is the query's **declared grain**
+  (L1.5): the first grain column whose `output_fields` type is `date`
+  (`QueryManifest::time_dimension`); other grain columns become `series`. The
+  catalog validator rejects a chart on a query with no date grain
+  (`chart_matches_grain`, unit test `chart_requires_a_declared_time_grain`).
+  Declared on the four capabilities whose query returns a monthly series
+  (`request_shape.output: time_series`): `client_activation_monthly_breakdown`,
+  `organization_office_opening_monthly_breakdown`,
+  `savings_deposit_monthly_breakdown`, `savings_withdrawal_monthly_breakdown`.
+  The monthly **top-N** capabilities are not charted — their grain is
+  `transaction_id`. A charted capability always serves its `table` (also on one
+  row) plus either a `chart_spec` (`derived_from` = the node, `data_block_id` =
+  the table) or a `note` `chart_downgraded` (responses.md §7). The validator
+  re-checks the declared shape against the node rows in the ledger
+  (`job_node_runs.output_json`) and drops a non-conforming `chart_spec` under
+  rule `§7`. Large results: above `NODE_OUTPUT_INLINE_THRESHOLD` (200 rows or
+  32 KB, runtime.md §4) the `table` block carries `dataset_id` + `pagination`
+  and no `rows` (responses.md §2, #11 rules 2–3); smaller results stay inline.
+  Proven live by `engine/resp-chart-response.yml` (chart over
+  Nov 2025–Sep 2026 deposits) and `engine/resp-large-response.yml` /
+  `resp-large-rows.yml` ("top 100 deposits per month": 450 rows → handle-backed
+  table, first page of 200 readable through its `rows_path`).
+- **Deviation from the brief's ownership list:** the ledger query in
+  `engine/repository.rs` now also reads `output_json` for the §7 check.
+- §5.1 stays **36/59**: no new scenario ID. L5 stays 🔨 until RESP-8.7/8.9
+  are proven at HTTP (FIN-61, FIN-63).
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

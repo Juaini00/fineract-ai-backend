@@ -29,6 +29,8 @@ supported_intents:
 unsupported_intents:
 - client identity lookup
 - client contact details
+chart:
+  kind: time_series
 defaults:
   authorized_scope_only: true
 guards:

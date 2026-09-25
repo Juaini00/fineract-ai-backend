@@ -26,7 +26,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::engine::{
@@ -80,6 +80,10 @@ pub struct Ledger {
     /// §4: tahun di dalam nama periode yang sudah muncul di parameter bukan
     /// klaim data.
     pub parameters: Vec<Value>,
+    /// Baris hasil tiap node (`job_node_runs.output_json.rows`), berkunci
+    /// identitasnya. Bentuk data yang dituntut `chart_spec` (§7) diperiksa atas
+    /// baris INI, bukan atas baris yang dipegang composer.
+    pub outputs: BTreeMap<String, Vec<Map<String, Value>>>,
 }
 
 /// Satu aturan yang dilanggar.
@@ -228,6 +232,7 @@ fn failures(
     let blocks = response.blocks.as_array().map(Vec::as_slice).unwrap_or(&[]);
 
     failures.extend(shape_failures(blocks));
+    failures.extend(chart_failures(blocks, ledger));
 
     // D1 — satu arah. Composer boleh tahu celah yang tidak terlihat di ledger,
     // jadi klaim yang LEBIH BURUK diterima. Klaim yang lebih baik tidak pernah:
@@ -381,6 +386,44 @@ fn shape_failures(blocks: &[Value]) -> Vec<Failure> {
     }
 
     failures
+}
+
+/// §7 — `chart_spec` mendeklarasikan bentuk data yang dibutuhkannya, dan data
+/// rujukannya di ledger wajib memenuhinya. Chart yang tidak dapat dibuktikan —
+/// bentuk tak dideklarasikan, data tidak ada di ledger, atau data tidak
+/// kompatibel — dibuang; tabel yang memuat angkanya tetap tersaji.
+fn chart_failures(blocks: &[Value], ledger: &Ledger) -> Vec<Failure> {
+    blocks
+        .iter()
+        .filter(|block| block.get("type").and_then(Value::as_str) == Some("chart_spec"))
+        .filter_map(|block| {
+            let problem = chart_problem(block, ledger)?;
+            Some(Failure {
+                rule: "§7",
+                block_id: Some(block_id(block)),
+                detail: format!(
+                    "chart_spec tidak memenuhi bentuk yang dideklarasikannya: {problem}"
+                ),
+            })
+        })
+        .collect()
+}
+
+fn chart_problem(block: &Value, ledger: &Ledger) -> Option<String> {
+    if block.get("chart_type").and_then(Value::as_str) != Some("time_series") {
+        return Some("chart_type bukan time_series".to_string());
+    }
+    let Some(time_dimension) = block.get("time_dimension").and_then(Value::as_str) else {
+        return Some("time_dimension tidak dideklarasikan".to_string());
+    };
+
+    let refs = block.get("derived_from").and_then(Value::as_array)?;
+    refs.iter().find_map(|reference| {
+        let Some(rows) = contributor_key(reference).and_then(|key| ledger.outputs.get(&key)) else {
+            return Some("data rujukan tidak ada di ledger".to_string());
+        };
+        compose::time_series_incompatibility(time_dimension, rows).map(str::to_string)
+    })
 }
 
 /// Versi konservatif yang menggantikan dokumen yang ditolak (§6).

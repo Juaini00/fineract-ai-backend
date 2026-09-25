@@ -1,0 +1,45 @@
+info:
+  name: FIN-65 hasil di atas ambang inline merujuk dataset handle
+  type: http
+  seq: 50.4
+  description: |
+    responses.md §2 / runtime.md §4 `NODE_OUTPUT_INLINE_THRESHOLD` (32 KB atau
+    200 baris): tabel besar tidak pernah disalin inline — blok `table` merujuk
+    dataset handle + pagination. 100 setoran terbesar per bulan atas delapan
+    bulan data lokal menghasilkan ratusan baris.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{largeJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          const table = document.blocks_json.find(function (b) { return b.type === "table"; });
+          const lineage = document.evidence_json.lineage[0];
+
+          test("FIN-65: top-N per bulan menjawab lebih dari 200 baris", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.outcome).to.equal("Answered");
+            expect(document.validation_status).to.equal("passed");
+            expect(lineage.capability_id).to.equal("savings_deposit_monthly_top_n");
+            expect(table.row_count).to.be.above(200);
+          });
+
+          test("FIN-65: tabel besar merujuk dataset handle + pagination, tanpa baris inline", function () {
+            expect(table).to.not.have.property("rows");
+            expect(table.dataset_id).to.equal(lineage.dataset_id);
+            expect(table.pagination.rows_path).to.equal("/chat/datasets/" + lineage.dataset_id + "/rows");
+            expect(table.pagination.limit).to.equal(200);
+            expect(table.derived_from[0].node_run_id).to.equal(lineage.node_run_id);
+          });
+
+          bru.setVar("largeDatasetId", table.dataset_id);
+          bru.setVar("largeRowsPath", table.pagination.rows_path);
+          bru.setVar("largeRowCount", table.row_count);
+        }

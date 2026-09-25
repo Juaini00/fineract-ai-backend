@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::engine::{
     dataset::Retained,
-    planner::{Bound, Plan},
+    planner::{Bound, Chart, Plan},
     repository::SettledResponse,
 };
 
@@ -133,68 +133,93 @@ pub fn from_dataset(dataset_id: Uuid) -> Value {
     json!({ "dataset_id": dataset_id })
 }
 
-/// §7 — sebuah chart mendeklarasikan bentuk data yang dibutuhkannya (time series
-/// memerlukan dimensi waktu **terurut**). Bila data rujukan tidak memenuhi
-/// bentuk itu, chart **tidak** dirender: ia turun menjadi `table` + `note`. Bukan
-/// kegagalan — angkanya tetap utuh — dan bukan chart yang menyesatkan.
-///
-/// ponytail: hanya bentuk `time_series` yang dikenal hari ini. Satu bentuk cukup
-/// menegakkan aturan §7; kategori chart lain ditambahkan saat benar-benar
-/// diminta (YAGNI). Kompatibel → satu blok `chart_spec`; tidak → tabel + catatan.
-pub fn chart_or_table(
-    block_id: &str,
-    time_dimension: &str,
+/// Ambang `NODE_OUTPUT_INLINE_THRESHOLD` (runtime.md §4): hasil sampai 200
+/// baris **dan** 32 KB boleh inline pada blok `table` (#11 aturan 3); di atas
+/// itu tabel merujuk dataset handle + pagination, tidak pernah disalin inline
+/// (responses.md §2).
+pub const INLINE_MAX_ROWS: usize = 200;
+pub const INLINE_MAX_BYTES: usize = 32 * 1024;
+
+/// Ukuran halaman yang diiklankan tabel berhandle — batas atas
+/// `GET /chat/datasets/{id}/rows` (`dataset::service::MAX_PAGE_SIZE`).
+const DATASET_PAGE_LIMIT: usize = 200;
+
+/// Titik waktu minimal agar sebuah time series bermakna: satu titik bukan tren.
+const TIME_SERIES_MIN_POINTS: usize = 2;
+
+/// §7 — chart yang dideklarasikan capability, **di samping** tabel yang
+/// memuat datanya (§2: `chart_spec` adalah spesifikasi atas data yang sudah
+/// ada). Data yang memenuhi bentuk `time_series` → satu blok `chart_spec`;
+/// tidak → blok `note` yang menyatakan downgrade, sehingga yang tersaji adalah
+/// `table` + `note`. Bukan kegagalan — angkanya tetap utuh — dan bukan chart
+/// yang menyesatkan.
+pub fn chart_or_note(
+    chart: &Chart,
     columns: &[String],
     rows: &[Map<String, Value>],
     derived_from: &[Value],
-) -> Vec<Value> {
-    if let Some(reason) = time_series_incompatibility(time_dimension, columns, rows) {
-        return vec![
-            table_block(columns, &[], rows, derived_from),
-            block(
-                &format!("{block_id}:downgraded"),
-                "note",
-                &[],
-                json!({
-                    "title": "Chart downgraded to a table",
-                    "body": format!(
-                        "The requested time-series chart was not rendered because {reason}. \
-                         The same numbers are shown as a table instead."
-                    ),
-                    "downgraded_from": "chart_spec",
-                    "reason": reason,
-                }),
-            ),
-        ];
+) -> Value {
+    if let Some(reason) = time_series_incompatibility(&chart.time_dimension, rows) {
+        return block(
+            "chart_downgraded",
+            "note",
+            &[],
+            json!({
+                "title": "Chart downgraded to a table",
+                "body": format!(
+                    "The time-series chart was not rendered because {reason}. \
+                     The same numbers are shown in the table instead."
+                ),
+                "downgraded_from": "chart_spec",
+                "reason": reason,
+            }),
+        );
     }
 
-    vec![block(
-        block_id,
+    let measures: Vec<&String> = columns
+        .iter()
+        .filter(|column| **column != chart.time_dimension && !chart.series.contains(column))
+        .collect();
+
+    block(
+        "chart",
         "chart_spec",
         derived_from,
-        json!({ "chart_type": "time_series", "time_dimension": time_dimension }),
-    )]
+        json!({
+            "chart_type": "time_series",
+            "time_dimension": chart.time_dimension,
+            "series": chart.series,
+            "measures": measures,
+            // Data chart adalah tabel ini — bukan salinan kedua.
+            "data_block_id": "result",
+        }),
+    )
 }
 
 /// `None` = kompatibel. `Some(reason)` menyebut kenapa chart tidak boleh
-/// dirender: kolom waktu hilang, atau nilainya tidak terurut naik.
-fn time_series_incompatibility(
+/// dirender: kolom waktu hilang, kurang dari dua titik waktu, atau nilainya
+/// tidak terurut naik. Dipakai composer DAN validator — validator menjalankannya
+/// atas baris ledger, bukan atas baris yang dipegang composer.
+pub fn time_series_incompatibility(
     time_dimension: &str,
-    columns: &[String],
     rows: &[Map<String, Value>],
 ) -> Option<&'static str> {
-    if !columns.iter().any(|column| column == time_dimension) {
+    if rows.iter().any(|row| !row.contains_key(time_dimension)) {
         return Some("the required time dimension column is absent");
     }
 
     // ponytail: perbandingan string cukup untuk periode/tanggal ISO yang
     // terurut leksikografis ("2026-01" < "2026-02"). Kalau kelak ada sumbu
     // waktu numerik non-ISO, bandingkan sebagai angka di sini.
-    let ordered = rows
-        .windows(2)
-        .all(|pair| cell(&pair[0], time_dimension) <= cell(&pair[1], time_dimension));
+    let points: Vec<String> = rows.iter().map(|row| cell(row, time_dimension)).collect();
+    if !points.windows(2).all(|pair| pair[0] <= pair[1]) {
+        return Some("the time dimension is not ordered");
+    }
 
-    (!ordered).then_some("the time dimension is not ordered")
+    let mut distinct = points;
+    distinct.dedup();
+    (distinct.len() < TIME_SERIES_MIN_POINTS)
+        .then_some("the result has fewer than two points on the time dimension")
 }
 
 fn cell(row: &Map<String, Value>, key: &str) -> String {
@@ -270,14 +295,26 @@ pub fn analysis(
                 }),
             )],
         ),
-        1 => (
+        // Capability ber-chart tetap menyajikan tabel pada satu baris: bentuk
+        // alaminya deret waktu, dan satu titik harus TERLIHAT turun (§7).
+        1 if plan.chart.is_none() => (
             "Answered",
             metric_blocks(&visible, &rows[0], &period, &derived_from),
         ),
-        _ => (
-            "Answered",
-            vec![table_block(&visible, &withheld, rows, &derived_from)],
-        ),
+        _ => {
+            let table = table_block(
+                &visible,
+                &withheld,
+                rows,
+                &derived_from,
+                retained.dataset_id,
+            );
+            let chart = plan
+                .chart
+                .as_ref()
+                .map(|chart| chart_or_note(chart, &visible, rows, &derived_from));
+            ("Answered", std::iter::once(table).chain(chart).collect())
+        }
     };
 
     // I5 — tidak ada penghilangan senyap: kolom yang ditahan dinyatakan, bukan
@@ -533,6 +570,7 @@ fn table_block(
     withheld: &[String],
     rows: &[Map<String, Value>],
     derived_from: &[Value],
+    dataset_id: Uuid,
 ) -> Value {
     let values: Vec<Value> = rows
         .iter()
@@ -546,19 +584,28 @@ fn table_block(
         })
         .collect();
 
-    block(
-        "result",
-        "table",
-        derived_from,
-        json!({
-            "columns": output_fields,
-            "rows": values,
-            "row_count": rows.len(),
-            // §7 — blok tabel MENDEKLARASIKAN kolom yang ditahan; blok
-            // limitation menyatakannya. Keduanya, bukan salah satu.
-            "withheld_columns": withheld,
-        }),
-    )
+    let mut payload = json!({
+        "columns": output_fields,
+        "row_count": rows.len(),
+        // §7 — blok tabel MENDEKLARASIKAN kolom yang ditahan; blok
+        // limitation menyatakannya. Keduanya, bukan salah satu.
+        "withheld_columns": withheld,
+    });
+
+    let inline_bytes = Value::Array(values.clone()).to_string().len();
+    if rows.len() <= INLINE_MAX_ROWS && inline_bytes <= INLINE_MAX_BYTES {
+        payload["rows"] = Value::Array(values);
+    } else {
+        // #11 aturan 2 — tabel besar merujuk handle, baris dibaca berhalaman.
+        payload["dataset_id"] = json!(dataset_id);
+        payload["pagination"] = json!({
+            "rows_path": format!("/chat/datasets/{dataset_id}/rows"),
+            "limit": DATASET_PAGE_LIMIT,
+            "cursor": Value::Null,
+        });
+    }
+
+    block("result", "table", derived_from, payload)
 }
 
 /// Parameter yang benar-benar terikat, dalam satu bentuk.
@@ -699,6 +746,7 @@ mod tests {
             graph_hash: "graph".into(),
             deterministic_binds: Vec::new(),
             unapplied_params: Vec::new(),
+            chart: None,
         }
     }
 
@@ -1012,6 +1060,28 @@ mod tests {
         row
     }
 
+    fn charted_plan() -> Plan {
+        Plan {
+            output_fields: vec!["period".into(), "total".into()],
+            output_sensitivity: vec!["public_business".into(), "public_business".into()],
+            chart: Some(Chart {
+                time_dimension: "period".into(),
+                series: Vec::new(),
+            }),
+            ..plan()
+        }
+    }
+
+    fn block_types(response: &SettledResponse) -> Vec<String> {
+        response
+            .blocks
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["type"].as_str().unwrap().to_string())
+            .collect()
+    }
+
     /// RESP-8.7 — chart yang tidak kompatibel turun menjadi tabel, bukan gagal
     /// dan bukan menyesatkan. "Bukan gagal" dibuktikan dengan melewatkan hasil
     /// downgrade lewat validator: statusnya `passed`.
@@ -1020,59 +1090,126 @@ mod tests {
         use crate::engine::validate::{self, Ledger};
         use std::collections::BTreeMap;
 
-        let columns = vec!["period".to_string(), "total".to_string()];
-        let derived_from = [from_node(node())];
-
-        // Terurut naik → chart_spec dipertahankan.
-        let ordered = [time_row("2026-01", 1), time_row("2026-02", 2)];
-        let compatible = chart_or_table("trend", "period", &columns, &ordered, &derived_from);
-        assert_eq!(compatible.len(), 1);
-        assert_eq!(compatible[0]["type"], "chart_spec");
-
-        // Tidak terurut → turun menjadi tabel + catatan, tanpa chart.
-        let unordered = [time_row("2026-02", 2), time_row("2026-01", 1)];
-        let downgraded = chart_or_table("trend", "period", &columns, &unordered, &derived_from);
-        let blocks: Vec<&str> = downgraded
-            .iter()
-            .map(|b| b["type"].as_str().unwrap())
-            .collect();
-        assert_eq!(blocks, vec!["table", "note"]);
-        assert!(
-            !downgraded.iter().any(|b| b["type"] == "chart_spec"),
-            "chart yang menyesatkan tidak boleh dirender"
-        );
-        let note = &downgraded[1];
-        assert_eq!(note["downgraded_from"], "chart_spec");
-        assert_eq!(note["reason"], "the time dimension is not ordered");
-
-        // Kolom waktu hilang juga menurunkan.
-        let no_time = chart_or_table(
-            "trend",
-            "period",
-            &["total".to_string()],
-            &ordered,
-            &derived_from,
-        );
-        assert_eq!(
-            no_time[1]["reason"],
-            "the required time dimension column is absent"
-        );
-
-        // Bukan kegagalan: dokumen hasil downgrade lolos validator apa adanya.
-        let response = SettledResponse {
-            kind: "analysis",
-            outcome: "Answered",
-            completeness: "Complete",
-            completeness_reason: "curated_query:x".into(),
-            response_hash: "h".into(),
-            evidence: json!({ "lineage": [], "derivations": [] }),
-            blocks: Value::Array(downgraded),
-        };
-        let ledger = Ledger {
+        let plan = charted_plan();
+        let ledger_of = |rows: &[Map<String, Value>]| Ledger {
             contributors: BTreeMap::from([(node().to_string(), "Complete".to_string())]),
+            outputs: BTreeMap::from([(node().to_string(), rows.to_vec())]),
             ..Ledger::default()
         };
-        assert_eq!(validate::apply(response, &ledger).status(), "passed");
+
+        // Terurut naik → tabel + chart_spec yang merujuk tabel itu.
+        let ordered = [time_row("2026-01", 1), time_row("2026-02", 2)];
+        let compatible = analysis(&plan, &ordered, 5, false, &[], node(), &dataset(), None);
+        assert_eq!(block_types(&compatible), vec!["table", "chart_spec"]);
+        let chart = &compatible.blocks[1];
+        assert_eq!(chart["time_dimension"], "period");
+        assert_eq!(chart["measures"], json!(["total"]));
+        assert_eq!(chart["data_block_id"], "result");
+        assert_shape(&compatible.blocks);
+        assert_eq!(
+            validate::apply(compatible, &ledger_of(&ordered)).status(),
+            "passed"
+        );
+
+        // Tidak terurut → tabel + catatan, tanpa chart.
+        let unordered = [time_row("2026-02", 2), time_row("2026-01", 1)];
+        let downgraded = analysis(&plan, &unordered, 5, false, &[], node(), &dataset(), None);
+        assert_eq!(block_types(&downgraded), vec!["table", "note"]);
+        let note = &downgraded.blocks[1];
+        assert_eq!(note["downgraded_from"], "chart_spec");
+        assert_eq!(note["reason"], "the time dimension is not ordered");
+        assert_eq!(downgraded.outcome, "Answered");
+        assert_eq!(
+            validate::apply(downgraded, &ledger_of(&unordered)).status(),
+            "passed"
+        );
+
+        // Satu titik waktu bukan tren: capability ber-chart tetap tabel + note,
+        // bukan metric.
+        let single = [time_row("2026-01", 1)];
+        let one_point = analysis(&plan, &single, 5, false, &[], node(), &dataset(), None);
+        assert_eq!(block_types(&one_point), vec!["table", "note"]);
+        assert_eq!(
+            one_point.blocks[1]["reason"],
+            "the result has fewer than two points on the time dimension"
+        );
+
+        // Kolom waktu hilang juga menurunkan.
+        assert_eq!(
+            time_series_incompatibility("period", &[row("1.00", 1), row("2.00", 2)]),
+            Some("the required time dimension column is absent")
+        );
+    }
+
+    /// Validator menghitung ulang bentuk chart atas baris ledger: chart_spec
+    /// yang disusun di atas data tidak terurut ditolak, blok chart dibuang,
+    /// tabelnya bertahan.
+    #[test]
+    fn resp_8_7_validator_drops_a_chart_whose_ledger_data_is_incompatible() {
+        use crate::engine::validate::{self, Ledger};
+        use std::collections::BTreeMap;
+
+        let ordered = [time_row("2026-01", 1), time_row("2026-02", 2)];
+        let response = analysis(
+            &charted_plan(),
+            &ordered,
+            5,
+            false,
+            &[],
+            node(),
+            &dataset(),
+            None,
+        );
+        let ledger = Ledger {
+            contributors: BTreeMap::from([(node().to_string(), "Complete".to_string())]),
+            outputs: BTreeMap::from([(
+                node().to_string(),
+                vec![time_row("2026-02", 2), time_row("2026-01", 1)],
+            )]),
+            ..Ledger::default()
+        };
+
+        let validated = validate::apply(response, &ledger);
+        assert_eq!(validated.status(), "fallback");
+        assert_eq!(block_types(&validated.served), vec!["table", "limitation"]);
+        assert_eq!(validated.served.blocks[0]["block_id"], "result");
+    }
+
+    /// NODE_OUTPUT_INLINE_THRESHOLD — sampai 200 baris inline; di atasnya tabel
+    /// merujuk dataset handle + pagination tanpa baris inline.
+    #[test]
+    fn a_large_result_references_the_dataset_handle_instead_of_inline_rows() {
+        let small: Vec<_> = (0..INLINE_MAX_ROWS as i64)
+            .map(|i| row("1.00", i))
+            .collect();
+        let inline = analysis(&plan(), &small, 5, false, &[], node(), &dataset(), None);
+        assert_eq!(
+            inline.blocks[0]["rows"].as_array().unwrap().len(),
+            INLINE_MAX_ROWS
+        );
+        assert!(inline.blocks[0].get("dataset_id").is_none());
+
+        let large: Vec<_> = (0..=INLINE_MAX_ROWS as i64)
+            .map(|i| row("1.00", i))
+            .collect();
+        let backed = analysis(&plan(), &large, 5, false, &[], node(), &dataset(), None);
+        let table = &backed.blocks[0];
+        assert!(
+            table.get("rows").is_none(),
+            "tabel besar tidak disalin inline"
+        );
+        assert_eq!(table["row_count"], INLINE_MAX_ROWS + 1);
+        assert_eq!(table["dataset_id"], dataset().dataset_id.to_string());
+        assert_eq!(
+            table["pagination"]["rows_path"],
+            format!("/chat/datasets/{}/rows", dataset().dataset_id)
+        );
+        assert_shape(&backed.blocks);
+
+        // Ambang byte berlaku walau baris sedikit.
+        let wide: Vec<_> = (0..10).map(|i| row(&"9".repeat(4_000), i)).collect();
+        let by_bytes = analysis(&plan(), &wide, 5, false, &[], node(), &dataset(), None);
+        assert!(by_bytes.blocks[0].get("rows").is_none());
     }
 
     /// RESP-8.9 — dataset kedaluwarsa: tabel menyatakan detail tidak lagi
