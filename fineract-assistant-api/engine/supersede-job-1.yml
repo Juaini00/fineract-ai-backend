@@ -1,0 +1,29 @@
+info:
+  name: "FIN-147 dua jawaban satu session — job 1"
+  type: http
+  seq: 41.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{supersede_key_1}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{supersedeSession}}", "request_text": "Show the savings portfolio summary.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("supersede_key_1", "fin147-1-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — job 1 diterima", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("supersede_job_1", res.getBody().data.job_id);

@@ -1,0 +1,24 @@
+info:
+  name: "FIN-147 dua jawaban satu session — job state 2"
+  type: http
+  seq: 41.5
+  description: |
+    Jawaban kedua mempromosikan ActiveScope baru; yang lama wajib di-supersede di T7 yang sama
+    (memory-context.md:30, :77). Sebelum FIN-147 FK `superseded_by_id` menggagalkan T7 dan job
+    berakhir Failed lewat lease reaper.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{supersede_job_2}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("FIN-147: jawaban kedua dengan scope berbeda Completed/Answered", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+        });

@@ -307,20 +307,24 @@ async fn promote(
         // `entity_key IS NOT DISTINCT FROM $3` menyatukan dua aturan keunikan
         // dalam satu statement: `ActiveScope` (entity_key NULL, satu per
         // session) dan `ResolvedEntity` (satu per entity_key).
-        sqlx::query(
+        //
+        // Tiga langkah, bukan satu (FIN-147): FK `superseded_by_id` tidak
+        // deferrable, jadi ia belum boleh menunjuk `id` sebelum baris itu ada;
+        // sebaliknya INSERT dulu ditolak partial unique index selama baris lama
+        // masih `valid`. Maka: supersede → INSERT → tautkan tepat baris tadi.
+        let superseded: Vec<Uuid> = sqlx::query_scalar(
             "UPDATE session_memory
              SET status = 'superseded',
-                 superseded_by_id = $4,
                  invalidation_reason = 'superseded_by_newer',
                  invalidated_at = now()
              WHERE session_id = $1 AND kind = $2 AND entity_key IS NOT DISTINCT FROM $3
-               AND status = 'valid' AND kind <> 'PriorResult'",
+               AND status = 'valid' AND kind <> 'PriorResult'
+             RETURNING id",
         )
         .bind(session_id)
         .bind(fact.kind)
         .bind(fact.entity_key.as_deref())
-        .bind(id)
-        .execute(&mut **tx)
+        .fetch_all(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -349,6 +353,14 @@ async fn promote(
         .bind(&fact.completeness_reason)
         .execute(&mut **tx)
         .await?;
+
+        if !superseded.is_empty() {
+            sqlx::query("UPDATE session_memory SET superseded_by_id = $1 WHERE id = ANY($2)")
+                .bind(id)
+                .bind(&superseded)
+                .execute(&mut **tx)
+                .await?;
+        }
     }
 
     Ok(())
