@@ -1,0 +1,24 @@
+info:
+  name: response FIN-148 ranking phrase withdrawal monthly top-n
+  type: http
+  seq: 22
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{withdrawalRankingPhraseJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          test("FIN-148: frasa peringkat singkat 'Peringkat penarikan tabungan terbesar tiap bulan.' memilih savings_withdrawal_monthly_top_n, bukan savings_withdrawal_total", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_withdrawal_monthly_top_n");
+          });
+        }

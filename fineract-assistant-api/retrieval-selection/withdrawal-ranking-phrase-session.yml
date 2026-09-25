@@ -1,0 +1,24 @@
+info:
+  name: session FIN-148 ranking phrase withdrawal monthly top-n
+  type: http
+  seq: 20
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "retrieval-selection FIN-148 ranking phrase" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("withdrawalRankingPhraseSessionId", res.getBody().data.id);

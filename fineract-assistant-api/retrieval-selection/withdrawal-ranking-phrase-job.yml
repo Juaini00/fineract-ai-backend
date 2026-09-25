@@ -1,0 +1,32 @@
+info:
+  name: job FIN-148 ranking phrase withdrawal monthly top-n
+  type: http
+  seq: 21
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{withdrawalRankingPhraseIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{withdrawalRankingPhraseSessionId}}",
+        "request_text": "Peringkat penarikan tabungan terbesar tiap bulan."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("withdrawalRankingPhraseIdemKey", "bruno-withdrawal-ranking-phrase-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("withdrawalRankingPhraseJobId", res.getBody().data.job_id);
