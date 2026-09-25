@@ -1,0 +1,24 @@
+info:
+  name: tunggu plan durable (attempt 1 Runnable) sebelum cancel
+  type: http
+  seq: 8
+  description: |
+    Sequence 3 = fase `planning` (T3): attempt 1 sudah `Runnable`. Seam stage
+    ini membuat worker error sebelum admisi, jadi attempt itu tidak pernah
+    menjadi `Running`.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{skipCancelJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, function (job) { return job.last_event_sequence >= 3; })) {
+          test("OVR-6.4 (FIN-144): plan durable sebelum cancel", function () {
+            expect(res.getBody().data.plan_version).to.equal(1);
+          });
+        }

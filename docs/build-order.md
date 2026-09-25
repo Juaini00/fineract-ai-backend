@@ -1130,6 +1130,34 @@ Update after FIN-146 (flaky `.../response` reads that can race job settlement
   green (coverage unchanged at 36/59 — mechanism fix, no new scenario ID,
   same class as FIN-138/FIN-145).
 
+Update after FIN-144 (OVR-6.4 never-admitted attempts on terminal jobs):
+
+- **Bug:** every terminal settlement to `Expired`/`Cancelled` closed only
+  `Running` attempts (`Abandoned`, FIN-141). An attempt still
+  `Pending`/`Runnable` — e.g. the worker errored after T3 and before
+  admission — stayed `Runnable` on a terminal job forever, which
+  `architecture/engine.md:155` and `data/database-design.md:309` (T11) forbid.
+- **Now (`engine/repository.rs` `skip_unadmitted_attempts`):** all three
+  paths that make a job `Expired`/`Cancelled` — reaper expiry
+  (`settle_expired`), reaper `Cancelling` → `Cancelled` without a live lease
+  (`settle_abandoned_cancelling`) and the worker-driven cancel commit
+  (`settle_cancelled`, T9, fenced by `lease_token`) — close every
+  `Pending`/`Runnable` attempt as `Skipped` in the same transaction as the
+  job update, emitting `node.status_changed` `{"status":"Skipped"}` and a
+  `node.skipped` audit row right before `job.expired`/`job.cancelled`.
+  Terminal attempt rows are never touched; a second reaper pass finds no
+  selectable job, so it changes nothing. Retry semantics are unchanged.
+- **Proven (Bruno, `worker-error` stage):** the Expired path by
+  `worker-error/events.yml` (attempt 1 → `Skipped` directly before
+  `job.expired`, replacing the FIN-141 assertion "no `node.status_changed`");
+  the reaper Cancelled path by the new chain
+  `worker-error/cancel*.yml` (seq 6–11)
+  (cancel while attempt 1 is `Runnable` → `Skipped` directly before
+  `job.cancelled`). Both fail on the pre-fix code. The worker-driven cancel
+  path is only reachable through a claim/cancel race, so it is covered by the
+  shared helper rather than by a deterministic Bruno request.
+- L4 stays 🔨: FIN-135 is still open.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

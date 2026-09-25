@@ -579,6 +579,9 @@ pub async fn settle_cancelled(
         return Ok(false);
     }
 
+    // Worker menutup job sebelum admisi (T9): attempt yang menunggu tidak
+    // akan pernah berjalan (FIN-144).
+    skip_unadmitted_attempts(&mut tx, job_id, session_id, FailureActor::Worker).await?;
     append_event(&mut tx, job_id, "job.cancelled", None).await?;
 
     audit::insert(
@@ -676,9 +679,12 @@ async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
     .await?;
 
     for (job_id, session_id) in &jobs {
-        // Job terminal tidak meninggalkan attempt `Running` (FIN-141): query
-        // yang mungkin sudah berjalan hasilnya tidak diketahui (I4).
+        // Job terminal tidak meninggalkan attempt terbuka: `Running` →
+        // `Abandoned` (FIN-141, hasilnya tidak diketahui, I4), `Pending`/
+        // `Runnable` → `Skipped` (FIN-144, pasti tidak pernah berjalan).
         abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
+        skip_unadmitted_attempts(&mut tx, *job_id, *session_id, FailureActor::Reaper(worker))
+            .await?;
         finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.expired", "job.expired").await?;
     }
 
@@ -712,6 +718,8 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
 
     for (job_id, session_id) in &jobs {
         abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
+        skip_unadmitted_attempts(&mut tx, *job_id, *session_id, FailureActor::Reaper(worker))
+            .await?;
         finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.cancelled", "job.cancelled").await?;
     }
 
@@ -901,6 +909,71 @@ async fn abandon_running_attempts(
     }
 
     Ok(abandoned)
+}
+
+/// Tutup setiap attempt `Pending`/`Runnable` job yang menjadi terminal sebagai
+/// `Skipped` + event + audit (engine.md "Attempt node", T11).
+///
+/// Bukan `Abandoned`: attempt itu tidak pernah diadmisikan, jadi tidak ada
+/// query yang mungkin sudah berjalan. Attempt terminal tidak disentuh.
+async fn skip_unadmitted_attempts(
+    tx: &mut Transaction<'_, Postgres>,
+    job_id: Uuid,
+    session_id: Uuid,
+    actor: FailureActor<'_>,
+) -> sqlx::Result<()> {
+    let skipped = sqlx::query_as::<_, (i32, String, i32)>(
+        "UPDATE job_node_runs
+         SET status = 'Skipped', finished_at = now()
+         WHERE job_id = $1 AND status IN ('Pending', 'Runnable')
+         RETURNING plan_version, node_id, attempt",
+    )
+    .bind(job_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let (actor_kind, reaper) = match actor {
+        FailureActor::Worker => ("worker", None),
+        FailureActor::Reaper(reaper) => ("reaper", Some(reaper)),
+    };
+
+    for (plan_version, node_id, attempt) in &skipped {
+        append_event_ref(
+            tx,
+            job_id,
+            "node.status_changed",
+            EventRef {
+                plan_version: Some(*plan_version),
+                node_id: Some(node_id),
+                node_attempt: Some(*attempt),
+                ..Default::default()
+            },
+            Some(serde_json::json!({ "status": "Skipped" })),
+        )
+        .await?;
+
+        audit::insert(
+            tx,
+            AuditEvent {
+                actor_kind,
+                job_id: Some(job_id),
+                session_id: Some(session_id),
+                stage: "node_execute",
+                action: "node.skipped",
+                result: "ok",
+                detail_json: Some(serde_json::json!({
+                    "reaper": reaper,
+                    "plan_version": plan_version,
+                    "node_id": node_id,
+                    "attempt": attempt,
+                })),
+                ..Default::default()
+            },
+        )
+        .await?;
+    }
+
+    Ok(())
 }
 
 /// Cap attempt tak pasti tercapai: `Failed` + `OperationalFailure` +
@@ -1172,8 +1245,9 @@ pub enum Admission {
 ///
 /// Inilah yang membuat ketidakpastian dapat dinyatakan (I4): reaper hanya
 /// menandai `Abandoned` attempt yang `Running` — yang mungkin sudah menyentuh
-/// sumber. Attempt yang belum diadmisikan tetap `Runnable`; ia tidak pernah
-/// berjalan, jadi tidak ada yang tidak pasti tentangnya.
+/// sumber. Attempt yang belum diadmisikan tidak pernah berjalan, jadi tidak
+/// ada yang tidak pasti tentangnya: selama job hidup ia tetap `Runnable`, dan
+/// settlement terminal menutupnya `Skipped` (FIN-144).
 pub async fn admit_node(
     pool: &PgPool,
     job_id: Uuid,
@@ -1352,7 +1426,8 @@ pub async fn complete_node(
 /// versi yang ditolak mendahuluinya.
 const FAILED_RESPONSE_VERSION: i32 = 1;
 
-/// Siapa yang memindahkan job ke `Failed` — menentukan baris audit-nya.
+/// Siapa yang menutup job (`Failed`, atau attempt `Skipped` saat job
+/// terminal) — menentukan baris audit-nya.
 enum FailureActor<'a> {
     Worker,
     Reaper(&'a str),

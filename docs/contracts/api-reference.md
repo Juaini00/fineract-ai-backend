@@ -916,8 +916,9 @@ level atas dan **tidak pernah** menimpa field envelope.
 
 `node.status_changed` membawa `node_id`, `node_attempt` dan `plan_version` pada
 envelope, dan `status` di level atas. `status` yang dipancarkan hari ini:
-`Completed`/`Failed` (worker, T4, beserta `rows_returned`) dan `Abandoned`
-(reaper, T11). Admisi ke `Running` ditulis ke ledger tanpa event.
+`Completed`/`Failed` (worker, T4, beserta `rows_returned`), `Abandoned`
+(reaper, T11) dan `Skipped` (settlement terminal, FIN-144). Admisi ke `Running`
+ditulis ke ledger tanpa event.
 
 `Abandoned` berarti worker atau lease-nya hilang **sesudah** query sumber
 dikirim dan **sebelum** hasilnya commit: hasilnya **tidak diketahui**. Ia bukan
@@ -947,7 +948,14 @@ Startup ditolak bila ia di-set di luar `local`, atau bernilai `0`.
 Job yang ditutup reaper `Expired` atau `Cancelled` saat attempt-nya masih
 `Running` (FIN-141) memancarkan `node.status_changed` `Abandoned` untuk attempt
 itu **sebelum** `job.expired`/`job.cancelled`, dalam transaksi yang sama —
-tanpa `job.notice` dan tanpa attempt baru. Klaim ulang sesudah lease hilang
+tanpa `job.notice` dan tanpa attempt baru. Attempt yang masih
+`Pending`/`Runnable` — belum pernah diadmisikan, jadi pasti tidak pernah
+menyentuh sumber — ditutup `Skipped` (FIN-144) oleh setiap settlement
+`Expired`/`Cancelled`, baik oleh reaper maupun oleh worker yang menuntaskan
+cancel, dengan `node.status_changed` `Skipped` tepat sebelum
+`job.expired`/`job.cancelled` dalam transaksi yang sama. `Skipped` bukan
+kegagalan dan bukan ketidakpastian. Job terminal tidak pernah menyisakan
+attempt `Pending`/`Runnable`/`Running`. Klaim ulang sesudah lease hilang
 tidak memperpanjang batas waktu job: job yang terus gagal sebelum query
 dikirim berakhir `job.expired` pada batas waktu aslinya.
 

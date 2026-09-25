@@ -36,8 +36,12 @@ runtime:
           expect(claims.length).to.equal(notices.length + 1);
         });
 
-        test("OVR-6.4 (FIN-141): attempt 1 tidak pernah diadmisikan — tidak ada Abandoned, tidak ada attempt 2", function () {
-          expect(names).to.not.include("node.status_changed");
+        test("OVR-6.4 (FIN-141/FIN-144): attempt 1 tidak pernah diadmisikan — settlement Expired menutupnya Skipped, bukan Abandoned, tanpa attempt 2", function () {
+          const nodes = events.filter(function (event) { return event.event === "node.status_changed"; });
+          expect(nodes.map(function (event) { return [event.node_id, event.node_attempt, event.status]; }))
+            .to.deep.equal([["main", 1, "Skipped"]]);
+          // Skipped tepat sebelum event terminal: transaksi settlement yang sama.
+          expect(names.indexOf("node.status_changed")).to.equal(names.indexOf("job.expired") - 1);
         });
 
         test("OVR-6.4 (FIN-141): berakhir tepat sekali di job.expired", function () {

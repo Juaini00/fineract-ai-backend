@@ -1,0 +1,38 @@
+info:
+  name: replay menutup attempt Runnable sebagai Skipped sebelum Cancelled
+  type: http
+  seq: 11
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{skipCancelJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        const events = poll.replay(res);
+        const names = events.map(function (event) { return event.event; });
+        const nodes = events.filter(function (event) { return event.event === "node.status_changed"; });
+
+        test("OVR-6.4 (FIN-144): replay utuh 1..last_event_sequence", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("skipCancelLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.4 (FIN-144): settlement Cancelled menutup attempt yang belum diadmisikan sebagai Skipped — tidak ada Runnable basi", function () {
+          expect(nodes.map(function (event) { return [event.node_id, event.node_attempt, event.status]; }))
+            .to.deep.equal([["main", 1, "Skipped"]]);
+          expect(nodes[0].plan_version).to.equal(1);
+          // Skipped tepat sebelum event terminal: transaksi settlement yang sama.
+          expect(names.indexOf("node.status_changed")).to.equal(names.indexOf("job.cancelled") - 1);
+        });
+
+        test("OVR-6.4 (FIN-144): berakhir tepat sekali di job.cancelled", function () {
+          expect(events[events.length - 1].event).to.equal("job.cancelled");
+          expect(names.filter(function (n) { return n === "job.cancelled"; })).to.have.lengthOf(1);
+          expect(names).to.not.include("job.expired");
+        });
