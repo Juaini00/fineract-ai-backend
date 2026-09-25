@@ -1129,6 +1129,24 @@ Update after FIN-146 (flaky `.../response` reads that can race job settlement
   `cargo clippy -D warnings`, `docs-check.sh` and `acceptance-check.sh` all
   green (coverage unchanged at 36/59 — mechanism fix, no new scenario ID,
   same class as FIN-138/FIN-145).
+Update after FIN-150 (`engine/row-cap-response.yml` reads the response
+without waiting for settlement — mechanism gate, no scenario ID):
+
+- **Found:** confirms the follow-up FIN-146 flagged above — `row-cap-response.yml`
+  was preceded only by the job POST, no state check or poll, same no-wait
+  shape as FIN-146's eight fixes. The sibling readers `row-cap-job-state.yml`
+  (seq 32.6) and `row-cap-dataset-rows.yml` (seq 32.7) both run strictly
+  after `row-cap-response.yml` in the same folder, so once the response read
+  itself blocks on settlement they observe an already-terminal job — no
+  no-wait gap of their own, left untouched.
+- **Fix:** same mechanism as FIN-138/FIN-145/FIN-146 — switched
+  `row-cap-response.yml` to `lib/poll.js`'s `awaitJob`, wrapping the existing
+  assertions unchanged. `engine` already runs under `BRU_SANDBOX=developer`
+  (set by FIN-146), so no runner change was needed.
+- **Verified:** `engine` stage passed **3/3 consecutive** locked runs, plus a
+  full locked run, all green. `cargo test`, `cargo clippy -D warnings`,
+  `docs-check.sh` and `acceptance-check.sh` all green (coverage unchanged —
+  mechanism fix, no new scenario ID).
 
 Update after FIN-144 (OVR-6.4 never-admitted attempts on terminal jobs):
 
