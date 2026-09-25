@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{acctTermsSession}}", "request_text": "What interest rate applies to savings account Branch 001000000001?" }
+      { "session_id": "{{acctTermsSession}}", "request_text": "What interest rate applies to savings account Branch 001000000002?" }
 runtime:
   scripts:
     - type: before-request

@@ -101,4 +101,28 @@ shapes:
       - { name: product_overdraft_limit, type: decimal, sensitivity: public_business }
     parameters:
       - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  # FIN-137: identity resolver for account_number/savings_account_id. Never
+  # projects the raw account number (sensitive_business_identifier) — only the
+  # masked label and business fields, same as client.identity/identity_candidates.
+  - id: identity_candidates
+    role: resolver
+    expected_cardinality: many
+    row_cap: 25
+    produces:
+      - { slot: savings_account_id, type: integer, sensitivity: public_business, cardinality: many }
+    request_shape:
+      operation: lookup
+      subject: savings_account
+      grouping: none
+      output: lookup
+      pii: none
+    fragment: queries/datasets/savings/accounts.identity_candidates.frag.sql
+    output_fields:
+      - { name: savings_account_id, type: bigint, sensitivity: public_business, core: true }
+      - { name: masked_account_number, type: string, sensitivity: masked_output, core: true }
+      - { name: office_id, type: bigint, sensitivity: public_business, core: true }
+      - { name: office_name, type: string, sensitivity: public_business, core: true }
+      - { name: savings_product_name, type: string, sensitivity: public_business, core: true }
+    parameters:
+      - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
 timeout_ms: 3000

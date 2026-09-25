@@ -1,0 +1,34 @@
+id: savings_account_identity_resolve
+status: approved_mvp
+domain: savings
+display_name: Savings Account Identity Resolve
+# Internal resolver capability: it exists only so the `savings.accounts`
+# `identity_candidates` resolver shape has an approved_mvp capability + query
+# behind it (same pattern as client_identity_resolve /
+# savings_charge_type_identity_resolve). FIN-137: the workflow compiler stamps
+# this capability id onto a ResolveEntity node whenever a parameter declares
+# an `authorized_data_probe` against that shape. `continuation: true` keeps it
+# out of first-turn classifier selection — it is never asked for directly,
+# only used as a probe target.
+kind: resolver
+continuation: true
+description: Resolve candidate savings accounts within the caller's authorized office scope, returning the account id and masked identifier for entity selection. The raw account number is never projected.
+data_areas: [organization_foundation, client_foundation, savings_core]
+required_api_capability: savings_account_identity_resolve
+query_id: savings.account_identity_candidates
+metrics: [savings.account_identity]
+output_mode: list
+request_shape: { operation: lookup, subject: savings_account, grouping: none, output: lookup, pii: none }
+examples:
+  - Resolve the savings account to continue.
+supported_intents:
+  - resolve a savings account entity by number within authorized office scope
+guards:
+  require_office_scope: true
+  snapshot_only: true
+dataset_recipe:
+  dataset_id: savings.accounts
+  shape_id: identity_candidates
+  projection: [savings_account_id, masked_account_number, office_id, office_name, savings_product_name]
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }

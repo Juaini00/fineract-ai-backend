@@ -4,9 +4,13 @@ sql_file: queries/savings/account_identity_lookup.sql
 data_areas: [organization_foundation, client_foundation, savings_core]
 tables: [m_savings_account, m_client, m_office, m_savings_product]
 metrics: [savings.account_identity]
+# FIN-137: account_number resolves through savings_account_identity_resolve
+# (dataset savings.accounts, shape identity_candidates) before this query
+# runs. The identity slot is savings_account_id — a resolved, server-issued
+# option (K1) — not the raw account number.
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
-  - { name: account_number, type: string, required: true, source: transient_sensitive_input }
+  - { name: savings_account_id, type: integer, required: true }
 output_fields:
   - { name: savings_account_id, type: bigint, sensitivity: public_business }
   - { name: masked_account_number, type: string, sensitivity: masked_output }

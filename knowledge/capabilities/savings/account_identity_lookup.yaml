@@ -21,13 +21,20 @@ guards:
   require_office_scope: true
   snapshot_only: true
 checks:
-  - { id: exact_identifier_only, rule: Account number is transient, equality-only, and never projected raw. }
+  - { id: identity_resolved_via_probe, rule: savings_account_id is bound only through the authorized savings_account_identity_resolve probe; never accepted as free text (K1). }
 parameters:
-  account_number: { type: string, required: true }
+  savings_account_id:
+    type: integer
+    required: true
+    resolution: [authorized_data_probe]
+    probe:
+      dataset_id: savings.accounts
+      shape_id: identity_candidates
+      output_slot: savings_account_id
   office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
 dataset_recipe:
   dataset_id: savings.accounts
   shape_id: identity
   filters:
-    - { filter_id: account_number, operator: eq, parameter: account_number }
+    - { filter_id: savings_account_id, operator: eq, parameter: savings_account_id }
   projection: [savings_account_id, masked_account_number, client_id, client_display_name, office_id, office_name, savings_product_id, savings_product_name, savings_status_enum, currency_code]

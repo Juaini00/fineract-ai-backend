@@ -1,0 +1,29 @@
+info:
+  name: savings_charge_count_by_type halaman opsi charge_name
+  type: http
+  seq: 4.4
+  description: |
+    q=Withdrawal mempersempit ke charge definition 46 ("Withdrawal fee").
+    binding-nya charge_name (string), bukan charge_definition_id — lihat
+    knowledge/capabilities/savings/charge_count_by_type.yaml probe.output_slot.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{chargeCountJob}}/clarification/options?field_id=charge_name&q=Withdrawal"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const page = res.getBody().data;
+          const option = page.options.find(function (o) { return String(o.option_id) === "46"; });
+          test("FIN-137: q=Withdrawal menemukan charge definition 46 (Withdrawal fee)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(option, "charge_definition_id=46 tidak ditemukan dengan q=Withdrawal").to.not.equal(undefined);
+            expect(option.label).to.equal("Withdrawal fee");
+          });
+          bru.setVar("chargeCountOptionId", option && option.option_id);
+        }

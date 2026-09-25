@@ -50,6 +50,12 @@ checks:
     rule: charge_name must reach SQL as a bound dataset filter, never as a discarded hint.
   - id: pii_gated
     rule: client identity fields must be redacted when caller lacks can_view_pii.
+  # FIN-137: charge_name is an identity slot (K1) once it declares a probe;
+  # savings_charge_type_identity_resolve resolves the same column
+  # (m_charge.name) the underlying query filters on, so the resolved value
+  # binds exactly what a typed charge name would have.
+  - id: charge_type_resolved_via_probe
+    rule: charge_name is bound only through the authorized savings_charge_type_identity_resolve probe; never accepted as free text (K1).
 dataset_recipe:
   dataset_id: savings.account_charges
   shape_id: recent_list
@@ -61,6 +67,11 @@ parameters:
   charge_name:
     type: string
     required: true
+    resolution: [authorized_data_probe]
+    probe:
+      dataset_id: savings.charge_definitions
+      shape_id: charge_type_candidates
+      output_slot: charge_name
   office_ids:
     type: integer_array
     required: false

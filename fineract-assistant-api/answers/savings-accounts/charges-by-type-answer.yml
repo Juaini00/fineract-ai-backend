@@ -1,7 +1,7 @@
 info:
   name: savings_charges_by_type answer
   type: http
-  seq: 5.5
+  seq: 5.6
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{chargesByTypeJob}}/response"

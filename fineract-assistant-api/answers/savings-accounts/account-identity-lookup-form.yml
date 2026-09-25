@@ -1,0 +1,30 @@
+info:
+  name: savings_account_identity_lookup form klarifikasi
+  type: http
+  seq: 1.3
+  description: |
+    FIN-137 — account_number sekarang identity slot beresolver (K1):
+    savings_account_id ditanyakan sebagai single_choice, bukan lagi
+    Unsupported/identity_slot_without_resolver.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{acctIdentityJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const form = res.getBody().data;
+          test("FIN-137 CLR-7: form klarifikasi terbuka untuk slot savings_account_id (resolver, bukan teks bebas)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(form.state).to.equal("open");
+            expect(form.fields_json[0].field_id).to.equal("savings_account_id");
+            expect(form.fields_json[0].type).to.equal("single_choice");
+          });
+          bru.setVar("acctIdentityClarificationId", form.clarification_id);
+          bru.setVar("acctIdentityRevision", form.revision);
+        }
