@@ -306,7 +306,7 @@ INSERT `job_responses` · UPDATE `chat_jobs` (`lifecycle` terminal, `outcome`, `
 **T10 — Hapus session (FORCE, #6)**
 Cek job nonterminal di service layer → tulis `Cancelling` · `DELETE FROM chat_sessions` (CASCADE membersihkan seluruh rantai) · INSERT audit `stage='admin'`. Worker pemegang lease **tidak diberi tahu**: heartbeat berikutnya mengenai 0 baris dan ia wajib berhenti (C16). `idempotency_keys` dan `audit_events` **tidak** ikut terhapus.
 
-**T11 — Reaper** (idempoten, berulang): lease kedaluwarsa → attempt `Abandoned` + attempt baru · job melewati `expires_at` → `Expired` · `Cancelling` tanpa lease → `Cancelled` · dataset melewati TTL → `expired`/`purged` (hapus chunk, **pertahankan baris dataset**) · purge `clarification_options` pada form terminal · purge `idempotency_keys` kedaluwarsa · purge `job_events` berbasis usia · purge `audit_evidence`.
+**T11 — Reaper** (idempoten, berulang): lease kedaluwarsa → attempt `Abandoned` + attempt baru · job melewati `expires_at` → `Expired` · `Cancelling` tanpa lease → `Cancelled` — pada kedua settlement terminal ini, dalam transaksi yang sama, attempt `Running` → `Abandoned` dan attempt `Pending`/`Runnable` yang belum diadmisikan → `Skipped` ([engine.md](../architecture/engine.md) matriks node) · dataset melewati TTL → `expired`/`purged` (hapus chunk, **pertahankan baris dataset**) · purge `clarification_options` pada form terminal · purge `idempotency_keys` kedaluwarsa · purge `job_events` berbasis usia · purge `audit_evidence`.
 
 **T12 — Perubahan konfigurasi**: INSERT `system_settings` versi baru + audit `stage='admin'`. Job berjalan **tidak** terpengaruh — nilainya sudah disnapshot (C17).
 
