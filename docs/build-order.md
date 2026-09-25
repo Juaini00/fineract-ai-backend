@@ -184,7 +184,9 @@ column. Query results are dumped inline into `job_node_runs.output_json`.
 [architecture/overview.md](architecture/overview.md) §6
 **Prerequisites**: L1, L3
 **Done when**: for every capability in use, the job's result is compared against
-direct SQL on Fineract and matches.
+direct SQL on Fineract and matches, and every L4-owned OVR scenario (OVR-6.1,
+OVR-6.3…6.7) carries a test naming its ID. OVR-6.2 (multi-node fan-in) is owned
+by L8 — owner decision 2026-09-25, see §5.1.
 **Status**: 🔨 — the job machinery (8 lifecycle states, fencing, idempotency,
 reaper) runs and is tested. **The correctness of the answers has never been
 tested by anyone.**
@@ -224,8 +226,9 @@ deviates (§6.1), nothing reads memory back, the summary is never computed, and
 
 ### L8 — Everything above
 
-Additive LLM narration, multi-node plans with fan-in, analytical contracts
-(Mode 2), final security model, observability, OpenAPI.
+Additive LLM narration, multi-node plans with fan-in (including scenario
+OVR-6.2, moved here from L4 — §5.1), analytical contracts (Mode 2), final
+security model, observability, OpenAPI.
 **Prerequisites**: L7.
 **Status**: ⬜ — **do not touch** until L1–L7 are ✅.
 
@@ -734,6 +737,29 @@ Update after FIN-136 (L2 lexical scoring bug):
   and is untouched by this fix — this was a ranking-precision bug inside an
   already-passing mechanism, not a missing capability of L2 itself.
 
+Update after owner decisions of 2026-09-25 (FIN-54, FIN-143, FIN-144):
+
+- **OVR-6.2 moves from L4 to L8.** The planner only builds single-node plans
+  (`engine/planner.rs`, `depends_on: []`; `engine/repository.rs` "a single-node
+  plan has no fan-in"), and multi-node plans with fan-in are L8 work (§3,
+  FIN-99). Keeping OVR-6.2 in the L4 gate made L4 depend on L8, which needs
+  L7, which needs L4 — a cycle. The owner resolved it by moving the scenario's
+  ownership: `scripts/acceptance-check.sh` maps `OVR-6.2 → L8` per ID (the
+  scenario text in `architecture/overview.md` is unchanged). FIN-54 is
+  re-parented under L8 and proven together with FIN-99.
+- **Docs-only corrections, owner-authorised:** `architecture/engine.md` retry
+  eligibility now reads `attempt < NODE_ATTEMPT_CAP` (attempt numbering starts
+  at 1; cap 3 = attempts 1, 2, 3 — FIN-143, matching `operations/runtime.md`
+  §1 and the FIN-141 decision); a never-admitted `Pending`/`Runnable` attempt
+  on a job that becomes `Expired`/`Cancelled` is closed `Skipped` in the same
+  settlement transaction (`engine.md` node matrix, `database-design.md` T11 —
+  FIN-144; the code change follows in that ticket).
+- L4 stays 🔨: every L4-owned OVR scenario now carries a test (6/6), but the
+  answers are not yet correct for every question as asked — FIN-135 (the
+  planner silently ignores user-stated dates/limits/currency/office), FIN-140
+  (Indonesian secret-field paraphrases and deferred-domain routing) and
+  FIN-144 are open.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -749,7 +775,7 @@ Latest run — **36 of 59 scenarios have a test**:
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
-| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 |
+| `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 (OVR-6.2 → L8) |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
