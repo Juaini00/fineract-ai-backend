@@ -1,0 +1,32 @@
+info:
+  name: job contoh Indonesia withdrawal breakdown
+  type: http
+  seq: 18
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{withdrawalBreakdownIdIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{withdrawalBreakdownIdSessionId}}",
+        "request_text": "Penarikan tabungan per bulan dari Januari sampai September."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("withdrawalBreakdownIdIdemKey", "bruno-withdrawal-breakdown-id-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("withdrawalBreakdownIdJobId", res.getBody().data.job_id);

@@ -99,6 +99,7 @@ if [ "$#" -gt 0 ]; then
     REDIS_DOWN_FOLDERS=()
     CRASH_FOLDERS=()
     RETRIEVAL_HEALTHY_FOLDERS=()
+    RETRIEVAL_SELECTION_FOLDERS=()
     for folder in "$@"; do
         if [ "$folder" = "answers" ]; then
             ANSWERS_FOLDERS+=("$folder")
@@ -114,7 +115,9 @@ if [ "$#" -gt 0 ]; then
             RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-vector" ] || [ "$folder" = "retrieval-healthy" ]; then
             RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
-        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ] || [ "$folder" = "retrieval-selection" ]; then
+        elif [ "$folder" = "retrieval-selection" ]; then
+            RETRIEVAL_SELECTION_FOLDERS+=("$folder")
+        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -122,13 +125,14 @@ if [ "$#" -gt 0 ]; then
     done
 else
     INTAKE_FOLDERS=(health auth chat)
-    ENGINE_FOLDERS=(engine clarification resolver sse retrieval-selection)
+    ENGINE_FOLDERS=(engine clarification resolver sse)
     DATASET_CAPPED_FOLDERS=(dataset-capped)
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)
     CRASH_FOLDERS=(crash-recovery crash-exhausted crash-expired crash-cancelled worker-error)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
+    RETRIEVAL_SELECTION_FOLDERS=(retrieval-selection)
 fi
 
 command -v bru >/dev/null || {
@@ -243,6 +247,16 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
             run_folders 1500 sse
         fi
     done
+fi
+
+if [ "${#RETRIEVAL_SELECTION_FOLDERS[@]}" -gt 0 ]; then
+    stop_app
+    start_app true
+    echo "==> bru run ${RETRIEVAL_SELECTION_FOLDERS[*]} (worker menyala)"
+    # FIN-145 — response.yml di sini menunggu lewat lib/poll.js (setTimeout);
+    # sandbox quickjs default tidak mengenal setTimeout, sama seperti
+    # crash-*/answers/redis-down/retrieval-unavailable/retrieval-healthy.
+    BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_SELECTION_FOLDERS[@]}"
 fi
 
 if [ "${#DATASET_CAPPED_FOLDERS[@]}" -gt 0 ]; then

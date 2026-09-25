@@ -22,7 +22,8 @@ request_shape:
 examples:
 - Largest withdrawal for each month from January to September 2026.
 - Top 3 withdrawals per month this year.
-- Show the biggest savings withdrawal per month.
+- Rank the biggest savings withdrawal per month, highest first.
+- Penarikan terbesar setiap bulan tahun ini.
 defaults:
   exclude_reversed: true
   default_limit: 1

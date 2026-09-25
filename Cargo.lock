@@ -42,9 +42,12 @@ dependencies = [
  "core",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "sqlx",
  "tokio",
  "tower-http",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
