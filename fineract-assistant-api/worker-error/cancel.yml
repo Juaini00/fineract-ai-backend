@@ -1,0 +1,18 @@
+info:
+  name: cancel saat attempt masih Runnable
+  type: http
+  seq: 9
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{skipCancelJob}}/cancel"
+  headers:
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("OVR-6.4 (FIN-144): cancel atas job nonterminal → Cancelling", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.lifecycle).to.equal("Cancelling");
+        });

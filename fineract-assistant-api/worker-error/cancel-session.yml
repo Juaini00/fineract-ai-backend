@@ -1,0 +1,22 @@
+info:
+  name: session untuk cancel atas attempt yang belum diadmisikan
+  type: http
+  seq: 6
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-144 cancel atas attempt Runnable" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("skipCancelSession", res.getBody().data.id);

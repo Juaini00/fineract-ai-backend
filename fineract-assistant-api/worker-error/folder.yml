@@ -12,4 +12,9 @@ info:
     (2) klaim ulang sesudah lease hilang tidak menggeser `expires_at`, jadi job
     yang selalu gagal sebelum admisi berakhir `Expired` pada deadline ASLINYA,
     tidak berputar tanpa batas. Attempt 1 tidak pernah diadmisikan: tidak ada
-    attempt `Abandoned`, tidak ada attempt 2.
+    attempt `Abandoned`, tidak ada attempt 2 — settlement terminal menutupnya
+    `Skipped` (FIN-144).
+
+    Rantai kedua (`cancel*`, FIN-144): job lain dibatalkan saat attempt 1-nya
+    masih `Runnable`; settlement `Cancelled` wajib menutupnya `Skipped` dalam
+    transaksi yang sama.

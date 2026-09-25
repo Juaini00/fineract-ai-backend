@@ -1,0 +1,27 @@
+info:
+  name: job yang dibatalkan sebelum attempt-nya diadmisikan
+  type: http
+  seq: 7
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+    - name: Idempotency-Key
+      value: "{{skipCancelKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{skipCancelSession}}", "request_text": "Show the savings portfolio summary." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("skipCancelKey", "fin144-skipCancel-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("skipCancelJob", res.getBody().data.job_id);
