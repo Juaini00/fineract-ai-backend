@@ -580,9 +580,10 @@ Update after FIN-139 (OVR-6.6 unapproved surface):
   `policy-surface-*` chains are refused.
 - It runs in `run_job` right after the write guard, before scope, retrieval,
   plan and any source query.
-- **Not covered:** the vocabulary is English because `knowledge/` is; an
-  Indonesian paraphrase ("kata sandi") is not matched. Deferred-domain
-  questions (loans, tax, accounting) keep their own route.
+- **Not covered (closed by FIN-140, see below):** the vocabulary was English
+  because `knowledge/` was; an Indonesian paraphrase ("kata sandi") was not
+  matched. Deferred-domain questions (loans, tax, accounting) had no route of
+  their own and could fall through to the nearest read capability.
 - L4 stays 🔨: OVR-6.2, 6.4 have no test.
 
 Update after FIN-56 (OVR-6.4):
@@ -756,9 +757,9 @@ Update after owner decisions of 2026-09-25 (FIN-54, FIN-143, FIN-144):
   FIN-144; the code change follows in that ticket).
 - L4 stays 🔨: every L4-owned OVR scenario now carries a test (6/6), but the
   answers are not yet correct for every question as asked — FIN-135 (the
-  planner silently ignores user-stated dates/limits/currency/office), FIN-140
-  (Indonesian secret-field paraphrases and deferred-domain routing) and
-  FIN-144 are open.
+  planner silently ignores user-stated dates/limits/currency/office) and
+  FIN-144 are open. FIN-140 (Indonesian secret-field paraphrases and
+  deferred-domain routing) is closed — see the update below.
 
 Update after FIN-138 (flaky `retrieval-healthy` stage — mechanism gate, no
 scenario ID):
@@ -845,6 +846,63 @@ Update after FIN-60/62/64 (L5.1/L5.3/L5.5, Lane C — live document conformance)
   vocabulary assertion (types ⊆ 9, on every live document) and FIN-62's
   `limitation`-states-withholding assertion are the live half of this
   scenario.
+
+Update after FIN-140 (OVR-6.6 — Indonesian secret-field terms + deferred
+loan/tax/accounting route):
+
+- **Closes the two gaps FIN-139 left open (§5, "Not covered" above).**
+  Reproduced first against a running instance (pre-fix): "Tampilkan kata
+  sandi semua pengguna aplikasi." and "Berapa pajak yang terkumpul bulan
+  ini?" opened a clarification instead of being refused; worse, "Show loan
+  transactions.", "Tampilkan transaksi pinjaman bulan ini." and "Show journal
+  entries for this month." were **misrouted and `Answered`** through
+  `savings_activity_list` / `savings_withdrawal_top_n` — a deferred domain's
+  subject silently answered with unrelated savings data.
+- **Indonesian secret-field terms** — `secret_never_expose` in
+  `schema/fineract/columns/sensitivity.yaml` gained a `synonyms:` list
+  (`kata sandi`, `sandi`, `hash kata sandi`), the same convention
+  `domains/*.yaml` concepts already use for bilingual terms. `loader.rs`
+  feeds `synonyms` into `Surfaces::build` alongside `examples`, so these
+  paraphrases settle `Completed` + `BlockedByPolicy` + `Unknown`,
+  `surface_not_approved` — identical shape to the English case
+  (`engine/policy-surface-id-*`).
+- **New guard: `catalog::surface::DeferredDomains`.** A request whose
+  subject is a domain with `status: deferred` (loans, tax, accounting_gl)
+  now settles **`Unsupported`** (not `BlockedByPolicy` — this is not a
+  policy refusal, `surface.rs` module doc) before scope, retrieval, plan and
+  any source query, with reason `domain_deferred` (new row,
+  `docs/contracts/api-reference.md`). It runs in `run_job` right after the
+  `surface_not_approved` check.
+- **Vocabulary is each deferred domain's own `concepts[].synonyms`** (EN/ID
+  mixed, same field `loan.yaml`/`tax.yaml`/`accounting.yaml`/`savings.yaml`
+  already declared) — `Domain` gained a `concepts: Vec<DomainConcept>` field
+  in `model.rs`; no new Rust vocabulary.
+- **Narrow by construction, same discipline as FIN-139:** whole-token phrase
+  match, never substring; a term is dropped from the deferred vocabulary if
+  it also occurs in an approved capability's own prose OR in a **non-deferred
+  domain's own concept synonyms** — `"credit"` is a `loan` synonym
+  (deferred) *and* a `savings` `deposit` synonym (`approved_mvp`,
+  `domains/savings.yaml`), so it must never silence a legitimate savings
+  question. `savings.yaml` also gained the Indonesian `"kredit"` synonym
+  (same ambiguity, other language) so the guard treats both consistently.
+  Proven by `ambiguous_terms_shared_with_an_approved_domain_never_trigger_the_deferred_guard`
+  and the Bruno control chain `policy-deferred-savings-credit-control-*`
+  ("Show savings credit transactions this month." still `Answered`).
+- **Fixed in passing, same file:** `catalog/surface.rs`'s `singular()` only
+  stripped a trailing `-s`, so "entries" normalized to "entrie" and never
+  matched the concept synonym "entry" ("journal entry"). Extended to strip
+  `-ies → -y` (a second common English plural pattern, not a phrase-specific
+  rule) — this also benefits the existing `Surfaces` guard, not just the new
+  one.
+- Extended the existing catalog-wide unit test
+  (`bruno_request_texts_are_refused_only_in_the_deferred_chain`, mirrors
+  FIN-139's `..._surface_chain` test): every `request_text` in
+  `fineract-assistant-api/` is checked against `DeferredDomains`; only
+  `policy-deferred-*` chains (excluding the `-control-` variant, which
+  proves the opposite) may be captured.
+- L4 stays 🔨: OVR-6.2, 6.4 still have no test (unchanged by this ticket).
+  `group_center.yaml`'s conditional-not-enabled reason is explicitly out of
+  scope, left for its own ticket.
 
 ### 5.1 Scenario coverage
 

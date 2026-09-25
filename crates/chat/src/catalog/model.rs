@@ -197,6 +197,10 @@ pub struct SensitivityClasses {
 pub struct SensitivityClass {
     #[serde(default)]
     pub examples: Vec<String>,
+    /// Padanan istilah lintas bahasa (mis. Indonesia) untuk kelas ini — sama
+    /// konvensinya dengan `synonyms` di `domains/*.yaml` (FIN-140).
+    #[serde(default)]
+    pub synonyms: Vec<String>,
 }
 
 /// `knowledge/data-scope/areas/*.yaml` — hanya yang dibaca guard permukaan.
@@ -217,6 +221,16 @@ pub struct Domain {
     pub data_areas: Vec<String>,
     #[serde(default)]
     pub unsupported_intents: Vec<String>,
+    /// Kosakata subjek domain — dipakai guard domain deferred (FIN-140) untuk
+    /// mengenali subjeknya lintas bahasa, tanpa menanam istilah di Rust.
+    #[serde(default)]
+    pub concepts: Vec<DomainConcept>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DomainConcept {
+    #[serde(default)]
+    pub synonyms: Vec<String>,
 }
 
 /// `knowledge/policies/query_safety.yaml`.

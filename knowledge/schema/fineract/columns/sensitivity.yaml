@@ -16,6 +16,9 @@ classes:
   secret_never_expose:
     default_behavior: never_expose
     examples: [password, token, command_as_json, result]
+    # Padanan Indonesia (FIN-140): permintaan berbahasa Indonesia atas field
+    # rahasia harus ditolak sama seperti padanan Inggrisnya.
+    synonyms: [kata sandi, sandi, hash kata sandi]
   # Ditambahkan 2026-09-13: dipakai 4 manifest query (account_no yang sudah
   # dipotong menjadi ****1234) tanpa pernah dideklarasikan di sini, sehingga
   # kebijakan PII tidak punya aturan untuknya dan ia lolos tanpa pemeriksaan.

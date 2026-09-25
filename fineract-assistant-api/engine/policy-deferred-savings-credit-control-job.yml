@@ -1,0 +1,34 @@
+info:
+  name: "OVR-6.6 domain deferred — kontrol: savings 'credit' tetap dijawab"
+  type: http
+  seq: 38.96
+  description: |
+    "credit" adalah synonym konsep `loan` (deferred, `knowledge/domains/loan.yaml`) SEKALIGUS
+    synonym konsep `deposit` di `savings.yaml` (approved_mvp). Guard domain deferred (FIN-140)
+    membuang istilah ambigu seperti ini dari kosakatanya, jadi pertanyaan savings yang sah tetap
+    sampai ke retrieval — bukan ikut ditolak sebagai domain deferred.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_savings_credit_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show savings credit transactions this month.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_savings_credit_key", "fin140-control-savings-credit-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_savings_credit_job", res.getBody().data.job_id);

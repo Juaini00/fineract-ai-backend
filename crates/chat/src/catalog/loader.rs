@@ -17,7 +17,7 @@ use crate::catalog::{
         Capability, DataScopeArea, Dataset, DatasetShape, Domain, QueryManifest, SafetyPolicy,
         SensitivityClasses,
     },
-    surface::Surfaces,
+    surface::{DeferredDomains, Surfaces},
 };
 
 /// Katalog yang sudah dimuat, belum divalidasi.
@@ -32,6 +32,10 @@ pub struct Catalog {
     /// Kosakata permukaan yang tidak disetujui, diturunkan dari knowledge
     /// (OVR-6.6, FIN-139). Lihat `catalog::surface`.
     pub unapproved_surfaces: Surfaces,
+    /// Domain berstatus `deferred` (loans, tax, accounting_gl) — dijawab
+    /// `Unsupported` sebelum retrieval, bukan dijawab lewat capability lain
+    /// (OVR-6.6, FIN-140). Lihat `catalog::surface`.
+    pub deferred_domains: DeferredDomains,
     /// Isi setiap file SQL di `queries/`, dikunci path relatif terhadap root repo.
     pub sql_files: BTreeMap<String, String>,
     pub content_hash: String,
@@ -79,17 +83,26 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
 
         if under("capabilities") {
             match serde_yaml::from_str::<Capability>(&text) {
-                Ok(entry) => capabilities.push(Loaded { path: relative, entry }),
+                Ok(entry) => capabilities.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if under("queries") {
             match serde_yaml::from_str::<QueryManifest>(&text) {
-                Ok(entry) => queries.push(Loaded { path: relative, entry }),
+                Ok(entry) => queries.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if under("datasets") {
             match serde_yaml::from_str::<Dataset>(&text) {
-                Ok(entry) => datasets.push(Loaded { path: relative, entry }),
+                Ok(entry) => datasets.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if relative.ends_with("columns/sensitivity.yaml") {
@@ -97,6 +110,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
                 Ok(declared) => {
                     if let Some(secret) = declared.classes.get(SECRET_CLASS) {
                         secret_fields.clone_from(&secret.examples);
+                        secret_fields.extend(secret.synonyms.iter().cloned());
                     }
                     sensitivity_classes.extend(declared.classes.into_keys());
                 }
@@ -136,6 +150,8 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         &domains,
         capabilities.iter().map(|loaded| &loaded.entry),
     );
+    let deferred_domains =
+        DeferredDomains::build(&domains, capabilities.iter().map(|loaded| &loaded.entry));
 
     Ok(Catalog {
         capabilities,
@@ -144,6 +160,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         safety_policy,
         sensitivity_classes,
         unapproved_surfaces,
+        deferred_domains,
         sql_files,
         content_hash: hex::encode(hasher.finalize()),
         unreadable,

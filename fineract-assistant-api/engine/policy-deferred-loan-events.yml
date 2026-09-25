@@ -1,0 +1,26 @@
+info:
+  name: "OVR-6.6 domain deferred (loan, EN) — events"
+  type: http
+  seq: 38.921
+  description: |
+    Stream tertutup pada event terminal, jadi request ini juga menunggu job selesai.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_loan_job}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const names = (String(res.getBody()).match(/^event: (\S+)$/gm) || []).map(function (line) {
+          return line.slice(7);
+        });
+        test("OVR-6.6 (deferred, loan EN): dijawab sebelum source execution — tanpa node, tanpa klarifikasi", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(names[0]).to.equal("job.accepted");
+          expect(names[names.length - 1]).to.equal("job.completed");
+          expect(names).to.not.include("node.status_changed");
+          expect(names.filter(function (n) { return n.startsWith("clarification."); })).to.have.lengthOf(0);
+        });
