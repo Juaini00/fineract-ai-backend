@@ -1,0 +1,32 @@
+info:
+  name: job paraphrase withdrawal top-n
+  type: http
+  seq: 3
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{withdrawalParaphraseIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{withdrawalParaphraseSessionId}}",
+        "request_text": "Top withdrawals per month in the last 12 months."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("withdrawalParaphraseIdemKey", "bruno-withdrawal-paraphrase-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("withdrawalParaphraseJobId", res.getBody().data.job_id);

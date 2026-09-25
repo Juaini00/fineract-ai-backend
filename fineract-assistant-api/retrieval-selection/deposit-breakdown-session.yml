@@ -1,0 +1,24 @@
+info:
+  name: session manifest example deposit breakdown
+  type: http
+  seq: 5
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "retrieval-selection deposit breakdown" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("depositBreakdownSessionId", res.getBody().data.id);

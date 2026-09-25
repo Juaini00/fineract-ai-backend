@@ -1,0 +1,32 @@
+info:
+  name: job manifest example deposit breakdown
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{depositBreakdownIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{depositBreakdownSessionId}}",
+        "request_text": "Show savings deposits per month for this year."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("depositBreakdownIdemKey", "bruno-deposit-breakdown-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("depositBreakdownJobId", res.getBody().data.job_id);

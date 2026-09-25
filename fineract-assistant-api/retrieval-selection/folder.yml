@@ -1,0 +1,14 @@
+info:
+  name: retrieval-selection
+  seq: 12
+  description: |
+    FIN-136 — mekanisme pemilihan capability lexical-first (planner::best_capability)
+    dibuktikan lewat permukaan HTTP nyata, bukan cuma test unit SQL lokal. Empat
+    kasus: satu paraphrase yang dulu salah rute (bukan literal example manifest),
+    satu literal example bahasa Inggris yang bertetangga dekat dengan capability
+    lain (breakdown vs top-n), satu literal example yang dulu kalah dari
+    capability lain karena pengulangan kosakata generik (lifecycle vs
+    summary-by-office), dan satu contoh bahasa Indonesia sebagai bukti fix tidak
+    meregresi jalur non-Inggris. Dijalankan dengan worker menyala (klaster
+    `engine`/`clarification`/`resolver`/`sse`) supaya job benar-benar settle dan
+    lineage.capability_id dapat dibaca dari response.

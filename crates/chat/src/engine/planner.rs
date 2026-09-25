@@ -387,17 +387,36 @@ async fn best_capability(
         return Ok(None);
     }
 
+    // `matched_terms` tetap kriteria urutan utama (kandidat yang cocok pada
+    // lebih banyak term request selalu menang lebih dulu). Perubahan FIN-136
+    // ada di *tie-break* dua bagian, karena term count saja tidak cukup
+    // membedakan capability bertetangga yang berbagi kosakata domain sama:
+    //
+    // 1. `title` diberi bobot 'A' (penuh) sementara sisa `retrieval_text`
+    //    (deskripsi + contoh) diberi bobot 'C' (0.4x default). Tanpa ini,
+    //    capability lain yang mengulang kata umum domain berkali-kali di
+    //    banyak contohnya ("client" di hampir tiap contoh capability
+    //    client-domain) bisa mengungguli kecocokan frasa persis pada
+    //    capability targetnya sendiri — lihat kasus
+    //    "Show client lifecycle summary." di FIN-136.
+    // 2. Normalisasi rank `2` (bagi dengan panjang dokumen) menghukum
+    //    capability yang skornya digelembungkan oleh banyak contoh panjang,
+    //    dan lah yang menyelesaikan tie exact match/skor antara "Top
+    //    withdrawals per month in the last 12 months." dan capability lain
+    //    yang kebetulan cocok pada term count dan skor yang sama.
     let candidate = sqlx::query_as::<_, (String, f32, i64)>(
         "WITH query AS (
              SELECT to_tsquery('simple', array_to_string($2::text[], ' | ')) AS terms
          ), documents AS MATERIALIZED (
-             SELECT source_id, to_tsvector('simple', retrieval_text) AS document
+             SELECT source_id,
+                    setweight(to_tsvector('simple', coalesce(title, '')), 'A')
+                    || setweight(to_tsvector('simple', retrieval_text), 'C') AS document
              FROM knowledge_index
              WHERE catalog_version_id = $1
                AND source_type = 'capability'
          )
          SELECT documents.source_id,
-                ts_rank_cd(documents.document, query.terms) AS score,
+                ts_rank_cd(documents.document, query.terms, 2) AS score,
                 overlap.matched_terms
          FROM documents
          CROSS JOIN query
