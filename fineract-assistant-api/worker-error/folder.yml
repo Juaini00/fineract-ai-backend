@@ -1,0 +1,15 @@
+info:
+  name: worker-error
+  seq: 16
+  description: |
+    FIN-141 — error worker (bukan crash) SEBELUM admisi node. Runner menyalakan
+    worker dengan seam lokal `LOCAL_WORKER_ERROR_BEFORE_ADMISSION` (hanya sah di
+    APP_ENV=local; pola FIN-56) sehingga SETIAP klaim berakhir error sesudah plan
+    durable, lease 6 s / heartbeat 2 s / reaper 2 s, dan `JOB_TTL_RUNNING_SECS=24`.
+
+    Dua janji yang diuji: (1) heartbeat berhenti pada error, jadi lease lapse dan
+    reaper memulihkan job jauh sebelum TTL — bukan ditahan renewal sampai TTL;
+    (2) klaim ulang sesudah lease hilang tidak menggeser `expires_at`, jadi job
+    yang selalu gagal sebelum admisi berakhir `Expired` pada deadline ASLINYA,
+    tidak berputar tanpa batas. Attempt 1 tidak pernah diadmisikan: tidak ada
+    attempt `Abandoned`, tidak ada attempt 2.

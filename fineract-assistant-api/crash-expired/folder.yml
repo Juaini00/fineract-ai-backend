@@ -1,0 +1,11 @@
+info:
+  name: crash-expired
+  seq: 17
+  description: |
+    FIN-141 — job melewati TTL sementara attempt-nya `Running`. Runner memakai
+    seam FIN-56 `LOCAL_CRASH_AFTER_EXTERNAL_CALL=1` dengan
+    `JOB_TTL_RUNNING_SECS=4` < lease 6 s: attempt ditinggalkan sesudah query,
+    lalu `expires_at` lewat LEBIH DULU daripada lease, sehingga reaper menutup
+    job `Expired` (kedaluwarsa diperiksa sebelum requeue). Settlement itu wajib
+    menutup attempt `Running` sebagai `Abandoned` (I4) pada transaksi yang sama —
+    job terminal tidak meninggalkan attempt `Running`.

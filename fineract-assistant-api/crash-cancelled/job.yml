@@ -1,0 +1,27 @@
+info:
+  name: job yang dibatalkan saat attempt Running
+  type: http
+  seq: 3
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{crashCancelledToken}}"
+    - name: Idempotency-Key
+      value: "{{crashCancelledKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{crashCancelledSession}}", "request_text": "Show the savings portfolio summary." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("crashCancelledKey", "fin141-crashCancelled-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("crashCancelledJob", res.getBody().data.job_id);

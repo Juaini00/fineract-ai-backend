@@ -174,6 +174,13 @@ pub struct Config {
     /// HTTP tanpa membunuh proses. Di luar `local` startup ditolak.
     #[serde(default)]
     pub local_crash_after_external_call: Option<u32>,
+    /// Seam KHUSUS `local` (FIN-141, pola FIN-56): N klaim pertama proses ini
+    /// berakhir dengan error worker sesudah plan dipersist dan SEBELUM admisi
+    /// node — tidak ada query sumber yang dikirim. Membuat heartbeat yang
+    /// berhenti pada error dan recovery pra-admisi yang dibatasi TTL dapat
+    /// dibuktikan di permukaan HTTP. Di luar `local` startup ditolak.
+    #[serde(default)]
+    pub local_worker_error_before_admission: Option<u32>,
 
     // ---- Event dan SSE (runtime.md §5) ----
     /// Jeda baca PostgreSQL saat tidak ada notifikasi. Ini **fallback yang
@@ -386,20 +393,33 @@ impl Config {
             anyhow::bail!("NODE_ATTEMPT_CAP wajib minimal 1");
         }
 
-        // Seam crash yang lolos keluar local berarti production diam-diam
-        // membuang hasil query: gagal keras, jangan diabaikan.
-        if let Some(crashes) = self.local_crash_after_external_call {
-            if self.app_env != AppEnv::Local {
-                anyhow::bail!(
-                    "LOCAL_CRASH_AFTER_EXTERNAL_CALL hanya sah di APP_ENV=local, bukan {:?}",
-                    self.app_env
-                );
-            }
-            if crashes == 0 {
-                anyhow::bail!("LOCAL_CRASH_AFTER_EXTERNAL_CALL wajib lebih besar dari nol");
-            }
-        }
+        // Seam crash/error yang lolos keluar local berarti production diam-diam
+        // membuang hasil query atau menggagalkan job: gagal keras.
+        self.local_failure_seam(
+            "LOCAL_CRASH_AFTER_EXTERNAL_CALL",
+            self.local_crash_after_external_call,
+        )?;
+        self.local_failure_seam(
+            "LOCAL_WORKER_ERROR_BEFORE_ADMISSION",
+            self.local_worker_error_before_admission,
+        )?;
 
+        Ok(())
+    }
+
+    fn local_failure_seam(&self, name: &str, value: Option<u32>) -> anyhow::Result<()> {
+        let Some(count) = value else {
+            return Ok(());
+        };
+        if self.app_env != AppEnv::Local {
+            anyhow::bail!(
+                "{name} hanya sah di APP_ENV=local, bukan {:?}",
+                self.app_env
+            );
+        }
+        if count == 0 {
+            anyhow::bail!("{name} wajib lebih besar dari nol");
+        }
         Ok(())
     }
 }
@@ -692,5 +712,27 @@ mod tests {
 
         let error = build(entries).unwrap_err().to_string();
         assert!(error.contains("LOCAL_CRASH_AFTER_EXTERNAL_CALL"), "{error}");
+    }
+
+    #[test]
+    fn local_worker_error_seam_refuses_to_start_outside_local_or_at_zero() {
+        let mut entries = minimal();
+        entries.push(("app_env", "staging".into()));
+        entries.push(("jwt_access_secret", "produksi-access".into()));
+        entries.push(("jwt_refresh_secret", "produksi-refresh".into()));
+        entries.push(("local_worker_error_before_admission", "1".into()));
+        let error = build(entries).unwrap_err().to_string();
+        assert!(
+            error.contains("LOCAL_WORKER_ERROR_BEFORE_ADMISSION"),
+            "{error}"
+        );
+
+        let mut entries = minimal();
+        entries.push(("local_worker_error_before_admission", "0".into()));
+        let error = build(entries).unwrap_err().to_string();
+        assert!(
+            error.contains("LOCAL_WORKER_ERROR_BEFORE_ADMISSION"),
+            "{error}"
+        );
     }
 }

@@ -1,0 +1,34 @@
+info:
+  name: job berakhir Expired pada deadline aslinya
+  type: http
+  seq: 4
+  description: |
+    TTL 24 s, siklus lease-hilang ≈ 8 s. Deadline yang digeser SEKALI saja oleh
+    klaim ulang (paling cepat ±8 s sesudah klaim pertama) membuat job terminal
+    paling cepat 32 s sesudah dibuat; deadline asli menutupnya < 30 s.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{workerErrorJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, function (job) { return poll.TERMINAL.includes(job.lifecycle); })) {
+          const job = res.getBody().data;
+          test("OVR-6.4 (FIN-141): recovery pra-admisi dibatasi TTL — Expired/Unknown, bukan berputar", function () {
+            expect(job.lifecycle).to.equal("Expired");
+            expect(job.outcome).to.equal("Expired");
+            expect(job.completeness).to.equal("Unknown");
+            expect(job.completeness_reason).to.equal("job_ttl_exceeded");
+          });
+          test("OVR-6.4 (FIN-141): klaim ulang tidak menggeser expires_at — terminal pada deadline asli", function () {
+            const lifetime = Date.parse(job.terminal_at) - Date.parse(job.created_at);
+            expect(lifetime).to.be.at.least(24000);
+            expect(lifetime).to.be.below(30000);
+          });
+          bru.setVar("workerErrorLastSequence", job.last_event_sequence);
+        }

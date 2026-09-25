@@ -1,0 +1,26 @@
+info:
+  name: job ditutup reaper sebagai Expired
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashExpiredJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashExpiredToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, function (job) { return poll.TERMINAL.includes(job.lifecycle); })) {
+          const job = res.getBody().data;
+          test("OVR-6.4 (FIN-141): reaper menutup job Expired/Unknown", function () {
+            expect(job.lifecycle).to.equal("Expired");
+            expect(job.outcome).to.equal("Expired");
+            expect(job.completeness).to.equal("Unknown");
+            expect(job.completeness_reason).to.equal("job_ttl_exceeded");
+            expect(job.plan_version).to.equal(1);
+          });
+          bru.setVar("crashExpiredLastSequence", job.last_event_sequence);
+        }

@@ -1,0 +1,20 @@
+info:
+  name: login untuk yang dibatalkan saat attempt Running
+  type: http
+  seq: 1
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      { "username": "{{username}}", "password": "{{password}}" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(200);
+        bru.setVar("crashCancelledToken", res.getBody().data.access_token);

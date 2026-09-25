@@ -1,0 +1,48 @@
+info:
+  name: replay menyatakan lease yang dilepas dan batasnya
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{workerErrorJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        const events = poll.replay(res);
+        const names = events.map(function (event) { return event.event; });
+        const notices = events.filter(function (event) { return event.event === "job.notice"; });
+        const claims = events.filter(function (event) { return event.event === "job.phase_changed" && event.phase === "understanding"; });
+
+        test("OVR-6.4 (FIN-141): replay utuh 1..last_event_sequence", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("workerErrorLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.4 (FIN-141): heartbeat berhenti pada error — reaper memulihkan lease sebelum TTL, berulang", function () {
+          // Heartbeat yang tetap hidup menahan lease sampai TTL: nol notice.
+          expect(notices.length).to.be.at.least(2);
+          notices.forEach(function (event) {
+            expect(event.by).to.equal("reaper");
+            // Lease hilang sebelum admisi tidak mengulang attempt apa pun.
+            expect(event.retry).to.equal(undefined);
+          });
+          // Setiap pemulihan diikuti tepat satu klaim ulang.
+          expect(claims.length).to.equal(notices.length + 1);
+        });
+
+        test("OVR-6.4 (FIN-141): attempt 1 tidak pernah diadmisikan — tidak ada Abandoned, tidak ada attempt 2", function () {
+          expect(names).to.not.include("node.status_changed");
+        });
+
+        test("OVR-6.4 (FIN-141): berakhir tepat sekali di job.expired", function () {
+          expect(events[events.length - 1].event).to.equal("job.expired");
+          expect(names.filter(function (n) { return n === "job.expired"; })).to.have.lengthOf(1);
+          expect(names).to.not.include("job.failed");
+          expect(names).to.not.include("job.completed");
+        });

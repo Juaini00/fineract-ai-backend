@@ -1,0 +1,10 @@
+info:
+  name: crash-cancelled
+  seq: 18
+  description: |
+    FIN-141 — pembatalan atas job yang attempt-nya ditinggalkan `Running`.
+    Runner memakai seam FIN-56 `LOCAL_CRASH_AFTER_EXTERNAL_CALL=1`: worker
+    meninggalkan attempt sesudah query, klien meminta cancel (`Cancelling`), dan
+    tanpa lease hidup reaper yang menutupnya `Cancelled`. Settlement itu wajib
+    menutup attempt `Running` sebagai `Abandoned` pada transaksi yang sama —
+    kontrak tidak punya status node `Cancelled`.

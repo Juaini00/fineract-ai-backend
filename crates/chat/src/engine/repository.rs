@@ -54,10 +54,14 @@ pub async fn claim_next(
              heartbeat_at = now(),
              lease_expires_at = now() + make_interval(secs => $2),
              started_at = COALESCE(started_at, now()),
-             -- K3: expires_at dihitung ULANG pada setiap transisi fase. Tanpa
-             -- ini, job yang sempat menunggu klarifikasi lama akan langsung
-             -- kedaluwarsa begitu dilanjutkan.
-             expires_at = now() + make_interval(secs => $3),
+             -- K3: expires_at dihitung ulang pada setiap transisi FASE — dan
+             -- transisi yang mengembalikan job ke antrean (T6, auto-resolve)
+             -- sudah menulisnya. Klaim hanya mengisi yang masih kosong (job
+             -- baru diterima). Klaim ulang sesudah reaper mengembalikan job
+             -- (lease hilang) BUKAN transisi fase: menghitungnya ulang di sini
+             -- memberi job yang selalu mematikan worker-nya umur baru tanpa
+             -- batas (FIN-141), sehingga TTL tidak pernah menjadi jaring.
+             expires_at = COALESCE(expires_at, now() + make_interval(secs => $3)),
              updated_at = now()
          WHERE id = (
              SELECT id FROM chat_jobs
@@ -660,6 +664,9 @@ async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
     .await?;
 
     for (job_id, session_id) in &jobs {
+        // Job terminal tidak meninggalkan attempt `Running` (FIN-141): query
+        // yang mungkin sudah berjalan hasilnya tidak diketahui (I4).
+        abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
         finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.expired", "job.expired").await?;
     }
 
@@ -692,6 +699,7 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
     .await?;
 
     for (job_id, session_id) in &jobs {
+        abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
         finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.cancelled", "job.cancelled").await?;
     }
 

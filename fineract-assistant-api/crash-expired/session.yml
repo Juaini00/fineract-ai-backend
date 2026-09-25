@@ -1,0 +1,22 @@
+info:
+  name: session untuk yang kedaluwarsa saat attempt Running
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{crashExpiredToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-141 yang kedaluwarsa saat attempt Running" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("crashExpiredSession", res.getBody().data.id);
