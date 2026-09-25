@@ -12,8 +12,12 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("FIN-40: saldo kantor Indonesia memilih capability terindeks", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(res.getBody().data.evidence_json.lineage[0].capability_id)
-            .to.equal("organization_office_savings_summary");
-        });
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          test("FIN-40: saldo kantor Indonesia memilih capability terindeks", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(res.getBody().data.evidence_json.lineage[0].capability_id)
+              .to.equal("organization_office_savings_summary");
+          });
+        }

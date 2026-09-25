@@ -1066,6 +1066,69 @@ Update after FIN-147 (L4 bug — second answer in one session failed at T7):
 - **Not built (L7, MEM-7.6 / FIN-86):** invalidating `PriorResult` rows as
   `scope_changed` when the scope changes — `promote` still skips
   `PriorResult` entirely. This ticket moves no scenario ID in §5.1.
+Update after FIN-146 (flaky `.../response` reads that can race job settlement
+— mechanism gate, no scenario ID):
+
+- **Found:** unlike FIN-138's `retrieval-*` stages, most `GET
+  /chat/jobs/:id/response` requests across the collection are preceded by a
+  request that already single-checks `job.lifecycle === "Completed"` (or an
+  `awaitJob`/`awaitResponse` poll) — safe transitively, since that check
+  fails first if the job isn't terminal yet. A minority read the response
+  immediately after job creation with **no wait of any kind**: the five
+  `engine/indonesian-*-response.yml` + `engine/default-limit-response.yml`
+  chains (no `*-job-state.yml` between question and response — the ticket's
+  named repro, `engine/indonesian-client-balance-response.yml`, races the
+  worker for real), `resolver/bound-response.yml` (reads right after the
+  202-Queued `answer-option.yml`), `resolver/nocandidate-response.yml` /
+  `noresolver-response.yml` (read right after `POST /chat/jobs`), and
+  `dataset-capped/response.yml` (same). `retrieval-selection/*-response.yml`,
+  the sixth file of this same no-wait shape, was independently fixed by
+  FIN-145 (landed on `main` mid-ticket, above) — not touched again here. Full
+  audit table of every `.../response` reader in the collection is in the
+  ticket's worker report (`/tmp/jarvis-reports/FIN-146.md`).
+- **Fix:** same mechanism as FIN-138/FIN-145 — switched eight no-wait files
+  to `lib/poll.js`'s `awaitJob` (`resolver/noresolver-response.yml`'s own
+  fix was dropped on rebase: FIN-137, landed mid-ticket, retired the whole
+  `resolver/noresolver-{session,job,response}.yml` scenario — `account_number`
+  now has a resolver, so its "identity slot without resolver" fixture no
+  longer exists), and added `BRU_SANDBOX=developer` to the `ENGINE_FOLDERS`
+  (`engine clarification resolver sse`, `retrieval-selection` already split
+  out by FIN-145) and `dataset-capped` stage invocations in
+  `scripts/integration-test.sh` (`awaitJob` needs `setTimeout`, absent from
+  the default `quickjs` sandbox). Everything already covered by a preceding
+  terminal-state check, or already polling, was left untouched — this
+  ticket owns only the previously-unguarded reads, not a rewrite of the
+  chain.
+- **Out of scope, left as follow-ups (owned by other tickets or the
+  coordinator):** `engine/row-cap-response.yml` (not preceded by a
+  terminal-state check — same no-wait shape as this ticket's fixes, but
+  `row-cap-*` is owned elsewhere) and the six `engine/policy-*-response.yml`
+  files (each preceded by a single-check `*-state.yml`, safe transitively —
+  lower priority). Not touched here per this ticket's ownership boundary.
+- **New bug found while verifying the fix, left unfixed (out of scope —
+  app code, not a Bruno poll script):** `dataset-capped/response.yml` still
+  fails intermittently **after** the connection-race fix (job reliably
+  settles and returns 200/`Complete`/`validation_status: passed`), but the
+  `dataset_truncated` `limitation` block it/DS-8.1 requires is sometimes
+  absent even though `LOCAL_DATASET_MAX_ROWS=1` and the served table always
+  has more than one row (truncation should be deterministic). Reproduced in
+  2 of 4 isolated post-fix runs — a genuine, separate race in
+  `compose.rs`/`worker.rs::retain_dataset`, not caused by and not curable
+  from the test side. Flagged for the coordinator to file as its own ticket
+  (same pattern as FIN-147 for `engine/policy-narrow-events`, above — that
+  bug was already found and fixed independently before this ticket's own
+  full-suite run landed).
+- **Verified:** reproducing the flake directly proved unnecessary — the
+  ticket's own repro (a FIN-60 run) already showed it once on `origin/main`.
+  Post-fix, `engine` + `resolver` passed **5/5 consecutive** targeted locked
+  runs (109/109 requests, 161/161 tests each), plus a full locked run, all
+  green. `dataset-capped`'s connection-race is fixed (0/5 runs since the fix
+  failed with a 404/connect error), but the stage as a whole is not 5/5
+  clean because of the unrelated content-composition bug above (2/4
+  isolated runs failed *that* assertion, not the connection). `cargo test`,
+  `cargo clippy -D warnings`, `docs-check.sh` and `acceptance-check.sh` all
+  green (coverage unchanged at 36/59 — mechanism fix, no new scenario ID,
+  same class as FIN-138/FIN-145).
 
 ### 5.1 Scenario coverage
 

@@ -12,9 +12,13 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("FIN-40: aktivasi nasabah Indonesia memilih capability terindeks", function () {
-          expect(res.getStatus()).to.equal(200);
-          const lineage = res.getBody().data.evidence_json.lineage[0];
-          expect(lineage.capability_id).to.equal("client_activation_monthly_breakdown");
-          expect(lineage.query_id).to.equal("client.activation_monthly_breakdown");
-        });
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          test("FIN-40: aktivasi nasabah Indonesia memilih capability terindeks", function () {
+            expect(res.getStatus()).to.equal(200);
+            const lineage = res.getBody().data.evidence_json.lineage[0];
+            expect(lineage.capability_id).to.equal("client_activation_monthly_breakdown");
+            expect(lineage.query_id).to.equal("client.activation_monthly_breakdown");
+          });
+        }
