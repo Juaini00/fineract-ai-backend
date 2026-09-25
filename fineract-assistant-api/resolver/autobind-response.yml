@@ -19,10 +19,13 @@ runtime:
   scripts:
     - type: tests
       code: |
+        const shape = require("./lib/response_shape.js");
         const document = res.getBody().data;
         const auto = document.blocks_json.find(function (block) {
           return block.block_id === "slots_auto_bound";
         });
+
+        shape.assertBlockShape(test, expect, document);
 
         test("job selesai tanpa pernah menanyakan apa pun", function () {
           expect(res.getStatus()).to.equal(200);

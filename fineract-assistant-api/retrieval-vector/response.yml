@@ -19,11 +19,22 @@ runtime:
         // WAKTU (90 s) dengan tidur per-poll.
         const poll = require("./lib/poll.js");
         if (await poll.awaitJob(bru, req, res, () => true)) {
+          const shape = require("./lib/response_shape.js");
           const document = res.getBody().data;
           test("FIN-41: vector fallback selects savings_deposit_total", function () {
             expect(res.getStatus()).to.equal(200);
             expect(document.kind).to.equal("analysis");
             expect(document.evidence_json.lineage[0].capability_id)
               .to.equal("savings_deposit_total");
+          });
+
+          // L5.1 §1–§2 — savings.deposit_total groups by nothing (single row),
+          // so this is the live `metric`-shaped document: one block per
+          // named value, not the `table` shape answered-response.yml covers.
+          shape.assertBlockShape(test, expect, document);
+          test("L5.1 §1–§2: grouping none → blok metric, bukan table", function () {
+            const blocks = document.blocks_json;
+            expect(blocks.filter((b) => b.type === "metric").length).to.be.above(0);
+            expect(blocks.find((b) => b.type === "table")).to.equal(undefined);
           });
         }
