@@ -624,23 +624,72 @@ WHERE client_id=65 AND deposit_type_enum IN (200,300);   -- 1
 Catatan: `LIMIT 100` keras seperti pada `savings_client_activity`, tetapi pada
 data ini batas itu tidak pernah tersentuh, jadi kedua angkanya cocok.
 
-### savings_account_identity_lookup — lulus
+### savings_account_identity_lookup — lulus (FIN-137: account_number sekarang identity slot beresolver)
 
-- Kapabilitas (`account_number='Branch 001000000001'`): 1 baris, `****0001`,
-  klien 1, kantor 2, produk 1, status 300, USD
+- Kapabilitas (`savings_account_id=1`, resolved dari account_number lewat
+  `savings_account_identity_resolve`): 1 baris, `****0001`, klien 1, kantor 2,
+  produk 1, status 300, USD
 - SQL langsung: 1 baris dengan nilai yang sama
 
 ```sql
 SELECT sa.id, sa.client_id, c.office_id, sa.product_id, sa.status_enum, sa.currency_code
 FROM m_savings_account sa JOIN m_client c ON c.id=sa.client_id
-WHERE sa.account_no='Branch 001000000001';
+WHERE sa.id=1;   -- account_no='Branch 001000000001'
 ```
 
-### savings_account_terms_lookup — lulus
+Sebelum FIN-137, `account_number` dideklarasikan query manifest sebagai
+`source: transient_sensitive_input` tanpa `probe:` capability — K1
+(`planner.rs Missing::unanswerable`) membuat slot itu **tidak dapat
+ditanyakan sama sekali**, jadi capability ini selalu `Unsupported` /
+`identity_slot_without_resolver` (dibuktikan `resolver/noresolver-*.yml`).
+Perbaikan: query & capability sekarang mengikat `savings_account_id`
+(integer, bukan lagi `account_number` string), diisi lewat probe baru
+`savings_account_identity_resolve` (dataset `savings.accounts`, shape
+`identity_candidates`) — masked label + savings_account_id saja, nomor
+rekening mentah tidak pernah diproyeksikan (`sensitive_business_identifier`,
+`columns/sensitivity.yaml`).
 
-- Kapabilitas: 1 baris; bunga rekening `2.000000`, bunga produk `2.000000`,
-  overdraft rekening `0.000000`, overdraft produk `NULL`
+### savings_account_terms_lookup — lulus (FIN-137: sama seperti di atas)
+
+- Kapabilitas (`savings_account_id=2`, `****0002`): bunga rekening
+  `2.000000`, bunga produk `2.000000`, overdraft rekening `false`/`0.000000`,
+  overdraft produk `false`/`NULL`
 - SQL langsung: nilai yang sama dari `m_savings_account` dan `m_savings_product`
+
+### savings_account_identity_resolve — lulus (probe baru, FIN-137)
+
+- Kapabilitas (`office_ids` = seluruh 7 office / scope admin): 205 baris,
+  205 `savings_account_id` distinct — tidak ada fanout dari join
+  `m_client`/`m_office`/`m_savings_product`.
+- SQL langsung: 205 baris, 205 id.
+
+```sql
+SELECT count(*), count(DISTINCT sa.id) FROM m_savings_account sa
+JOIN m_client c ON c.id=sa.client_id
+JOIN m_office o ON o.id=c.office_id
+JOIN m_savings_product sp ON sp.id=sa.product_id;   -- 205, 205
+```
+
+`right(account_no,4)` unik untuk rekening 1 dan 2 (`'0001'`/`'0002'`) di
+seluruh 205 baris — `q=0001` pada `/clarification/options` mempersempit ke
+tepat satu kandidat tanpa memperluas scope (CLR-7), dibuktikan
+`account-identity-lookup-options.yml`/`account-terms-lookup-options.yml`.
+Tidak ada office dengan tepat satu rekening pada data ini (minimum 6, office
+8), jadi K5 `resolver_unique` auto-bind untuk slot ini tidak dibuktikan ulang
+di sini dengan fixture segar — mekanismenya generik dan sama dengan yang
+`resolver/autobind-*.yml` sudah buktikan untuk `client_id`.
+
+### savings_charge_count_by_type / savings_charges_by_type — charge_name diikat ke probe (FIN-137)
+
+`charge_name` sekarang mendeklarasikan `probe:` ke
+`savings_charge_type_identity_resolve` (dataset `savings.charge_definitions`,
+shape `charge_type_candidates`, `output_slot: charge_name`) — keduanya
+memfilter `ch.name`/`m_charge.name` case-insensitively, kolom yang sama yang
+probe resolusi (`charge_name`), jadi nilai yang di-resolve mengikat persis
+seperti teks yang diketik akan mengikat. Angka jawaban tidak berubah
+(`tests/answers/savings_charge_count_by_type.sql`,
+`savings_charges_by_type.sql` tetap `charge_name: "Withdrawal fee"` — hanya
+mekanisme pengikatannya yang berubah dari teks bebas menjadi opsi resolver).
 
 ---
 

@@ -1,7 +1,7 @@
 info:
   name: savings_charge_count_by_type jawab klarifikasi
   type: http
-  seq: 4.4
+  seq: 4.5
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs/{{chargeCountJob}}/responses"
@@ -18,7 +18,7 @@ http:
       {
         "clarification_id": "{{chargeCountClarificationId}}",
         "revision": {{chargeCountRevision}},
-        "answers": { "charge_name": "Withdrawal fee" }
+        "answers": { "charge_name": "{{chargeCountOptionId}}" }
       }
 runtime:
   scripts:

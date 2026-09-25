@@ -1,7 +1,7 @@
 info:
   name: savings_charge_count_by_type answer
   type: http
-  seq: 4.5
+  seq: 4.6
 http:
   method: get
   url: "{{baseUrl}}/chat/jobs/{{chargeCountJob}}/response"

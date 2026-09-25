@@ -965,6 +965,77 @@ FIN-145 (retrieval-selection poll flake, same class as FIN-138):
   test`, `cargo clippy -D warnings`, `docs-check.sh` and `acceptance-check.sh`
   all green.
 
+Update after FIN-137 (savings_account_identity_lookup / savings_account_terms_lookup):
+
+- **Found:** both capabilities declared `account_number` as a plain
+  `type: string` parameter, but the query manifests they run
+  (`knowledge/queries/savings/account_identity_lookup.yaml`,
+  `account_terms_lookup.yaml`) marked it `source: transient_sensitive_input`.
+  K1 (`planner.rs Missing::unanswerable`) forbids binding an identity slot from
+  free text, and neither capability declared a `probe:` for it, so the slot
+  could never be asked at all — every request landed on `Unsupported` /
+  `identity_slot_without_resolver`. This mirrors
+  `savings_charge_type_identity_resolve`'s pre-FIN-34 state: an approved probe
+  shape existed nowhere for this parameter (`knowledge/parameter-bindings/
+  bindings.yaml:41-43` already anticipated a resolved answer needing "a
+  declared home", but nothing produced one).
+- **Fix:** added `savings_account_identity_resolve` (`kind: resolver`,
+  `continuation: true`, same pattern as `client_identity_resolve` /
+  `savings_charge_type_identity_resolve`), a new `identity_candidates` shape
+  on the `savings.accounts` dataset, and its wrapping query manifest
+  `savings.account_identity_candidates`. Both capabilities now bind
+  `savings_account_id` (integer) — resolved through the probe — instead of
+  `account_number` (string); their SQL filters `sa.id = $2::bigint` instead of
+  `sa.account_no = $2::text`. The probe never projects the raw account number
+  (`sensitive_business_identifier`, `columns/sensitivity.yaml`) — only
+  `masked_account_number`, `savings_account_id`, and non-identity business
+  fields (office, product name).
+- **Also wired:** `charge_name` on `savings_charge_count_by_type` and
+  `savings_charges_by_type` now declares the same `probe:` as
+  `savings_charge_type_identity_resolve` (`output_slot: charge_name`) — the
+  probe's underlying query and both capabilities' queries filter the same
+  column (`m_charge.name`/`ch.name`, case-insensitive), so the resolved value
+  binds exactly what typed free text used to. This was checked, not assumed
+  (Rule 4): the probe's `charge_type_candidates` shape already outputs
+  `charge_name`, so the identity/binding columns line up without inventing a
+  new shape.
+- **Verified** (`knowledge/VERIFICATION.md`): the new probe returns 205 rows /
+  205 distinct `savings_account_id` in the full authorized scope (no fanout);
+  `right(account_no, 4)` is unique for the two adjacent accounts used as
+  fixtures (`'0001'`/`'0002'`), so `q=0001`/`q=0002` on
+  `/clarification/options` narrows to exactly one candidate without widening
+  scope (CLR-7) — proven by the `account-identity-lookup-options.yml` /
+  `account-terms-lookup-options.yml` Bruno stages, and the full account/terms
+  answer chains (`account-identity-lookup-answer.yml`,
+  `account-terms-lookup-answer.yml`) now compare the resolved answer against
+  direct SQL via `answers.check()` instead of asserting `Unsupported`.
+  `charge_count_by_type`/`charges_by_type`'s existing direct-SQL truth files
+  are unchanged (`charge_name: "Withdrawal fee"` — only the binding mechanism
+  changed, not the expected numbers). `cargo run -p app -- catalog` → 0 error.
+- **Retired:** `resolver/noresolver-{session,job,response}.yml` — its scenario
+  ("Which office and product belong to savings account?" hits an identity slot
+  with no resolver) used `savings_account_identity_lookup`'s own
+  `account_number` as its example. That was the last `transient_sensitive_input`
+  query parameter without a `probe:` in the whole approved catalog, so fixing
+  it here left the Bruno scenario with no fixture to reproduce. The mechanism
+  it proved (`Missing::unanswerable`, `Unplannable::reason`/`explain`) is
+  unchanged pure logic — now proven by a new unit test
+  (`planner::tests::identity_slot_without_resolver_is_unanswerable_not_asked_as_text`)
+  instead. `crates/chat/src/catalog/validate.rs`'s `identity_slot_has_resolver`
+  warning still fires at catalog-load time if a future query re-introduces the
+  situation.
+- **Not reproduced with fresh fixture data:** K5 `resolver_unique` auto-bind
+  for a savings account identity slot — no office in this dataset has exactly
+  one savings account (minimum is 6, office 8), which is what would trigger
+  it. The mechanism itself is shared, generic code
+  (`crates/chat/src/engine/worker.rs`) already proven for `client_id` by
+  `resolver/autobind-*.yml`; this ticket did not duplicate that proof with
+  savings-specific fixtures.
+- L1 stays 🧪: this closes two of the nine originally-failing/incorrect
+  identity-slot capabilities' catalog shape, not a new acceptance scenario for
+  L1 itself. `CLR-7` gets its first test (coverage moves in §5.1); L7 stays ❌
+  since CLR-7 alone does not clear the layer's prerequisites.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -973,7 +1044,7 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **36 of 59 scenarios have a test**:
+Latest run — **37 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
@@ -982,10 +1053,10 @@ Latest run — **36 of 59 scenarios have a test**:
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 (OVR-6.2 → L8) |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
-| `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
+| `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 1 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **36** | |
+| | **Total** | **59** | **37** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

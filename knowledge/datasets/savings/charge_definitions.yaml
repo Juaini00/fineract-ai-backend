@@ -23,6 +23,10 @@ shapes:
     row_cap: 25
     produces:
       - { slot: charge_definition_id, type: integer, sensitivity: public_business, cardinality: many }
+      # FIN-137: charge_count_by_type/charges_by_type filter by charge_name
+      # (m_charge.name), not the definition id, so that's the output_slot
+      # their capability's probe: block declares.
+      - { slot: charge_name, type: string, sensitivity: public_business, cardinality: many }
     request_shape:
       operation: lookup
       subject: savings_account_charge

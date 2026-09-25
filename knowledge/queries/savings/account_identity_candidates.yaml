@@ -1,0 +1,23 @@
+id: savings.account_identity_candidates
+database: fineract
+# Wraps the savings.accounts dataset's identity_candidates resolver shape so an
+# approved capability can back it (same pattern as client.identity_resolve /
+# savings.charge_type_candidates). FIN-137: lets account_number resolve to a
+# savings_account_id through a server-issued option instead of being an
+# unanswerable transient_sensitive_input slot.
+sql_file: queries/datasets/savings/accounts.identity_candidates.source.sql
+data_areas: [organization_foundation, client_foundation, savings_core]
+tables: [m_savings_account, m_client, m_office, m_savings_product]
+metrics: [savings.account_identity]
+resolves: { dataset_id: savings.accounts, shape_id: identity_candidates }
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+output_fields:
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: masked_account_number, type: string, sensitivity: masked_output }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: office_name, type: string, sensitivity: public_business }
+  - { name: savings_product_name, type: string, sensitivity: public_business }
+grain: [savings_account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000

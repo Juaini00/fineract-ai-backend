@@ -1,24 +1,24 @@
 info:
-  name: savings_charges_by_type jawab klarifikasi
+  name: savings_account_terms_lookup jawab klarifikasi
   type: http
-  seq: 5.5
+  seq: 2.5
 http:
   method: post
-  url: "{{baseUrl}}/chat/jobs/{{chargesByTypeJob}}/responses"
+  url: "{{baseUrl}}/chat/jobs/{{acctTermsJob}}/responses"
   headers:
     - name: content-type
       value: application/json
     - name: authorization
       value: "Bearer {{answersToken}}"
     - name: Idempotency-Key
-      value: "{{chargesByTypeKey}}-answer"
+      value: "{{acctTermsKey}}-answer"
   body:
     type: json
     data: |
       {
-        "clarification_id": "{{chargesByTypeClarificationId}}",
-        "revision": {{chargesByTypeRevision}},
-        "answers": { "charge_name": "{{chargesByTypeOptionId}}" }
+        "clarification_id": "{{acctTermsClarificationId}}",
+        "revision": {{acctTermsRevision}},
+        "answers": { "savings_account_id": "{{acctTermsOptionId}}" }
       }
 runtime:
   scripts:
@@ -26,6 +26,6 @@ runtime:
       code: |
         test("jawaban klarifikasi durable, job yang sama kembali mengantre", function () {
           expect(res.getStatus()).to.equal(202);
-          expect(res.getBody().data.job_id).to.equal(bru.getVar("chargesByTypeJob"));
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("acctTermsJob"));
           expect(res.getBody().data.lifecycle).to.equal("Queued");
         });

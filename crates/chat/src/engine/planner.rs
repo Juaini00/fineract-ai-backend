@@ -796,6 +796,35 @@ mod tests {
         atomic::{AtomicBool, Ordering},
     };
 
+    // FIN-137: this is now the only proof of K1's "identity slot without a
+    // resolver is never asked" — `resolver/noresolver-*.yml` used to exercise
+    // it at the HTTP surface through `savings_account_identity_lookup`, whose
+    // `account_number` had no `probe:`. That was the last capability in the
+    // approved catalog in that state (`cargo run -p app -- catalog` shows zero
+    // `transient_sensitive_input` parameters left without a probe), so the
+    // Bruno scenario had no fixture left to reproduce it with. The mechanism
+    // itself (`Missing::unanswerable`, `Unplannable::reason`/`explain`) is
+    // unchanged — only pure logic, so a unit test proves it just as well.
+    #[test]
+    fn identity_slot_without_resolver_is_unanswerable_not_asked_as_text() {
+        let missing = Missing {
+            name: "account_number".to_string(),
+            kind: "string".to_string(),
+            identity: true,
+            resolver: None,
+        };
+        assert!(missing.unanswerable());
+        assert_eq!(missing.field_type(), "text");
+
+        let unplannable = Unplannable::NeedsClarification {
+            capability: "savings_account_identity_lookup".to_string(),
+            missing: vec![missing],
+        };
+        assert_eq!(unplannable.reason(), "identity_slot_without_resolver");
+        assert!(unplannable.explain().contains("account_number"));
+        assert!(unplannable.explain().contains("never bound from free text"));
+    }
+
     #[tokio::test]
     async fn lexical_candidate_wins_without_invoking_vector_arm() {
         let invoked = Arc::new(AtomicBool::new(false));

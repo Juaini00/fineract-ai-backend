@@ -10,6 +10,10 @@
 //!    bersumber `authorized_scope`; validator katalog menolak yang lain.
 //! 3. **Label tunduk pada sakelar PII dan fail closed.** Saat PII mati, nama
 //!    nasabah tidak menjadi label — `label_fallback` katalog yang dipakai.
+//!    `masked_output` (mis. nomor rekening yang sudah dipotong) BUKAN PII —
+//!    ia tetap boleh menjadi label/atribut apa pun keadaan sakelarnya
+//!    (columns/sensitivity.yaml: sama-sama `allow_if_capability_declares`
+//!    dengan `public_business`, berbeda dari `pii`).
 //! 4. **Pemotongan dinyatakan.** Kandidat melebihi `RESOLVER_MAX_CANDIDATES`
 //!    menjadi `truncated: true`, bukan daftar yang diam-diam lebih pendek (I5).
 
@@ -41,7 +45,13 @@ pub struct ResolverSlot {
     pub binding_kind: String,
     pub label_fields: Vec<String>,
     pub label_fallback: Option<String>,
-    /// Kolom yang boleh ikut sebagai atribut opsi (non-PII saja).
+    /// Kolom yang boleh ikut sebagai atribut/label tanpa sakelar PII:
+    /// `public_business` dan `masked_output` (columns/sensitivity.yaml —
+    /// keduanya `allow_if_capability_declares`, berbeda dari `pii` yang
+    /// menuntut sakelar menyala). Identifier mentah yang sudah dipotong
+    /// (mis. `masked_account_number`) bukan PII; menahannya di belakang
+    /// sakelar PII membuat resolver identitas non-klien (FIN-137) tidak
+    /// pernah dapat mencari lewat label sama sekali.
     pub public_fields: Vec<String>,
     /// `row_cap` shape: ukuran halaman **default**, bukan batas populasi.
     /// Memperlakukannya sebagai batas populasi membuat kandidat ke-26 tidak
@@ -53,11 +63,7 @@ impl ResolverSlot {
     /// Susun dari katalog. `binding_kind` datang dari manifest query yang
     /// **memakai** slot, bukan dari resolver — nilainya harus dapat diikat ke
     /// parameter itu, bukan sekadar ada.
-    pub fn from_catalog(
-        catalog: &Catalog,
-        probe: &ProbeRef,
-        binding_kind: &str,
-    ) -> Option<Self> {
+    pub fn from_catalog(catalog: &Catalog, probe: &ProbeRef, binding_kind: &str) -> Option<Self> {
         let resolver = catalog.resolver_for(&probe.dataset_id, &probe.shape_id)?;
         let entity = resolver.dataset.entity.as_ref()?;
         let sql_file = resolver.query.sql_file.as_deref()?;
@@ -78,7 +84,12 @@ impl ResolverSlot {
                 .query
                 .output_fields
                 .iter()
-                .filter(|field| field.sensitivity.as_deref() == Some("public_business"))
+                .filter(|field| {
+                    matches!(
+                        field.sensitivity.as_deref(),
+                        Some("public_business") | Some("masked_output")
+                    )
+                })
                 .map(|field| field.name.clone())
                 .collect(),
             // Shape tanpa row_cap: halaman probe yang lebih ketat, bukan tanpa batas.
@@ -133,7 +144,13 @@ pub async fn candidates(
     )
     .await?;
 
-    Ok(select(slot, &executed.rows, pii_enabled, search, max_candidates))
+    Ok(select(
+        slot,
+        &executed.rows,
+        pii_enabled,
+        search,
+        max_candidates,
+    ))
 }
 
 /// Ubah baris resolver menjadi opsi. Dipisah dari IO supaya aturan label,
@@ -155,7 +172,8 @@ pub fn select(
     for row in rows {
         let (Some(option), Some(binding)) = (
             row.get(&slot.option_field).filter(|value| !value.is_null()),
-            row.get(&slot.binding_field).filter(|value| !value.is_null()),
+            row.get(&slot.binding_field)
+                .filter(|value| !value.is_null()),
         ) else {
             // Baris tanpa id atau tanpa nilai binding tidak dapat dipilih tanpa
             // menebak; ia dilewati, bukan diterbitkan sebagai opsi kosong.
@@ -207,7 +225,12 @@ pub fn select(
 /// Label opsi. Kolom PII hanya ikut bila sakelar PII menyala; bila tidak,
 /// `label_fallback` katalog yang dipakai — fail closed, bukan label kosong.
 fn label_for(slot: &ResolverSlot, row: &Map<String, Value>, pii_enabled: bool) -> String {
-    if pii_enabled || slot.label_fields.iter().all(|field| slot.public_fields.contains(field)) {
+    if pii_enabled
+        || slot
+            .label_fields
+            .iter()
+            .all(|field| slot.public_fields.contains(field))
+    {
         let parts: Vec<String> = slot
             .label_fields
             .iter()
@@ -227,7 +250,9 @@ fn label_for(slot: &ResolverSlot, row: &Map<String, Value>, pii_enabled: bool) -
         None => format!(
             "{} {}",
             slot.option_field,
-            row.get(&slot.option_field).map(scalar_text).unwrap_or_default()
+            row.get(&slot.option_field)
+                .map(scalar_text)
+                .unwrap_or_default()
         ),
     }
 }
@@ -259,7 +284,12 @@ fn scalar_text(value: &Value) -> String {
 /// Apakah sebuah binding memenuhi tipe parameter yang akan menerimanya.
 pub fn binding_matches_kind(kind: &str, binding: &Value) -> bool {
     match kind {
-        "integer" | "bigint" => binding.is_i64() || binding.as_str().is_some_and(|text| text.parse::<i64>().is_ok()),
+        "integer" | "bigint" => {
+            binding.is_i64()
+                || binding
+                    .as_str()
+                    .is_some_and(|text| text.parse::<i64>().is_ok())
+        }
         "string" => binding.is_string(),
         _ => false,
     }
@@ -305,12 +335,51 @@ mod tests {
     }
 
     #[test]
+    fn masked_output_label_shows_regardless_of_pii_switch() {
+        // FIN-137: masked_account_number is `masked_output`, not `pii` — a
+        // resolver like savings.accounts/identity_candidates must show it
+        // (and let search match it) even when the caller lacks can_view_pii.
+        let slot = ResolverSlot {
+            dataset_id: "savings.accounts".into(),
+            shape_id: "identity_candidates".into(),
+            query_id: "savings.account_identity_candidates".into(),
+            sql: String::new(),
+            timeout_ms: 3_000,
+            option_field: "savings_account_id".into(),
+            binding_field: "savings_account_id".into(),
+            binding_kind: "integer".into(),
+            label_fields: vec!["masked_account_number".into()],
+            label_fallback: Some("Savings account {savings_account_id}".into()),
+            public_fields: vec!["savings_account_id".into(), "masked_account_number".into()],
+            page_size: 25,
+        };
+        let rows = [
+            json!({ "savings_account_id": 1, "masked_account_number": "****0001" })
+                .as_object()
+                .cloned()
+                .unwrap(),
+        ];
+
+        let with_pii_off = select(&slot, &rows, false, None, 25);
+        assert_eq!(with_pii_off.items[0].label, "****0001");
+
+        let narrowed = select(&slot, &rows, false, Some("0001"), 25);
+        assert_eq!(narrowed.items.len(), 1);
+    }
+
+    #[test]
     fn label_uses_pii_fields_only_when_the_switch_is_on() {
         let rows = [row(7, "Grace Dao")];
 
-        assert_eq!(select(&slot(), &rows, true, None, 2).items[0].label, "Grace Dao — Head Office");
+        assert_eq!(
+            select(&slot(), &rows, true, None, 2).items[0].label,
+            "Grace Dao — Head Office"
+        );
         // Sakelar mati: nama tidak boleh menjadi label, dan label tidak boleh kosong.
-        assert_eq!(select(&slot(), &rows, false, None, 2).items[0].label, "Client 7");
+        assert_eq!(
+            select(&slot(), &rows, false, None, 2).items[0].label,
+            "Client 7"
+        );
     }
 
     #[test]

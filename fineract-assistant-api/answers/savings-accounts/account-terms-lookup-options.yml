@@ -1,0 +1,30 @@
+info:
+  name: savings_account_terms_lookup halaman opsi savings_account_id (refine search)
+  type: http
+  seq: 2.4
+  description: |
+    CLR-7 — rekening 2 (account_no 'Branch 001000000002', masked ****0002) is
+    the only match for q=0002 in the whole authorized scope.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{acctTermsJob}}/clarification/options?field_id=savings_account_id&q=0002"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const page = res.getBody().data;
+          const option = page.options.find(function (o) { return String(o.option_id) === "2"; });
+          test("FIN-137 CLR-7: q=0002 mempersempit ke tepat satu kandidat (rekening 2, ****0002)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(page.matched_total).to.equal(1);
+            expect(page.truncated).to.equal(false);
+            expect(option, "savings_account_id=2 tidak ditemukan dengan q=0002").to.not.equal(undefined);
+            expect(option.label).to.contain("****0002");
+          });
+          bru.setVar("acctTermsOptionId", option && option.option_id);
+        }

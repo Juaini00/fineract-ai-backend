@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{acctIdentitySession}}", "request_text": "Who owns savings account number Branch 001000000001?" }
+      { "session_id": "{{acctIdentitySession}}", "request_text": "Who owns savings account number 000000001?" }
 runtime:
   scripts:
     - type: before-request

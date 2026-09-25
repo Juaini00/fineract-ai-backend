@@ -1,3 +1,8 @@
+-- params: {"savings_account_id": 2}
+-- FIN-137: account_number resolves to savings_account_id 2 (masked
+-- ****0002, account_no 'Branch 001000000002') through the identity
+-- resolver before this capability answers. Written independent from
+-- queries/savings/account_terms_lookup.sql.
 SELECT
     sa.id AS savings_account_id,
     CONCAT('****', RIGHT(sa.account_no, 4)) AS masked_account_number,
@@ -10,6 +15,4 @@ SELECT
 FROM m_savings_account sa
 JOIN m_client c ON c.id = sa.client_id
 JOIN m_savings_product sp ON sp.id = sa.product_id
-WHERE c.office_id = ANY($1::bigint[])
-  AND sa.id = $2::bigint
-ORDER BY sa.id;
+WHERE sa.id = 2

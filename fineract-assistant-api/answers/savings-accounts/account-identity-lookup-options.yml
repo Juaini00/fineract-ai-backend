@@ -1,0 +1,39 @@
+info:
+  name: savings_account_identity_lookup halaman opsi savings_account_id (refine search)
+  type: http
+  seq: 1.4
+  description: |
+    CLR-7 — mengetik "0001" mempersempit kandidat lewat `q` (label
+    masked_account_number berakhir "0001"), bukan mengikat account_number
+    dari teks bebas (K1: pilihan tetap lewat option_id server). Rekening 1
+    (account_no 'Branch 001000000001', masked ****0001) adalah satu-satunya
+    kecocokan di seluruh scope, jadi halaman ini membuktikan search
+    mempersempit tanpa memperluas scope — bukan resolver_unique (itu hanya
+    terpicu bila SELURUH scope kantor punya tepat satu rekening, yang tidak
+    berlaku di data ini).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{acctIdentityJob}}/clarification/options?field_id=savings_account_id&q=0001"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const page = res.getBody().data;
+          const option = page.options.find(function (o) { return String(o.option_id) === "1"; });
+          test("FIN-137 CLR-7: q=0001 mempersempit ke tepat satu kandidat (rekening 1, ****0001)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(page.matched_total).to.equal(1);
+            expect(page.truncated).to.equal(false);
+            expect(option, "savings_account_id=1 tidak ditemukan dengan q=0001").to.not.equal(undefined);
+            expect(option.label).to.contain("****0001");
+          });
+          test("FIN-137: label tidak pernah membawa nomor rekening mentah", function () {
+            expect(option.label).to.not.contain("Branch 001000000001");
+          });
+          bru.setVar("acctIdentityOptionId", option && option.option_id);
+        }
