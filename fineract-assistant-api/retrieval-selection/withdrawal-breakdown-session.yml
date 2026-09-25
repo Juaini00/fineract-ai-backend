@@ -1,0 +1,24 @@
+info:
+  name: session manifest example withdrawal breakdown
+  type: http
+  seq: 14
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "retrieval-selection withdrawal breakdown" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("withdrawalBreakdownSessionId", res.getBody().data.id);

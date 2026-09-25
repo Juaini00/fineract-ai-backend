@@ -1,0 +1,32 @@
+info:
+  name: job manifest example withdrawal breakdown
+  type: http
+  seq: 15
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{withdrawalBreakdownIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{withdrawalBreakdownSessionId}}",
+        "request_text": "Show savings withdrawals per month for this year."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("withdrawalBreakdownIdemKey", "bruno-withdrawal-breakdown-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("withdrawalBreakdownJobId", res.getBody().data.job_id);

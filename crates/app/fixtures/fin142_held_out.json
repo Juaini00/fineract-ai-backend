@@ -1,0 +1,50 @@
+[
+  {
+    "text": "Monthly breakdown of savings withdrawals from January to September.",
+    "expected": "savings_withdrawal_monthly_breakdown"
+  },
+  {
+    "text": "Total penarikan tabungan tiap bulan dari Januari sampai September.",
+    "expected": "savings_withdrawal_monthly_breakdown"
+  },
+  {
+    "text": "Rincian penarikan tabungan bulanan dari Januari sampai September.",
+    "expected": "savings_withdrawal_monthly_breakdown"
+  },
+  {
+    "text": "Monthly breakdown of savings deposits from January to September.",
+    "expected": "savings_deposit_monthly_breakdown"
+  },
+  {
+    "text": "Total setoran tabungan tiap bulan dari Januari sampai September.",
+    "expected": "savings_deposit_monthly_breakdown"
+  },
+  {
+    "text": "Give the savings deposit totals broken down month by month.",
+    "expected": "savings_deposit_monthly_breakdown"
+  },
+  {
+    "text": "Top 5 savings withdrawals ranked per month this year.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Largest savings withdrawal each month, ranked highest first.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Penarikan terbesar setiap bulan tahun ini.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Peringkat penarikan tabungan terbesar tiap bulan.",
+    "expected": "savings_withdrawal_monthly_top_n"
+  },
+  {
+    "text": "Top 5 savings deposits ranked per month this year.",
+    "expected": "savings_deposit_monthly_top_n"
+  },
+  {
+    "text": "Setoran tabungan terbesar tiap bulan, top 3.",
+    "expected": "savings_deposit_monthly_top_n"
+  }
+]

@@ -7,6 +7,7 @@
 mod catalog_command;
 mod cors;
 mod health;
+mod retrieval_sweep_command;
 
 use foundation::{AppEnv, Config, Foundation, auth, telemetry};
 
@@ -106,9 +107,16 @@ async fn run_command(foundation: &Foundation, command: &str) -> anyhow::Result<(
             }
             Ok(())
         }
+        "retrieval-sweep" => {
+            let passed = retrieval_sweep_command::run(foundation).await?;
+            if !passed {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         other => {
             anyhow::bail!(
-                "subcommand tidak dikenal: {other} (tersedia: catalog [--sync] [--embed] [--no-probe])"
+                "subcommand tidak dikenal: {other} (tersedia: catalog [--sync] [--embed] [--no-probe], retrieval-sweep)"
             )
         }
     }

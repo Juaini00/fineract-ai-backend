@@ -904,6 +904,67 @@ loan/tax/accounting route):
   `group_center.yaml`'s conditional-not-enabled reason is explicitly out of
   scope, left for its own ticket.
 
+Update after FIN-142 (catalog-wording residual left open by FIN-136) and
+FIN-145 (retrieval-selection poll flake, same class as FIN-138):
+
+- **FIN-142 found:** the FIN-136 "known residual" above —
+  `savings_withdrawal_monthly_breakdown`'s own example "Show savings
+  withdrawals per month for this year." still narrowly lost to
+  `savings_withdrawal_monthly_top_n`, because that capability's third example
+  ("Show the biggest savings withdrawal per month.") was a near-duplicate
+  phrase of the breakdown example and, being the denser document, edged it out
+  under `ts_rank_cd` normalization `2`. Testing this with a real corpus
+  (below) also surfaced an unrelated asymmetry: `savings_withdrawal_monthly_top_n`
+  had **no** Indonesian example, while its deposit sibling
+  (`savings_deposit_monthly_top_n`) did — so a terse Indonesian ranking
+  phrase for withdrawals ("Penarikan terbesar setiap bulan tahun ini.") lost
+  to the deposit capability on shared generic vocabulary.
+- **FIN-142 fix (`knowledge/capabilities/savings/withdrawal_monthly_top_n.yaml`):**
+  reworded the near-duplicate example to state the ranking intent explicitly
+  ("Rank the biggest savings withdrawal per month, highest first.") and added
+  an Indonesian example mirroring the deposit sibling's
+  ("Penarikan terbesar setiap bulan tahun ini."). No scorer change, no
+  allowlist/denylist — wording only, per the ticket's constraint.
+- **FIN-142 corpus tool (`cargo run -p app -- retrieval-sweep`,
+  `crates/app/src/retrieval_sweep_command.rs`):** a real-retrieval-path corpus
+  check (the FIN-136 sweep had been an ad-hoc script, never checked in). It
+  drives `planner::lexical_candidate` (the lexical arm only — the vector arm
+  needs a live `EMBEDDING_API_KEY` and the residual was purely a lexical-arm
+  phenomenon) against every manifest's own `examples:`, every phrase/capability
+  pair already asserted by `answers/**/*-job.yml` and
+  `retrieval-selection/*-response.yml`, plus a hand-written held-out set
+  (`crates/app/fixtures/fin142_held_out.json`, 12 EN/ID phrasings of monthly
+  breakdown vs. monthly top-N withdrawal/deposit questions, written before the
+  wording edit). Baseline: 234/235 corpus (the one known FIN-142 mismatch),
+  8/12 held-out. After the fix: **238/238 corpus (zero mismatches)**, 11/12
+  held-out — no regression anywhere else in the catalog. The one remaining
+  held-out miss ("Peringkat penarikan tabungan terbesar tiap bulan." →
+  `savings_withdrawal_total` instead of `savings_withdrawal_monthly_top_n`) is
+  a pre-existing three-way lexical ambiguity between `_total`/`_top_n`/
+  `_breakdown` for a terse phrase carrying no explicit "top N" cue — outside
+  the breakdown/top-n pair FIN-142 targets, and not a regression (the phrase
+  already lost, to a different wrong capability, before this change). Flagged
+  for the owner rather than chased with scorer tuning.
+- **FIN-142 proof at the HTTP surface:** two new `retrieval-selection` Bruno
+  cases (EN + the manifest's own ID example), test names `FIN-142: …`.
+- **FIN-145 found:** `retrieval-selection/*-response.yml` (four files from
+  FIN-136, plus the two FIN-142 added above) used the same count-bounded,
+  zero-sleep `bru.setNextRequest` poll FIN-138 fixed elsewhere — all 20 poll
+  attempts complete in single-digit milliseconds since `bru run --delay` does
+  not pace a request re-queuing itself.
+- **FIN-145 fix:** switched all six `response.yml` files to `lib/poll.js`'s
+  `awaitJob` (unchanged from FIN-138's pattern; every FIN-136 assertion text
+  is untouched). `scripts/integration-test.sh` splits `retrieval-selection`
+  out of the `ENGINE_FOLDERS` bundle into its own `RETRIEVAL_SELECTION_FOLDERS`
+  stage, run under `BRU_SANDBOX=developer` (the default `quickjs` sandbox has
+  no `setTimeout`), same as `retrieval-unavailable`/`retrieval-healthy`;
+  `engine`/`clarification`/`resolver`/`sse` stay on the default sandbox since
+  they don't `require` `lib/poll.js`.
+- **Verified:** `retrieval-selection` passed **5/5** consecutive locked runs
+  (19/19 tests each) after the fix, plus a full locked Bruno suite. `cargo
+  test`, `cargo clippy -D warnings`, `docs-check.sh` and `acceptance-check.sh`
+  all green.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -1053,6 +1114,7 @@ at the release predicate every eviction path uses. L3 is 🧪 (see §5).
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo run -p app -- catalog
+cargo run -p app -- retrieval-sweep   # if knowledge/ examples changed (FIN-142)
 psql -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -f tests/schema_smoke.sql   # if migrations changed
 ./scripts/docs-check.sh
 ./scripts/acceptance-check.sh

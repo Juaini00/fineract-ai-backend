@@ -437,6 +437,18 @@ async fn best_capability(
     Ok(confident_lexical_candidate(&terms, candidate))
 }
 
+/// Wrapper publik atas `best_capability` — arm leksikal saja, tanpa fallback
+/// semantik. Dipakai `retrieval-sweep` (FIN-142) untuk menguji kandidat
+/// leksikal lewat kode produksi yang sama persis dengan `plan()`, tanpa
+/// mengulang SQL-nya.
+pub async fn lexical_candidate(
+    pool: &PgPool,
+    catalog_version_id: Uuid,
+    request_text: &str,
+) -> sqlx::Result<Option<(String, f32)>> {
+    best_capability(pool, catalog_version_id, request_text).await
+}
+
 async fn lexical_first<F, Fut>(
     lexical: Option<(String, f32)>,
     semantic: F,

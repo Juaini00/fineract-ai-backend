@@ -1,0 +1,26 @@
+info:
+  name: response manifest example withdrawal breakdown
+  type: http
+  seq: 16
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{withdrawalBreakdownJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        // FIN-145 — poll berbasis hitungan (FIN-136) habis tanpa jeda `--delay`
+        // sama seperti FIN-138; diseragamkan ke lib/poll.js (batas WAKTU 90 s).
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          test("FIN-142: manifest example 'Show savings withdrawals per month for this year.' memilih savings_withdrawal_monthly_breakdown, bukan savings_withdrawal_monthly_top_n", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_withdrawal_monthly_breakdown");
+          });
+        }

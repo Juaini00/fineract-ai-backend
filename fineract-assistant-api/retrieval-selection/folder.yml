@@ -12,3 +12,11 @@ info:
     meregresi jalur non-Inggris. Dijalankan dengan worker menyala (klaster
     `engine`/`clarification`/`resolver`/`sse`) supaya job benar-benar settle dan
     lineage.capability_id dapat dibaca dari response.
+
+    FIN-142 — literal example manifest `savings_withdrawal_monthly_breakdown`
+    ("Show savings withdrawals per month for this year.") masih kalah tipis dari
+    `savings_withdrawal_monthly_top_n` setelah fix FIN-136, karena example
+    tetangganya near-duplicate. Dua kasus tambahan: literal example
+    bahasa Inggris, dan contoh bahasa Indonesia yang sudah ada di manifest
+    (`Penarikan tabungan per bulan dari Januari sampai September.`) sebagai
+    bukti jalur non-Inggris tidak meregresi.
