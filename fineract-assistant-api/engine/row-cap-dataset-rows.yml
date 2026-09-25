@@ -1,0 +1,32 @@
+info:
+  name: "RESP-8.8 baris dataset — PII tidak tersimpan sama sekali"
+  type: http
+  seq: 32.7
+  description: |
+    RESP-8.8 (FIN-62) — I5 fail-closed storage (worker.rs:446-455): kolom PII
+    dibuang sebelum baris ditulis ke chunk dataset, bukan hanya disaring saat
+    disajikan. Handle row-cap ini meretensi hasil `savings_client_activity`,
+    yang output_fields-nya memuat `client_display_name` (sensitivity: pii).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{rowCapDatasetId}}/rows"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        const NEVER_RETURN = ["account_no", "external_id", "ref_no", "payment_detail_id"];
+
+        test("RESP-8.8: baris dataset tidak membawa client_display_name atau kolom never_return", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.rows.length).to.be.above(0);
+          for (const row of page.rows) {
+            expect(row, "client_display_name tersimpan di dataset").to.not.have.property("client_display_name");
+            for (const column of NEVER_RETURN) {
+              expect(row, `never_return ${column} tersimpan di dataset`).to.not.have.property(column);
+            }
+          }
+        });

@@ -55,4 +55,21 @@ runtime:
           expect(limit.value).to.equal(100);
         });
 
+        const NEVER_RETURN = ["account_no", "external_id", "ref_no", "payment_detail_id"];
+
+        test("RESP-8.8: PII mati — client_display_name ditahan dan dinyatakan", function () {
+          const table = blocks.find(function (b) { return b.type === "table"; });
+          expect(table.columns, "client_display_name bocor ke tabel").to.not.include("client_display_name");
+          expect(table.withheld_columns).to.include("client_display_name");
+          for (const column of NEVER_RETURN) {
+            expect(table.columns, `never_return ${column} tampil`).to.not.include(column);
+          }
+
+          const withheld = blocks.find(function (b) { return b.block_id === "pii_withheld"; });
+          expect(withheld, "blok limitation pii_withheld tidak ada").to.not.equal(undefined);
+          expect(withheld.type).to.equal("limitation");
+          expect(withheld.withheld_columns).to.include("client_display_name");
+          expect(withheld.body, "body").to.be.a("string").and.contain("client_display_name");
+        });
+
         bru.setVar("rowCapDatasetId", lineage.dataset_id);

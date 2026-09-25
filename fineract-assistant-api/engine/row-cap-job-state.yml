@@ -1,0 +1,25 @@
+info:
+  name: "RESP-8.8 state job — PII mati by default"
+  type: http
+  seq: 32.6
+  description: |
+    RESP-8.8 (FIN-62) — default runtime adalah PII-off (runtime.md:118, fail
+    closed): `scope_json.pii.enabled` yang dipakai memvisibilitaskan kolom
+    tabel di row-cap-response.yml harus benar-benar berasal dari snapshot job
+    ini, bukan diasumsikan dari nama variabel.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{rowCapJobId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+
+        test("RESP-8.8: scope_json.pii.enabled = false pada job yang menjawab", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.scope_json.pii.enabled).to.equal(false);
+        });
