@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::catalog::{
     loader::Catalog,
-    model::{Capability, QueryManifest},
+    model::{CHART_KINDS, Capability, QueryManifest},
 };
 
 /// Tingkat temuan. `Error` berarti entri tidak boleh dianggap approved;
@@ -640,6 +640,13 @@ fn check_capability(
         ));
     }
 
+    // chart_matches_grain (responses.md §7): chart hanya sah di atas bentuk data
+    // yang dideklarasikan query. Di sini, bukan saat runtime — chart yang tidak
+    // mungkin kompatibel adalah deklarasi yang salah, bukan data yang turun.
+    if let Some(problem) = chart_problem(capability, query) {
+        findings.push(Finding::error(&subject, "chart_matches_grain", problem));
+    }
+
     if capability.examples.is_empty() {
         findings.push(Finding::warning(
             &subject,
@@ -669,11 +676,32 @@ fn check_capability(
     }
 }
 
+/// `None` = tidak ada chart, atau chart-nya sah atas grain query.
+fn chart_problem(capability: &Capability, query: &QueryManifest) -> Option<String> {
+    let chart = capability.chart.as_ref()?;
+
+    if !CHART_KINDS.contains(&chart.kind.as_str()) {
+        return Some(format!(
+            "chart.kind '{}' tidak dikenal; yang dikenal: {}",
+            chart.kind,
+            CHART_KINDS.join(", ")
+        ));
+    }
+
+    query.time_dimension().is_none().then(|| {
+        format!(
+            "chart time_series di atas query {} yang grain-nya tidak memuat kolom bertipe date",
+            query.id
+        )
+    })
+}
+
 /// Cakupan validator ini, dinyatakan terbuka supaya "lulus" tidak dibaca
 /// sebagai "seluruh katalog terbukti benar" (I5).
 pub fn coverage() -> &'static [&'static str] {
     &[
         "capabilities/**: query_id, parameter, PII output, office scope, prosa",
+        "capabilities/**: chart hanya time_series di atas grain yang memuat kolom date",
         "queries/**: sql_file, SELECT-only, single statement, token terlarang, placeholder, office binding, output_fields, grain dinyatakan + subset output_fields",
         "queries/**/*.sql (non-dataset): keterhubungan ke manifest",
         "resolver: resolves: -> dataset/shape ada, satu manifest per shape, parameter hanya authorized_scope, entity dideklarasikan",
@@ -817,5 +845,30 @@ mod tests {
         // Nilai warisan yang tidak memetakan ke kelas mana pun ditolak.
         assert!(!is_timeout_class(5_000));
         assert!(!is_timeout_class(8_000));
+    }
+
+    fn manifest(grain: &[&str]) -> QueryManifest {
+        serde_yaml::from_str(&format!(
+            "id: q\noutput_fields:\n  - {{ name: month_start, type: date }}\n  - {{ name: office_id, type: integer }}\ngrain: [{}]\n",
+            grain.join(", ")
+        ))
+        .unwrap()
+    }
+
+    fn charted(kind: &str) -> Capability {
+        serde_yaml::from_str(&format!("id: c\nquery_id: q\nchart: {{ kind: {kind} }}\n")).unwrap()
+    }
+
+    #[test]
+    fn chart_requires_a_declared_time_grain() {
+        // Grain tanpa kolom date: chart adalah kesalahan katalog, bukan
+        // downgrade saat runtime.
+        assert!(chart_problem(&charted("time_series"), &manifest(&["office_id"])).is_some());
+        assert!(chart_problem(&charted("time_series"), &manifest(&["month_start"])).is_none());
+        // Jenis chart di luar kosakata ditolak.
+        assert!(chart_problem(&charted("pie"), &manifest(&["month_start"])).is_some());
+        // Tanpa deklarasi chart tidak ada yang diperiksa.
+        let plain: Capability = serde_yaml::from_str("id: c\nquery_id: q\n").unwrap();
+        assert!(chart_problem(&plain, &manifest(&["office_id"])).is_none());
     }
 }

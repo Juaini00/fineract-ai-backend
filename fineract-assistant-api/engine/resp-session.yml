@@ -1,0 +1,22 @@
+info:
+  name: FIN-65 session chart dan tabel berhandle
+  type: http
+  seq: 50
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "bruno FIN-65 chart + dataset table" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-65: session dibuat", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("respSessionId", res.getBody().data.id);

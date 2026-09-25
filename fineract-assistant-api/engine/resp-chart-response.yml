@@ -1,0 +1,54 @@
+info:
+  name: FIN-65 capability ber-chart memancarkan chart_spec di atas tabelnya
+  type: http
+  seq: 50.2
+  description: |
+    `savings_deposit_monthly_breakdown` mendeklarasikan `chart: { kind: time_series }`
+    di katalog; grain query-nya `[month_start, currency_code]` (L1.5). Response
+    memuat tabel hasil dan satu `chart_spec` ber-`derived_from` yang merujuk
+    tabel itu — dan data tabelnya memenuhi bentuk time series (responses.md §7).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{chartJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          const blocks = document.blocks_json;
+          const table = blocks.find(function (b) { return b.type === "table"; });
+          const chart = blocks.find(function (b) { return b.type === "chart_spec"; });
+
+          test("FIN-65: capability deret waktu menjawab dan lolos validator", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.outcome).to.equal("Answered");
+            expect(document.validation_status).to.equal("passed");
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_deposit_monthly_breakdown");
+          });
+
+          test("FIN-65: chart_spec time_series ber-derived_from merujuk tabel hasil", function () {
+            expect(chart, "blok chart_spec").to.be.an("object");
+            expect(chart.schema_version).to.equal(1);
+            expect(chart.chart_type).to.equal("time_series");
+            expect(chart.time_dimension).to.equal("month_start");
+            expect(chart.series).to.deep.equal(["currency_code"]);
+            expect(chart.measures).to.deep.equal(["total_deposit_amount", "deposit_count"]);
+            expect(chart.data_block_id).to.equal(table.block_id);
+            expect(chart.derived_from).to.deep.equal(table.derived_from);
+            expect(chart.derived_from[0].node_run_id).to.be.a("string");
+            expect(blocks.find(function (b) { return b.block_id === "chart_downgraded"; })).to.equal(undefined);
+          });
+
+          test("FIN-65: data tabel memenuhi bentuk chart — sumbu waktu terurut, ≥2 titik", function () {
+            const at = table.columns.indexOf("month_start");
+            const months = table.rows.map(function (r) { return r[at]; });
+            const sorted = months.slice().sort();
+            expect(months).to.deep.equal(sorted);
+            expect(new Set(months).size).to.be.at.least(2);
+          });
+        }

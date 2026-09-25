@@ -28,6 +28,8 @@ supported_intents:
 unsupported_intents:
 - office external id lookup
 - staff identity lookup
+chart:
+  kind: time_series
 defaults:
   authorized_scope_only: true
 guards:

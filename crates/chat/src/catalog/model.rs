@@ -36,6 +36,19 @@ pub struct Capability {
     /// yang diminta saat `limit` dideklarasikan `unbounded` (FIN-133).
     #[serde(default)]
     pub defaults: BTreeMap<String, serde_yaml::Value>,
+    /// Chart yang boleh disertakan response (responses.md §2, §7). Dideklarasikan
+    /// per capability — bukan dipicu frasa pengguna — dan hanya sah di atas
+    /// query yang grain-nya memuat dimensi waktu (divalidasi katalog).
+    #[serde(default)]
+    pub chart: Option<ChartDeclaration>,
+}
+
+/// Satu-satunya jenis chart yang dikenal: `time_series` (§7).
+pub const CHART_KINDS: [&str; 1] = ["time_series"];
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChartDeclaration {
+    pub kind: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -165,8 +178,22 @@ pub struct QueryParameter {
 #[derive(Debug, Clone, Deserialize)]
 pub struct OutputField {
     pub name: String,
+    #[serde(rename = "type", default)]
+    pub kind: String,
     #[serde(default)]
     pub sensitivity: Option<String>,
+}
+
+impl QueryManifest {
+    /// Dimensi waktu yang **dideklarasikan** grain (L1.5): kolom grain pertama
+    /// yang bertipe `date`. Tidak pernah ditebak dari nama kolom atau data.
+    pub fn time_dimension(&self) -> Option<&str> {
+        self.grain.iter().map(String::as_str).find(|column| {
+            self.output_fields
+                .iter()
+                .any(|field| field.name == *column && field.kind == "date")
+        })
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

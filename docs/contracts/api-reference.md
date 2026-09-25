@@ -488,6 +488,80 @@ satu baris selalu menjadi blok `table` (L1.1, database-design #14).
 `withheld_columns` dideklarasikan pada tabel **dan** dinyatakan pada blok
 `limitation`; keduanya, bukan salah satu.
 
+**Tabel besar merujuk dataset handle** (FIN-65, responses.md §2, #11 aturan 2–3).
+Ambangnya `NODE_OUTPUT_INLINE_THRESHOLD` (runtime.md §4): hasil sampai **200 baris
+dan 32 KB** (JSON baris tabel) tetap inline seperti di atas. Di atas salah satu
+batas itu, blok `table` **tidak memuat `rows`** — barisnya dibaca berhalaman lewat
+[`GET /chat/datasets/{dataset_id}/rows`](#get-chatdatasetsdataset_idrows).
+`row_count` tetap jumlah baris jawaban; `derived_from` tetap `node_run_id`.
+
+```json
+{
+  "block_id": "result",
+  "type": "table",
+  "schema_version": 1,
+  "derived_from": [{ "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11" }],
+  "columns": ["month_start", "transaction_id", "amount", "currency_code"],
+  "row_count": 450,
+  "withheld_columns": ["client_display_name"],
+  "dataset_id": "3c1e9a52-7d4b-4f0e-9b61-2a8f5c0d7e44",
+  "pagination": {
+    "rows_path": "/chat/datasets/3c1e9a52-7d4b-4f0e-9b61-2a8f5c0d7e44/rows",
+    "limit": 200,
+    "cursor": null
+  }
+}
+```
+
+`dataset_id` di blok ini sama dengan `evidence_json.lineage[].dataset_id`.
+`cursor: null` berarti mulai dari baris pertama; halaman berikutnya memakai
+`next_cursor` dari respons `/rows`.
+
+**`chart_spec`** (FIN-65, responses.md §2 dan §7) — hanya untuk capability yang
+mendeklarasikan `chart: { kind: time_series }` di katalog; tidak pernah dipicu
+frasa pengguna. Sumbu waktu diambil dari **grain query yang dideklarasikan**
+(kolom grain bertipe `date`), kolom grain lain menjadi `series`, sisanya
+`measures`. Ia spesifikasi atas data yang sudah ada — tabel `data_block_id` pada
+dokumen yang sama — jadi tidak membawa salinan baris. Hari ini dideklarasikan
+oleh `client_activation_monthly_breakdown`,
+`organization_office_opening_monthly_breakdown`,
+`savings_deposit_monthly_breakdown`, dan `savings_withdrawal_monthly_breakdown`.
+
+```json
+{
+  "block_id": "chart",
+  "type": "chart_spec",
+  "schema_version": 1,
+  "derived_from": [{ "node_run_id": "9f0c1f9e-6c5a-4a1e-9c1a-0f2b7c3d5e11" }],
+  "chart_type": "time_series",
+  "time_dimension": "month_start",
+  "series": ["currency_code"],
+  "measures": ["total_deposit_amount", "deposit_count"],
+  "data_block_id": "result"
+}
+```
+
+Capability ber-chart selalu menyajikan blok `table` — juga saat hasilnya satu
+baris (tidak menjadi `metric`). Bila datanya tidak memenuhi bentuk time series
+(kolom waktu hilang, sumbu waktu tidak terurut naik, atau kurang dari dua titik
+waktu), chart **tidak** dirender: yang tersaji `table` + `note` `chart_downgraded`
+(RESP-8.7) — bukan kegagalan, `completeness` tidak berubah. Validator memeriksa
+ulang bentuk itu atas baris ledger node (`job_node_runs.output_json`); `chart_spec`
+yang tidak lolos dibuang lewat fallback (`failed_rules` memuat `§7`) dan tabelnya
+tetap tersaji.
+
+```json
+{
+  "block_id": "chart_downgraded",
+  "type": "note",
+  "schema_version": 1,
+  "title": "Chart downgraded to a table",
+  "body": "The time-series chart was not rendered because the result has fewer than two points on the time dimension. The same numbers are shown in the table instead.",
+  "downgraded_from": "chart_spec",
+  "reason": "the result has fewer than two points on the time dimension"
+}
+```
+
 **`narrative`** — kalimat. Angka di dalamnya wajib ada di blok lain atau
 ber-`derivation`; bila ia memuat angka, ia juga wajib membawa `derived_from`.
 

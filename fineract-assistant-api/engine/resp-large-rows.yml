@@ -1,0 +1,23 @@
+info:
+  name: FIN-65 rujukan pagination tabel besar dapat dibaca
+  type: http
+  seq: 50.5
+http:
+  method: get
+  url: "{{baseUrl}}{{largeRowsPath}}?limit=200"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        test("FIN-65: halaman pertama handle tabel besar penuh, dengan cursor lanjutan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.dataset_id).to.equal(bru.getVar("largeDatasetId"));
+          expect(page.handle_state).to.equal("live");
+          expect(page.rows).to.have.lengthOf(200);
+          expect(page.next_cursor).to.be.a("string");
+          expect(page.row_count_available).to.equal(Number(bru.getVar("largeRowCount")));
+        });
