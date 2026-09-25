@@ -20,9 +20,7 @@ use crate::{
     catalog::Catalog,
     clarification::repository::{self, AcceptedAnswer, Form},
     engine::{
-        compose,
-        executor,
-        planner,
+        compose, executor, planner,
         resolver::{self, Candidates, ResolverSlot},
     },
     job::{repository::Job, service as job_service},
@@ -103,7 +101,9 @@ pub async fn options(
 
     let field = find_field(&form.fields_json, field_id).ok_or(ApiError::NotFound)?;
     let slot = slot_of(catalog, &field).ok_or_else(|| {
-        ApiError::Conflict(format!("Field '{field_id}' is not answered by choosing an option"))
+        ApiError::Conflict(format!(
+            "Field '{field_id}' is not answered by choosing an option"
+        ))
     })?;
 
     let config = foundation.config();
@@ -423,7 +423,10 @@ fn structural_errors(fields: &[Value], answers: &BTreeMap<String, String>) -> Ve
     }
 
     for field in fields {
-        let required = field.get("required").and_then(Value::as_bool).unwrap_or(true);
+        let required = field
+            .get("required")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
         let field_id = field.get("field_id").and_then(Value::as_str).unwrap_or("");
 
         if required && !answers.contains_key(field_id) {
@@ -478,9 +481,10 @@ async fn option_answer(
     slot: &ResolverSlot,
 ) -> Result<Result<AcceptedAnswer, FieldError>, ApiError> {
     // 1. Pernah diterbitkan untuk form+field ini (C9).
-    let issued = repository::issued_option(foundation.app_db().pool(), form.id, field_id, option_id)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let issued =
+        repository::issued_option(foundation.app_db().pool(), form.id, field_id, option_id)
+            .await
+            .map_err(anyhow::Error::from)?;
 
     let Some((binding_json, label, resolver_ref)) = issued else {
         return Ok(Err(FieldError {
@@ -567,7 +571,7 @@ async fn fetch(
         foundation.config().resolver_max_candidates,
     )
     .await
-        .map_err(|error| anyhow::anyhow!("resolver: {}", error.failure_code()).into())
+    .map_err(|error| anyhow::anyhow!("resolver: {}", error.failure_code()).into())
 }
 
 fn find_field(fields_json: &Value, field_id: &str) -> Option<Value> {
@@ -733,6 +737,7 @@ mod tests {
             safety_policy: Default::default(),
             sensitivity_classes: Default::default(),
             unapproved_surfaces: Default::default(),
+            deferred_domains: Default::default(),
             sql_files: Default::default(),
             content_hash: String::new(),
             unreadable: Vec::new(),

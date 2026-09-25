@@ -267,6 +267,21 @@ async fn run_job(
         .await;
     }
 
+    // OVR-6.6 — subjek domain berstatus deferred (loans, tax, accounting_gl)
+    // dijawab Unsupported sebelum retrieval, bukan jatuh ke capability baca
+    // terdekat (mis. savings) yang menjawab data subjek yang salah. Berbeda
+    // dari guard di atas: ini bukan penolakan kebijakan (FIN-140).
+    if let Some(term) = catalog.deferred_domains.find(&job.request_text) {
+        warn!(job_id = %job.id, source = term.source, term = %term.name, "subjek domain deferred diminta; dijawab unsupported");
+        return settle_unsupported(
+            foundation,
+            job,
+            DOMAIN_DEFERRED,
+            "This subject is not yet supported by Jarvis, so no query was run.",
+        )
+        .await;
+    }
+
     // Scope dari otorisasi, dipersempit oleh permintaan — tidak pernah
     // diperlebar olehnya (I7).
     let requested_offices = requested_office_ids(&job.scope_json);
@@ -1019,6 +1034,8 @@ const OFFICE_SCOPE_NOT_AUTHORIZED: &str = "office_scope_not_authorized";
 const WRITE_NOT_SUPPORTED: &str = "write_not_supported";
 /// Alasan penolakan permukaan yang tidak disetujui (OVR-6.6, FIN-139).
 const SURFACE_NOT_APPROVED: &str = "surface_not_approved";
+/// Alasan subjek domain deferred (OVR-6.6, FIN-140).
+const DOMAIN_DEFERRED: &str = "domain_deferred";
 /// Plan versi aktif yang diverifikasi ulang saat recovery tidak lagi identik
 /// dengan yang tersimpan (D4); re-plan belum ada, jadi job tidak dijawab.
 const PLAN_CHANGED_ON_RECOVERY: &str = "plan_changed_on_recovery";
@@ -1041,6 +1058,28 @@ async fn settle_blocked(
         job.owner_user_id,
         job.lease_token,
         Validated::unchecked(blocked_response(reason, explanation, &job.request_text)),
+        &[],
+    )
+    .await
+    .map_err(Into::into)
+}
+
+/// Tutup job sebagai `Unsupported`: tanpa plan, tanpa node, tanpa query
+/// sumber — sama bentuknya dengan [`settle_blocked`], tetapi ini bukan
+/// penolakan kebijakan (FIN-140).
+async fn settle_unsupported(
+    foundation: &Foundation,
+    job: &ClaimedJob,
+    reason: &str,
+    explanation: &str,
+) -> anyhow::Result<bool> {
+    repository::settle_with_response(
+        foundation.app_db().pool(),
+        job.id,
+        job.session_id,
+        job.owner_user_id,
+        job.lease_token,
+        Validated::unchecked(limitation_response(reason, explanation, &job.request_text)),
         &[],
     )
     .await

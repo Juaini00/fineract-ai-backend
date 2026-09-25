@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 domain deferred (tax, ID) — job"
+  type: http
+  seq: 38.94
+  description: |
+    Domain `tax` berstatus `deferred` (`knowledge/domains/tax.yaml`) — "pajak" adalah synonym
+    konsep `tax_component`.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_tax_id_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Berapa pajak yang terkumpul bulan ini?", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_tax_id_key", "fin140-deferred-tax-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_tax_id_job", res.getBody().data.job_id);

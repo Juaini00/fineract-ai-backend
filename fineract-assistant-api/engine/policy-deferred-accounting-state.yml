@@ -1,0 +1,23 @@
+info:
+  name: "OVR-6.6 domain deferred (accounting, EN) — job state"
+  type: http
+  seq: 38.951
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_accounting_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6 (deferred, accounting EN): Completed + Unsupported + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Unsupported");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("domain_deferred");
+          expect(job.plan_version).to.equal(null);
+        });

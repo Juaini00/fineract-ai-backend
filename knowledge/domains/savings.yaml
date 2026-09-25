@@ -10,7 +10,10 @@ data_areas:
 concepts:
   - id: deposit
     meaning: Money credited into a savings account.
-    synonyms: [deposit, money in, credit, savings credit]
+    # "credit"/"kredit" juga synonym konsep `loan` di loan.yaml — istilah
+    # ambigu ini dibuang dari kosakata domain deferred (FIN-140) supaya
+    # pertanyaan savings yang sah tidak ikut ditolak.
+    synonyms: [deposit, money in, credit, savings credit, kredit]
   - id: withdrawal
     meaning: Money debited from a savings account.
     synonyms: [withdrawal, money out, debit, savings debit]

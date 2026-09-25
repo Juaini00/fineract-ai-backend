@@ -1,0 +1,23 @@
+info:
+  name: "OVR-6.6 field rahasia (padanan Indonesia) — job state"
+  type: http
+  seq: 38.912
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_surface_id_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6 (surface, ID): Completed + BlockedByPolicy + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("BlockedByPolicy");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("surface_not_approved");
+          expect(job.plan_version).to.equal(null);
+        });

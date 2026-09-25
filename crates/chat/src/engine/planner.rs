@@ -866,6 +866,7 @@ mod tests {
             safety_policy: Default::default(),
             sensitivity_classes: Default::default(),
             unapproved_surfaces: Default::default(),
+            deferred_domains: Default::default(),
             sql_files: Default::default(),
             content_hash: String::new(),
             unreadable: Vec::new(),

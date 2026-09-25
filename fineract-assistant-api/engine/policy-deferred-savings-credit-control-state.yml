@@ -1,0 +1,21 @@
+info:
+  name: "OVR-6.6 domain deferred — kontrol: savings 'credit' — job state"
+  type: http
+  seq: 38.961
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_savings_credit_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6 (kontrol): 'credit' pada subjek savings TIDAK ditolak sebagai domain deferred", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness_reason).to.not.equal("domain_deferred");
+        });
