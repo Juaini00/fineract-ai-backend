@@ -14,11 +14,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const polls = Number(bru.getVar("withdrawalParaphrasePolls") || 0);
-        if (res.getStatus() === 404 && polls < 20) {
-          bru.setVar("withdrawalParaphrasePolls", polls + 1);
-          bru.setNextRequest(req.getName());
-        } else {
+        // FIN-145 — poll berbasis hitungan (FIN-136) habis tanpa jeda `--delay`
+        // sama seperti FIN-138; diseragamkan ke lib/poll.js (batas WAKTU 90 s).
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
           const document = res.getBody().data;
           test("FIN-136: paraphrase 'Top withdrawals per month in the last 12 months.' memilih savings_withdrawal_monthly_top_n, bukan client_activation_top_n_offices", function () {
             expect(res.getStatus()).to.equal(200);

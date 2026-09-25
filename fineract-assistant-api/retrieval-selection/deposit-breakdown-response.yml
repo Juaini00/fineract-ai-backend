@@ -14,11 +14,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const polls = Number(bru.getVar("depositBreakdownPolls") || 0);
-        if (res.getStatus() === 404 && polls < 20) {
-          bru.setVar("depositBreakdownPolls", polls + 1);
-          bru.setNextRequest(req.getName());
-        } else {
+        // FIN-145 — poll berbasis hitungan (FIN-136) habis tanpa jeda `--delay`
+        // sama seperti FIN-138; diseragamkan ke lib/poll.js (batas WAKTU 90 s).
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
           const document = res.getBody().data;
           test("FIN-136: manifest example 'Show savings deposits per month for this year.' memilih savings_deposit_monthly_breakdown, bukan savings_deposit_monthly_top_n", function () {
             expect(res.getStatus()).to.equal(200);

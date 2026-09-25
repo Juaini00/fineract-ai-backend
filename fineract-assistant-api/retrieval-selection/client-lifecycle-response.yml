@@ -14,11 +14,10 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const polls = Number(bru.getVar("clientLifecyclePolls") || 0);
-        if (res.getStatus() === 404 && polls < 20) {
-          bru.setVar("clientLifecyclePolls", polls + 1);
-          bru.setNextRequest(req.getName());
-        } else {
+        // FIN-145 — poll berbasis hitungan (FIN-136) habis tanpa jeda `--delay`
+        // sama seperti FIN-138; diseragamkan ke lib/poll.js (batas WAKTU 90 s).
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
           const document = res.getBody().data;
           test("FIN-136: manifest example 'Show client lifecycle summary.' memilih client_lifecycle_summary, bukan capability office-grouped bertetangga", function () {
             expect(res.getStatus()).to.equal(200);
