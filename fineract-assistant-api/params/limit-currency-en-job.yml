@@ -1,0 +1,32 @@
+info:
+  name: limit-currency-en job
+  type: http
+  seq: 15
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+    - name: Idempotency-Key
+      value: "{{limitCurrencyEnIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{limitCurrencyEnSessionId}}",
+        "request_text": "Show top 5 clients by savings balance in IDR"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("limitCurrencyEnIdemKey", "fin135-limit-currency-en-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("limitCurrencyEnJobId", res.getBody().data.job_id);

@@ -492,7 +492,10 @@ satu baris selalu menjadi blok `table` (L1.1, database-design #14).
 ber-`derivation`; bila ia memuat angka, ia juga wajib membawa `derived_from`.
 
 **`note`** — pengungkapan asumsi/binding. Satu-satunya tempat pengungkapan
-auto-bind dihitung sah (responses.md §5):
+auto-bind dihitung sah (responses.md §5). `provenance` per slot: `resolver_unique`
+(resolver mengembalikan tepat satu kandidat) atau `deterministic_parse`
+(nilai terurai deterministik dari `request_text` — periode, top-N/limit, atau
+mata uang; FIN-135):
 
 ```json
 {
@@ -502,7 +505,8 @@ auto-bind dihitung sah (responses.md §5):
   "title": "Values chosen without asking",
   "body": "1 value(s) were bound automatically …",
   "auto_bound_slots": [
-    { "field_id": "client_id", "label": "Siti", "provenance": "resolver_unique" }
+    { "field_id": "client_id", "label": "Siti", "provenance": "resolver_unique" },
+    { "field_id": "period", "label": "period 2026-01-01 to 2026-09-25 (parsed from 'January to September 2026')", "provenance": "deterministic_parse" }
   ]
 }
 ```
@@ -513,6 +517,7 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `block_id` | Arti | Field tambahan |
 | --- | --- | --- |
 | `pii_withheld` | Kolom PII ditahan karena sakelar PII mati | `withheld_columns` |
+| `params_not_applied` | `request_text` menyebut nilai untuk sebuah slot (mis. nama kantor) yang tidak dapat diikat secara deterministik — slot identitas tidak pernah diikat dari teks bebas (K1) — sehingga default manifest yang dipakai (FIN-135). Bukan D2/auto-bind: tidak ada nilai yang diikat | `not_applied_params` (`[{ "parameter", "detail" }]`) |
 | `skipped_inputs` | Pengguna berhenti; input yang tidak pernah diisi | `unanswered_fields`, `completed_nodes` |
 | `validation_rejected` | Ada blok yang dibuang validator | `failed_rules`, `failures` |
 | `resolver_no_candidates` | Resolver berjalan utuh dan tidak menemukan kandidat dalam scope | — |

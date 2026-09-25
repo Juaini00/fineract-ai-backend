@@ -1,0 +1,41 @@
+info:
+  name: limit-currency-en response
+  type: http
+  seq: 16
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{limitCurrencyEnJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("limitCurrencyEnPolls") || 0);
+        if (res.getStatus() === 404 && polls < 30) {
+          bru.setVar("limitCurrencyEnPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          const params = document.evidence_json.lineage[0].parameters;
+          const limit = params.find((p) => p.name === "limit");
+          const currency = params.find((p) => p.name === "currency_code");
+          test("FIN-135 limit-currency-en: 'Show top 5 clients by savings balance in IDR' binds limit=5 and currency_code=IDR, not the manifest defaults (10, null)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(limit.value).to.equal(5);
+            expect(currency.value).to.equal("IDR");
+          });
+          test("FIN-135 limit-currency-en: both parsed values are disclosed in a note block (D2)", function () {
+            const note = document.blocks_json.find((b) => b.block_id === "slots_auto_bound");
+            expect(note, "blok slots_auto_bound tidak ada").to.exist;
+            const fields = note.auto_bound_slots.map((s) => s.field_id);
+            expect(fields).to.include("limit");
+            expect(fields).to.include("currency_code");
+            for (const slot of note.auto_bound_slots) {
+              expect(slot.provenance).to.equal("deterministic_parse");
+            }
+          });
+        }

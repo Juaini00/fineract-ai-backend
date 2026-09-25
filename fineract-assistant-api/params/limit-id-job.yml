@@ -1,0 +1,32 @@
+info:
+  name: limit-id job
+  type: http
+  seq: 12
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+    - name: Idempotency-Key
+      value: "{{limitIdIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{limitIdSessionId}}",
+        "request_text": "3 setoran terbesar per bulan"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("limitIdIdemKey", "fin135-limit-id-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("limitIdJobId", res.getBody().data.job_id);

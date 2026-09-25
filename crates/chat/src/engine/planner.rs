@@ -26,7 +26,7 @@ use crate::{
         loader::Catalog,
         model::{Capability, QueryManifest},
     },
-    engine::resolver::ResolverSlot,
+    engine::{param_parse, resolver::ResolverSlot},
 };
 
 /// Nilai parameter yang siap di-bind ke SQL, dalam urutan deklarasi manifest.
@@ -48,6 +48,26 @@ pub enum Bound {
     RowCap(i64),
 }
 
+/// Slot yang diikat dari teks permintaan sendiri, bukan dari default manifest
+/// (FIN-135). Provenance `deterministic_parse` (K5, database-design.md §4.14)
+/// — wajib diungkap lewat blok `note`, persis seperti `resolver_unique`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeterministicBind {
+    pub parameter: String,
+    /// Kalimat pendek untuk pengungkapan, mis. "period 2026-01-01 to
+    /// 2026-09-25 parsed from 'january to september 2026'".
+    pub detail: String,
+}
+
+/// Nilai yang teks nyatakan tapi tidak dapat diikat (I5: tidak ada
+/// penghilangan senyap). Slot tetap memakai default manifestnya — ini hanya
+/// pengungkapan bahwa sesuatu yang disebut pengguna tidak diterapkan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnappliedParam {
+    pub parameter: String,
+    pub detail: String,
+}
+
 /// Rencana untuk satu node `CuratedQuery`.
 #[derive(Debug, Clone)]
 pub struct Plan {
@@ -67,6 +87,11 @@ pub struct Plan {
     pub retrieval_score: f32,
     pub graph_json: Value,
     pub graph_hash: String,
+    /// Slot yang diikat dari teks permintaan (FIN-135) — wajib diungkap.
+    pub deterministic_binds: Vec<DeterministicBind>,
+    /// Nilai yang disebut teks tetapi tidak diterapkan (FIN-135) — wajib
+    /// diungkap dengan default yang benar-benar dipakai.
+    pub unapplied_params: Vec<UnappliedParam>,
 }
 
 impl Plan {
@@ -289,11 +314,17 @@ pub async fn plan(
         return Ok(Err(Unplannable::QueryMissing(query_id)));
     };
 
-    let parameters =
-        match bind_parameters(catalog, capability, query, authorized_office_ids, supplied) {
-            Ok(parameters) => parameters,
-            Err(problem) => return Ok(Err(problem)),
-        };
+    let (parameters, deterministic_binds, unapplied_params) = match bind_parameters(
+        catalog,
+        capability,
+        query,
+        authorized_office_ids,
+        supplied,
+        request_text,
+    ) {
+        Ok(bound) => bound,
+        Err(problem) => return Ok(Err(problem)),
+    };
 
     let graph_json = serde_json::json!({
         "nodes": [{
@@ -340,6 +371,8 @@ pub async fn plan(
         graph_hash: hex::encode(Sha256::digest(graph_json.to_string().as_bytes())),
         graph_json,
         parameters,
+        deterministic_binds,
+        unapplied_params,
         sql,
         sql_file,
     }))
@@ -539,20 +572,71 @@ fn provider_vector(result: anyhow::Result<Vec<Vec<f32>>>) -> Result<Vec<f32>, Re
         .ok_or(RetrievalOutcome::RetrievalUnavailable)
 }
 
-/// Ikat parameter query memakai default yang dideklarasikan capability.
+/// Batas atas yang dideklarasikan capability untuk sebuah parameter numerik:
+/// `hard_cap` per-parameter diutamakan, lalu `guards.max_limit` (FIN-133).
+fn declared_cap(
+    capability: &Capability,
+    declared: Option<&crate::catalog::model::CapabilityParameter>,
+) -> Option<i64> {
+    declared
+        .and_then(|declared| declared.hard_cap)
+        .or_else(|| capability.guards.get("max_limit").and_then(yaml_i64))
+}
+
+/// Potong periode yang terurai dari teks ke `guards.max_date_range_days`
+/// capability bila ada: cap yang dideklarasikan adalah janji kepada sumber
+/// data, bukan saran (pola yang sama dengan [`declared_cap`] untuk `limit`).
+/// `to` tetap; `from` digeser mendekat supaya rentang tidak pernah menembus
+/// klaim yang tidak disetujui katalog.
+fn clamp_period(
+    capability: &Capability,
+    period: &param_parse::ParsedPeriod,
+) -> (NaiveDate, NaiveDate, String) {
+    let param_parse::ParsedPeriod { from, to, detail } = period;
+    let (mut from, to) = (*from, *to);
+    let mut detail = detail.clone();
+
+    if let Some(max_days) = capability
+        .guards
+        .get("max_date_range_days")
+        .and_then(yaml_i64)
+        && (to - from).num_days() > max_days
+    {
+        from = to - chrono::Duration::days(max_days);
+        detail = format!("{detail}, clamped to the {max_days}-day maximum range");
+    }
+
+    (from, to, detail)
+}
+
+/// Ikat parameter query memakai teks permintaan lebih dulu (FIN-135), lalu
+/// default yang dideklarasikan capability.
 ///
 /// Urutannya mengikuti deklarasi manifest, karena itulah urutan `$1..$n` pada
 /// SQL — validator katalog sudah memastikan keduanya cocok.
+///
+/// Mengembalikan binding beserta dua pengungkapan wajib (I5/D2): slot yang
+/// benar-benar diikat dari teks, dan slot yang teks sebutkan tetapi tidak
+/// dapat diikat (default-nya tetap dipakai).
 fn bind_parameters(
     catalog: &Catalog,
     capability: &Capability,
     query: &QueryManifest,
     authorized_office_ids: &[i64],
     supplied: &BTreeMap<String, String>,
-) -> Result<Vec<Bound>, Unplannable> {
+    request_text: &str,
+) -> Result<(Vec<Bound>, Vec<DeterministicBind>, Vec<UnappliedParam>), Unplannable> {
     let today = Utc::now().date_naive();
     let mut bound = Vec::with_capacity(query.parameters.len());
     let mut missing: Vec<Missing> = Vec::new();
+    let mut deterministic: Vec<DeterministicBind> = Vec::new();
+    let mut unapplied: Vec<UnappliedParam> = Vec::new();
+
+    let parsed_period = param_parse::parse_period(request_text, today);
+    let parsed_limit = param_parse::parse_limit(request_text);
+    let parsed_currency = param_parse::parse_currency(request_text);
+    let mut period_disclosed = false;
+    let mut entity_disclosed = false;
 
     for parameter in &query.parameters {
         // Jawaban klarifikasi menang atas default — itulah gunanya bertanya.
@@ -578,6 +662,68 @@ fn bind_parameters(
         }
 
         let declared = capability.parameters.get(&parameter.name);
+
+        // FIN-135 — teks permintaan menang atas default manifest: pengguna
+        // menyatakan nilainya secara eksplisit, dan default (juga
+        // deterministik, hanya kurang spesifik) tidak boleh menimpanya.
+        // `from_date`/`to_date` diperiksa lewat nama parameter, bukan lewat
+        // capability tertentu — konvensi penamaan ini sudah dipakai lintas
+        // seluruh katalog (`period()` di compose.rs mengumpulkan Bound::Date
+        // yang sama dengan cara serupa).
+        if matches!(parameter.name.as_str(), "from_date" | "to_date")
+            && parameter.kind == "date"
+            && let Some(period) = &parsed_period
+        {
+            let (from, to, detail) = clamp_period(capability, period);
+            bound.push(Bound::Date(if parameter.name == "from_date" {
+                from
+            } else {
+                to
+            }));
+            if !period_disclosed {
+                deterministic.push(DeterministicBind {
+                    parameter: "period".to_string(),
+                    detail: format!("period {from} to {to} (parsed from '{detail}')"),
+                });
+                period_disclosed = true;
+            }
+            continue;
+        }
+
+        if parameter.name == "limit"
+            && matches!(parameter.kind.as_str(), "integer" | "bigint")
+            && let Some(parsed) = &parsed_limit
+        {
+            let value = declared_cap(capability, declared)
+                .map_or(parsed.value, |cap| parsed.value.min(cap));
+            bound.push(Bound::Bigint(value));
+            let detail = if value == parsed.value {
+                format!("limit {value} (parsed from '{}')", parsed.detail)
+            } else {
+                format!(
+                    "limit {value} (requested {}, clamped to the declared cap; parsed from '{}')",
+                    parsed.value, parsed.detail
+                )
+            };
+            deterministic.push(DeterministicBind {
+                parameter: parameter.name.clone(),
+                detail,
+            });
+            continue;
+        }
+
+        if parameter.name == "currency_code"
+            && parameter.kind == "string"
+            && let Some(parsed) = &parsed_currency
+        {
+            bound.push(Bound::Text(parsed.code.clone()));
+            deterministic.push(DeterministicBind {
+                parameter: parameter.name.clone(),
+                detail: format!("currency {} (parsed from '{}')", parsed.code, parsed.detail),
+            });
+            continue;
+        }
+
         let default = declared
             .and_then(|declared| declared.default.as_ref())
             .and_then(|value| value.as_str());
@@ -662,6 +808,31 @@ fn bind_parameters(
             }
         };
 
+        // FIN-135 / I5 — slot identitas tanpa default yang masih kosong: bila
+        // teks menyebut sebuah nama (K1: entitas tidak pernah diikat dari teks
+        // bebas), itu wajib diungkap, bukan dibiarkan hilang diam-diam.
+        if !entity_disclosed
+            && !parameter.required
+            && parameter.kind == "string"
+            && parameter.source.as_deref() != Some("authorized_scope")
+            && parameter.name != "currency_code"
+            && declared
+                .and_then(|declared| declared.default.as_ref())
+                .is_none()
+            && value == Bound::NullText
+            && let Some(phrase) = param_parse::stated_entity_phrase(request_text)
+        {
+            unapplied.push(UnappliedParam {
+                parameter: parameter.name.clone(),
+                detail: format!(
+                    "'{phrase}' tidak diterapkan, memakai default null — nilai identitas tidak \
+                     pernah diikat dari teks bebas (K1); ia menuntut resolver yang menerbitkan \
+                     opsi."
+                ),
+            });
+            entity_disclosed = true;
+        }
+
         bound.push(value);
     }
 
@@ -672,7 +843,7 @@ fn bind_parameters(
         });
     }
 
-    Ok(bound)
+    Ok((bound, deterministic, unapplied))
 }
 
 /// Keputusan owner FIN-133 untuk `limit` ber-`default: unbounded` tanpa nilai
@@ -750,20 +921,10 @@ fn relative_date(expression: &str, today: NaiveDate) -> Option<NaiveDate> {
     match unit.trim() {
         "d" => today.checked_sub_signed(chrono::Duration::days(count)),
         "w" => today.checked_sub_signed(chrono::Duration::weeks(count)),
-        "m" | "mo" => subtract_months(today, count),
-        "y" => subtract_months(today, count.checked_mul(12)?),
+        "m" | "mo" => param_parse::subtract_months(today, count),
+        "y" => param_parse::subtract_months(today, count.checked_mul(12)?),
         _ => None,
     }
-}
-
-/// Kurangi bulan tanpa pernah menghasilkan tanggal yang tidak ada: 31 Maret
-/// dikurangi satu bulan menjadi 28/29 Februari, bukan gagal diam-diam.
-fn subtract_months(date: NaiveDate, months: i64) -> Option<NaiveDate> {
-    let total = date.year() as i64 * 12 + (date.month() as i64 - 1) - months;
-    let year = i32::try_from(total.div_euclid(12)).ok()?;
-    let month = total.rem_euclid(12) as u32 + 1;
-
-    (0..4).find_map(|back| NaiveDate::from_ymd_opt(year, month, date.day().checked_sub(back)?))
 }
 
 /// Ubah jawaban bertipe menjadi nilai terikat. `None` berarti jawaban tidak
@@ -1019,8 +1180,15 @@ mod tests {
             parameter("office_ids", "array_bigint", true, Some("authorized_scope")),
         ]);
 
-        let bound =
-            bind_parameters(&catalog(), &capability, &query, &[1, 2], &BTreeMap::new()).unwrap();
+        let (bound, ..) = bind_parameters(
+            &catalog(),
+            &capability,
+            &query,
+            &[1, 2],
+            &BTreeMap::new(),
+            "",
+        )
+        .unwrap();
         let today = Utc::now().date_naive();
 
         assert_eq!(bound.len(), 3);
@@ -1048,8 +1216,8 @@ mod tests {
         };
         let query = query(vec![parameter("search", "string", true, None)]);
 
-        let problem =
-            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new(), "")
+            .unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya ditanyakan");
         };
@@ -1065,8 +1233,8 @@ mod tests {
             parameter("product_ids", "array_bigint", false, None),
         ]);
 
-        let bound =
-            bind_parameters(&catalog(), &capability, &query, &[7], &BTreeMap::new()).unwrap();
+        let (bound, ..) =
+            bind_parameters(&catalog(), &capability, &query, &[7], &BTreeMap::new(), "").unwrap();
         assert_eq!(bound[1], Bound::NullText);
         assert_eq!(bound[2], Bound::NullBigintArray);
     }
@@ -1076,8 +1244,8 @@ mod tests {
         let capability = capability(&[]);
         let query = query(vec![parameter("account_number", "string", true, None)]);
 
-        let problem =
-            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new(), "")
+            .unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = &problem else {
             panic!("seharusnya menuntut klarifikasi: {problem:?}");
         };
@@ -1145,7 +1313,8 @@ mod tests {
         let mut supplied = BTreeMap::new();
         supplied.insert("from_date".to_string(), "2026-01-01".to_string());
 
-        let bound = bind_parameters(&catalog(), &capability, &query, &[1], &supplied).unwrap();
+        let (bound, ..) =
+            bind_parameters(&catalog(), &capability, &query, &[1], &supplied, "").unwrap();
         assert_eq!(
             bound[0],
             Bound::Date(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap())
@@ -1166,7 +1335,8 @@ mod tests {
         supplied.insert("office_ids".to_string(), "1,2,3,4,5,6,7,8,9".to_string());
 
         // Scope tetap dari otorisasi (I7), jawaban diabaikan.
-        let bound = bind_parameters(&catalog(), &capability, &query, &[3], &supplied).unwrap();
+        let (bound, ..) =
+            bind_parameters(&catalog(), &capability, &query, &[3], &supplied, "").unwrap();
         assert_eq!(bound[0], Bound::OfficeIds(vec![3]));
     }
 
@@ -1178,8 +1348,8 @@ mod tests {
             parameter("to_date", "date", true, None),
         ]);
 
-        let problem =
-            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap_err();
+        let problem = bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new(), "")
+            .unwrap_err();
         let Unplannable::NeedsClarification { missing, .. } = problem else {
             panic!("seharusnya menuntut klarifikasi");
         };
@@ -1194,8 +1364,8 @@ mod tests {
         let capability = capability_with_cap(&[("limit", "250")], Some(100));
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
-        let bound =
-            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap();
+        let (bound, ..) =
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new(), "").unwrap();
         // 250 melebihi hard_cap 100 → dipotong, bukan diteruskan apa adanya.
         assert_eq!(bound[0], Bound::Bigint(100));
     }
@@ -1206,7 +1376,9 @@ mod tests {
         let query = query(vec![parameter("limit", "integer", true, None)]);
 
         assert_eq!(
-            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new()).unwrap()[0],
+            bind_parameters(&catalog(), &capability, &query, &[1], &BTreeMap::new(), "")
+                .unwrap()
+                .0[0],
             Bound::Bigint(10)
         );
     }
@@ -1238,7 +1410,10 @@ mod tests {
     }
 
     fn bind_limit(capability: &Capability, query: &QueryManifest) -> Bound {
-        bind_parameters(&catalog(), capability, query, &[1], &BTreeMap::new()).unwrap()[0].clone()
+        bind_parameters(&catalog(), capability, query, &[1], &BTreeMap::new(), "")
+            .unwrap()
+            .0[0]
+            .clone()
     }
 
     /// FIN-133 kasus 1 — `default_limit` adalah ukuran jawaban yang diminta,
@@ -1293,8 +1468,15 @@ mod tests {
             Some("authorized_scope"),
         )]);
 
-        let bound =
-            bind_parameters(&catalog(), &capability, &query, &[3, 4], &BTreeMap::new()).unwrap();
+        let (bound, ..) = bind_parameters(
+            &catalog(),
+            &capability,
+            &query,
+            &[3, 4],
+            &BTreeMap::new(),
+            "",
+        )
+        .unwrap();
         assert_eq!(bound[0], Bound::OfficeIds(vec![3, 4]));
     }
 }

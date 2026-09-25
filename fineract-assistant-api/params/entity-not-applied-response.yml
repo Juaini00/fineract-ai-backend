@@ -1,0 +1,45 @@
+info:
+  name: entity-not-applied response
+  type: http
+  seq: 19
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{entityNotAppliedJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("entityNotAppliedPolls") || 0);
+        if (res.getStatus() === 404 && polls < 30) {
+          bru.setVar("entityNotAppliedPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          const params = document.evidence_json.lineage[0].parameters;
+          const officeName = params.find((p) => p.name === "office_name");
+          test("FIN-135 entity-not-applied: 'Show me all clients from Head Office' never binds office_name from free text (K1)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(officeName, "parameter office_name tidak ada di lineage").to.exist;
+            expect(officeName.value).to.equal(null);
+          });
+          test("FIN-135 entity-not-applied: the mentioned-but-unbound value is disclosed in a limitation block, not silently dropped (I5)", function () {
+            const limitation = document.blocks_json.find((b) => b.block_id === "params_not_applied");
+            expect(limitation, "blok params_not_applied tidak ada").to.exist;
+            expect(limitation.type).to.equal("limitation");
+            const entry = limitation.not_applied_params.find((p) => p.parameter === "office_name");
+            expect(entry, "office_name tidak ada di not_applied_params").to.exist;
+            expect(entry.detail).to.include("Head Office");
+          });
+          test("FIN-135 entity-not-applied: an unbound mention is never counted as an auto-bind (D2 stays about bound values only)", function () {
+            const note = document.blocks_json.find((b) => b.block_id === "slots_auto_bound");
+            if (note) {
+              const fields = note.auto_bound_slots.map((s) => s.field_id);
+              expect(fields).to.not.include("office_name");
+            }
+          });
+        }

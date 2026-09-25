@@ -423,11 +423,58 @@ Update after FIN-52 (L4 answer gate) and the bugs it found (FIN-132, FIN-133, FI
   - FIN-133: `limit: unbounded` ignored the declared caps (4114 rows instead of
     100 disclosed). Owner decision: cap + disclose.
 - **Open findings (not fixed here):**
-  - The planner never extracts dates, limits, currencies or names from the
-    request text. It binds manifest defaults, and says nothing about the
-    parameters the user stated.
   - Some phrasings are misrouted by retrieval, e.g. "Top withdrawals per month…"
     goes to `client_activation_top_n_offices`.
+
+Update after FIN-135 (planner honours stated period/limit/currency, discloses what it cannot bind):
+
+- **Deterministic extraction, no LLM.** A new pure module,
+  `crates/chat/src/engine/param_parse.rs`, extracts three parameter kinds
+  straight from `request_text`, generic over parameter *name* (never over
+  which capability was selected): an explicit period (month range, "last N
+  months"/"N bulan terakhir", a bare year with a context word, and single-day
+  "today"/"hari ini" style phrases) for `from_date`/`to_date`; a stated
+  row-count ("top N" / "N terbesar") for `limit`; and an ISO currency code or
+  common name ("rupiah", "dollar") for `currency_code`. An open-ended period
+  (a month or year that includes today) is clamped to `business_today` — a
+  future partial period has no data yet. `planner::bind_parameters` tries a
+  parsed value before the manifest default; declared caps
+  (`hard_cap`/`guards.max_limit`/`guards.max_date_range_days`) still bind, now
+  clamping the *stated* value instead of the default.
+- **Entities stay behind a resolver (K1).** The parser never attempts to bind
+  a free-text name (e.g. an office name) to an identity-like slot — that
+  would be exactly the free-text-binds-identity mistake K1 forbids. When the
+  text names something capitalized after a generic preposition
+  ("from"/"dari"/...) and the query has a matching optional string parameter
+  with no default, the mention is disclosed as **not applied** instead of
+  silently dropped (I5): a new `limitation` block, `params_not_applied`
+  (`compose.rs`), distinct from the D2 auto-bind note because nothing was
+  actually bound.
+- **Disclosure reuses the D2 auto-bind path.** `compose::AutoBound` gained a
+  `provenance` field (`resolver_unique` | `deterministic_parse`); a
+  text-derived bind is disclosed in the same `slots_auto_bound` note block a
+  resolver auto-bind uses, so the existing D2 validator check (disclosed set
+  == `job_node_runs.input_binding_json.auto_bound_slots`) covers it for free.
+  `worker.rs` merges `plan.deterministic_binds` into the auto-bound list
+  before both the ledger write and the response composition — sourced from
+  `plan`, not a new table, because it is exactly as reproducible from
+  `request_text` + the catalog as any other binding.
+- **Verified**: `fineract-assistant-api/params/` (FIN-135) proves period
+  (EN month range, ID month range, bare-year), limit (ID superlative,
+  EN "top N"), currency (EN, combined with limit) and the K1 not-applied case
+  at the HTTP surface — lineage parameters plus the disclosure block, checked
+  against a request built from the *current* date so the collection does not
+  rot. Environment note: this shared dev Postgres had several other Orca
+  worktrees running their own `WORKER_ENABLED=true` app instance at the same
+  time, outside the `jarvis-bruno-locked.sh` lock's reach (the lock only
+  serializes Bruno *runner* invocations, not a stray long-lived `app`
+  process) — a job created here can be claimed and answered by another
+  worktree's pre-FIN-135 binary. Two clean, fully-isolated runs each showed
+  one scenario answered by stale (pre-fix) logic, in each case a *different*
+  scenario; the pure-logic unit tests in `param_parse.rs` (deterministic, no
+  network) and repeated single-scenario manual HTTP checks in this session
+  never showed a failure. Re-run `params` alone when the shared instance is
+  quiet before relying on a red run here as a real regression.
 - **L4 stays 🔨.** The "every capability in use matches direct SQL" half of the
   §3 gate holds. The seven OVR scenarios still have no test (FIN-53…FIN-59).
 

@@ -1,0 +1,38 @@
+info:
+  name: year-only response
+  type: http
+  seq: 10
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{yearOnlyJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("yearOnlyPolls") || 0);
+        if (res.getStatus() === 404 && polls < 30) {
+          bru.setVar("yearOnlyPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          const params = document.evidence_json.lineage[0].parameters;
+          const fromDate = params.find((p) => p.name === "from_date");
+          const toDate = params.find((p) => p.name === "to_date");
+          test("FIN-135 year-only: '" + bru.getVar("yearOnlyRequestText") + "' binds the whole stated year, not the manifest's last-12-months default", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(fromDate.value).to.equal(bru.getVar("yearOnlyExpectedFrom"));
+            expect(toDate.value).to.equal(bru.getVar("yearOnlyExpectedTo"));
+          });
+          test("FIN-135 year-only: the parsed period is disclosed in a note block (D2)", function () {
+            const note = document.blocks_json.find((b) => b.block_id === "slots_auto_bound");
+            expect(note, "blok slots_auto_bound tidak ada").to.exist;
+            const slot = note.auto_bound_slots.find((s) => s.field_id === "period");
+            expect(slot, "slot period tidak diungkap").to.exist;
+            expect(slot.provenance).to.equal("deterministic_parse");
+          });
+        }

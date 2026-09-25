@@ -130,7 +130,7 @@ if [ "$#" -gt 0 ]; then
             RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-selection" ]; then
             RETRIEVAL_SELECTION_FOLDERS+=("$folder")
-        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ]; then
+        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ] || [ "$folder" = "params" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")
@@ -138,7 +138,7 @@ if [ "$#" -gt 0 ]; then
     done
 else
     INTAKE_FOLDERS=(health auth chat)
-    ENGINE_FOLDERS=(engine clarification resolver sse)
+    ENGINE_FOLDERS=(engine clarification resolver sse params)
     DATASET_CAPPED_FOLDERS=(dataset-capped)
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)

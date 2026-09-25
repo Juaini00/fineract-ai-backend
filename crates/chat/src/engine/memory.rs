@@ -174,6 +174,8 @@ mod tests {
             retrieval_score: 0.5,
             graph_json: json!({}),
             graph_hash: "graph".into(),
+            deterministic_binds: Vec::new(),
+            unapplied_params: Vec::new(),
         }
     }
 
@@ -226,7 +228,10 @@ mod tests {
         let facts = promoted(&plan(), &response(), &[], 7);
         let result = facts.last().unwrap();
 
-        assert_eq!(result.provenance_json["query_id"], "savings.balance_summary");
+        assert_eq!(
+            result.provenance_json["query_id"],
+            "savings.balance_summary"
+        );
         assert_eq!(result.fact_json["row_count"], 7);
         assert_eq!(result.completeness, "Complete");
     }

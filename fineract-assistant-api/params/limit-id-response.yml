@@ -1,0 +1,36 @@
+info:
+  name: limit-id response
+  type: http
+  seq: 13
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{limitIdJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("limitIdPolls") || 0);
+        if (res.getStatus() === 404 && polls < 30) {
+          bru.setVar("limitIdPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          const params = document.evidence_json.lineage[0].parameters;
+          const limit = params.find((p) => p.name === "limit");
+          test("FIN-135 limit-id: '3 setoran terbesar per bulan' binds limit=3, not the manifest default", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(limit.value).to.equal(3);
+          });
+          test("FIN-135 limit-id: the parsed limit is disclosed in a note block (D2)", function () {
+            const note = document.blocks_json.find((b) => b.block_id === "slots_auto_bound");
+            expect(note, "blok slots_auto_bound tidak ada").to.exist;
+            const slot = note.auto_bound_slots.find((s) => s.field_id === "limit");
+            expect(slot, "slot limit tidak diungkap").to.exist;
+            expect(slot.provenance).to.equal("deterministic_parse");
+          });
+        }
