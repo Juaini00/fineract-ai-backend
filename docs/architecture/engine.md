@@ -152,7 +152,7 @@ Semantik status:
 - `Skipped`: node tidak diperlukan branch/plan aktif, atau fail-policy memutuskan node tidak boleh berjalan.
 - `Abandoned`: outcome attempt tidak pasti — worker/lease hilang setelah dispatch external call tetapi sebelum checkpoint commit.
 
-Transisi attempt: `Pending → Runnable → Running → Completed|Failed|Skipped|Abandoned`. Baris attempt terminal tidak dibuka kembali; recovery membuat attempt baru dengan `attempt` lebih besar, tanpa mengubah baris historis.
+Transisi attempt: `Pending → Runnable → Running → Completed|Failed|Skipped|Abandoned`. Attempt `Pending`/`Runnable` yang tidak lagi diperlukan — termasuk karena job menjadi terminal (`Expired`/`Cancelled`) sebelum attempt itu diadmisikan — ditutup langsung `Skipped` dalam transaksi settlement yang sama; bukan `Abandoned`, karena attempt itu pasti tidak pernah berjalan dan tidak ada outcome yang tidak pasti. Baris attempt terminal tidak dibuka kembali; recovery membuat attempt baru dengan `attempt` lebih besar, tanpa mengubah baris historis.
 
 ## Lease, fencing, dan recovery
 
