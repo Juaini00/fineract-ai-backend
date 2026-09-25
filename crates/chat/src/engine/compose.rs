@@ -44,11 +44,16 @@ pub const BLOCK_TYPES: [&str; 9] = [
 /// diperiksa per isi, bukan per tipe.
 pub const DATA_BLOCKS: [&str; 5] = ["metric", "table", "chart_spec", "comparison", "finding"];
 
-/// Slot yang diikat resolver tanpa bertanya (K5, provenance `resolver_unique`).
+/// Slot yang diikat tanpa bertanya: resolver dengan satu kandidat
+/// (`resolver_unique`, K5) atau teks permintaan yang terurai deterministik
+/// (`resolver_unique` | `deterministic_parse`, FIN-135, database-design.md
+/// §4.14). Keduanya diungkap lewat mekanisme yang sama (D2) — hanya
+/// alasannya yang berbeda.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AutoBound {
     pub field_id: String,
     pub label: Option<String>,
+    pub provenance: &'static str,
 }
 
 impl AutoBound {
@@ -56,6 +61,14 @@ impl AutoBound {
         match &self.label {
             Some(label) => format!("{} = {label}", self.field_id),
             None => self.field_id.clone(),
+        }
+    }
+
+    pub fn from_deterministic(bind: &crate::engine::planner::DeterministicBind) -> Self {
+        Self {
+            field_id: bind.parameter.clone(),
+            label: Some(bind.detail.clone()),
+            provenance: "deterministic_parse",
         }
     }
 }
@@ -177,9 +190,9 @@ fn time_series_incompatibility(
     // ponytail: perbandingan string cukup untuk periode/tanggal ISO yang
     // terurut leksikografis ("2026-01" < "2026-02"). Kalau kelak ada sumbu
     // waktu numerik non-ISO, bandingkan sebagai angka di sini.
-    let ordered = rows.windows(2).all(|pair| {
-        cell(&pair[0], time_dimension) <= cell(&pair[1], time_dimension)
-    });
+    let ordered = rows
+        .windows(2)
+        .all(|pair| cell(&pair[0], time_dimension) <= cell(&pair[1], time_dimension));
 
     (!ordered).then_some("the time dimension is not ordered")
 }
@@ -333,33 +346,89 @@ pub fn analysis(
         ));
     }
 
+    // FIN-135 / I5 — teks menyebut sesuatu yang tidak dapat diikat (mis. nama
+    // entitas tanpa resolver, K1): default tetap dipakai, tetapi itu wajib
+    // dinyatakan, bukan hilang diam-diam. Bukan D2 (tidak ada yang diikat,
+    // jadi bukan `note`/`auto_bound_slots`) — ini `limitation`, kelas yang
+    // sama dengan kolom yang ditahan dan baris yang dipotong di atas.
+    if !plan.unapplied_params.is_empty() {
+        blocks.push(block(
+            "params_not_applied",
+            "limitation",
+            &[],
+            json!({
+                "title": "Values not applied",
+                "body": format!(
+                    "{} value(s) mentioned in your request were not applied; the declared \
+                     default is used instead: {}.",
+                    plan.unapplied_params.len(),
+                    plan.unapplied_params
+                        .iter()
+                        .map(|item| format!("{} — {}", item.parameter, item.detail))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ),
+                "not_applied_params": plan.unapplied_params
+                    .iter()
+                    .map(|item| json!({ "parameter": item.parameter, "detail": item.detail }))
+                    .collect::<Vec<_>>(),
+            }),
+        ));
+    }
+
     // D2 (§5) — pengungkapan auto-bind hidup di blok `note`, bukan
-    // `limitation`: slot yang diikat karena hanya ada satu kandidat adalah
-    // **asumsi yang diambil**, bukan batas jawaban. Validator memeriksa blok
-    // inilah yang memuatnya.
+    // `limitation`: slot yang diikat tanpa bertanya (resolver satu kandidat,
+    // atau teks permintaan terurai deterministik, FIN-135) adalah **asumsi
+    // yang diambil**, bukan batas jawaban. Validator memeriksa blok inilah
+    // yang memuatnya.
     if !auto_bound.is_empty() {
+        let resolver_bound: Vec<&AutoBound> = auto_bound
+            .iter()
+            .filter(|slot| slot.provenance == "resolver_unique")
+            .collect();
+        let parsed_bound: Vec<&AutoBound> = auto_bound
+            .iter()
+            .filter(|slot| slot.provenance == "deterministic_parse")
+            .collect();
+
+        let mut sentences = Vec::new();
+        if !resolver_bound.is_empty() {
+            sentences.push(format!(
+                "{} value(s) were bound automatically because the approved resolver returned \
+                 exactly one candidate inside your authorized scope: {}.",
+                resolver_bound.len(),
+                resolver_bound
+                    .iter()
+                    .map(|slot| slot.describe())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !parsed_bound.is_empty() {
+            sentences.push(format!(
+                "{} value(s) were parsed directly from your request text: {}.",
+                parsed_bound.len(),
+                parsed_bound
+                    .iter()
+                    .map(|slot| slot.describe())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+
         blocks.push(block(
             "slots_auto_bound",
             "note",
             &[],
             json!({
                 "title": "Values chosen without asking",
-                "body": format!(
-                    "{} value(s) were bound automatically because the approved resolver returned exactly \
-                     one candidate inside your authorized scope. Nobody confirmed them: {}.",
-                    auto_bound.len(),
-                    auto_bound
-                        .iter()
-                        .map(AutoBound::describe)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
+                "body": sentences.join(" "),
                 "auto_bound_slots": auto_bound
                     .iter()
                     .map(|slot| json!({
                         "field_id": slot.field_id,
                         "label": slot.label,
-                        "provenance": "resolver_unique",
+                        "provenance": slot.provenance,
                     }))
                     .collect::<Vec<_>>(),
             }),
@@ -628,6 +697,8 @@ mod tests {
             retrieval_score: 0.5,
             graph_json: json!({}),
             graph_hash: "graph".into(),
+            deterministic_binds: Vec::new(),
+            unapplied_params: Vec::new(),
         }
     }
 
@@ -658,11 +729,16 @@ mod tests {
                 "tipe di luar kosakata §2: {block_type}"
             );
             assert!(block["block_id"].is_string(), "block_id hilang: {block}");
-            assert!(block.get("id").is_none(), "field `id` lama masih ada: {block}");
+            assert!(
+                block.get("id").is_none(),
+                "field `id` lama masih ada: {block}"
+            );
             assert_eq!(block["schema_version"], BLOCK_SCHEMA_VERSION);
             if DATA_BLOCKS.contains(&block_type) {
                 assert!(
-                    block["derived_from"].as_array().is_some_and(|refs| !refs.is_empty()),
+                    block["derived_from"]
+                        .as_array()
+                        .is_some_and(|refs| !refs.is_empty()),
                     "blok data tanpa derived_from: {block}"
                 );
             }
@@ -692,7 +768,10 @@ mod tests {
         assert_eq!(blocks[0]["block_id"], "metric:total_deposit_amount");
         assert_eq!(blocks[0]["value"], "1500.00");
         assert_eq!(blocks[0]["period"]["from_date"], "2026-09-01");
-        assert_eq!(blocks[0]["derived_from"][0]["node_run_id"], node().to_string());
+        assert_eq!(
+            blocks[0]["derived_from"][0]["node_run_id"],
+            node().to_string()
+        );
     }
 
     #[test]
@@ -741,7 +820,10 @@ mod tests {
         );
         let rendered = response.blocks.to_string();
 
-        assert!(!rendered.contains("Budi"), "PII bocor ke response: {rendered}");
+        assert!(
+            !rendered.contains("Budi"),
+            "PII bocor ke response: {rendered}"
+        );
         let blocks = response.blocks.as_array().unwrap();
         assert_eq!(blocks[0]["columns"].as_array().unwrap().len(), 2);
         // §7 — tabel mendeklarasikan kolom yang ditahan…
@@ -774,6 +856,7 @@ mod tests {
         let auto_bound = [AutoBound {
             field_id: "client_id".into(),
             label: Some("Siti".into()),
+            provenance: "resolver_unique",
         }];
         let response = analysis(
             &plan(),
@@ -788,7 +871,10 @@ mod tests {
         let blocks = response.blocks.as_array().unwrap();
 
         assert_shape(&response.blocks);
-        let note = blocks.iter().find(|b| b["type"] == "note").expect("blok note");
+        let note = blocks
+            .iter()
+            .find(|b| b["type"] == "note")
+            .expect("blok note");
         assert_eq!(note["block_id"], "slots_auto_bound");
         assert_eq!(note["auto_bound_slots"][0]["field_id"], "client_id");
         assert_eq!(note["auto_bound_slots"][0]["provenance"], "resolver_unique");
@@ -946,7 +1032,10 @@ mod tests {
         // Tidak terurut → turun menjadi tabel + catatan, tanpa chart.
         let unordered = [time_row("2026-02", 2), time_row("2026-01", 1)];
         let downgraded = chart_or_table("trend", "period", &columns, &unordered, &derived_from);
-        let blocks: Vec<&str> = downgraded.iter().map(|b| b["type"].as_str().unwrap()).collect();
+        let blocks: Vec<&str> = downgraded
+            .iter()
+            .map(|b| b["type"].as_str().unwrap())
+            .collect();
         assert_eq!(blocks, vec!["table", "note"]);
         assert!(
             !downgraded.iter().any(|b| b["type"] == "chart_spec"),
@@ -957,8 +1046,17 @@ mod tests {
         assert_eq!(note["reason"], "the time dimension is not ordered");
 
         // Kolom waktu hilang juga menurunkan.
-        let no_time = chart_or_table("trend", "period", &["total".to_string()], &ordered, &derived_from);
-        assert_eq!(no_time[1]["reason"], "the required time dimension column is absent");
+        let no_time = chart_or_table(
+            "trend",
+            "period",
+            &["total".to_string()],
+            &ordered,
+            &derived_from,
+        );
+        assert_eq!(
+            no_time[1]["reason"],
+            "the required time dimension column is absent"
+        );
 
         // Bukan kegagalan: dokumen hasil downgrade lolos validator apa adanya.
         let response = SettledResponse {
@@ -990,10 +1088,21 @@ mod tests {
         assert_eq!(table["handle_state"], "purged");
         assert_eq!(table["as_of"], as_of);
         // Detail dinyatakan hilang, TIDAK didiamkan sebagai nol baris (I5).
-        assert!(table["rows"].is_null(), "detail kedaluwarsa tidak boleh tampil sebagai []");
-        assert!(table["body"].as_str().unwrap().contains("no longer available"));
+        assert!(
+            table["rows"].is_null(),
+            "detail kedaluwarsa tidak boleh tampil sebagai []"
+        );
+        assert!(
+            table["body"]
+                .as_str()
+                .unwrap()
+                .contains("no longer available")
+        );
         // Handle bertahan setelah purge, jadi ia sah menjadi kontributor lineage.
-        assert_eq!(table["derived_from"][0]["dataset_id"], dataset_id.to_string());
+        assert_eq!(
+            table["derived_from"][0]["dataset_id"],
+            dataset_id.to_string()
+        );
         assert_shape(&json!([table.clone()]));
 
         // Angka ringkas — sudah dihitung sebelum purge — tetap terbaca dengan

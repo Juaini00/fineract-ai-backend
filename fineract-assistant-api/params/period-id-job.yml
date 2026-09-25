@@ -1,0 +1,40 @@
+info:
+  name: period-id job
+  type: http
+  seq: 6
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+    - name: Idempotency-Key
+      value: "{{periodIdIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{periodIdSessionId}}",
+        "request_text": "{{periodIdRequestText}}"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const months = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+        const today = new Date();
+        const year = today.getUTCFullYear();
+        const month = months[today.getUTCMonth()];
+        const isoToday = today.toISOString().slice(0, 10);
+        bru.setVar("periodIdIdemKey", "fin135-period-id-" + Date.now());
+        bru.setVar("periodIdRequestText", `Total setoran Januari sampai ${month} ${year}.`);
+        bru.setVar("periodIdExpectedFrom", `${year}-01-01`);
+        bru.setVar("periodIdExpectedTo", isoToday);
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("periodIdJobId", res.getBody().data.job_id);

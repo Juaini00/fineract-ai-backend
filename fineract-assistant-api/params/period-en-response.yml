@@ -1,0 +1,38 @@
+info:
+  name: period-en response
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{periodEnJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("periodEnPolls") || 0);
+        if (res.getStatus() === 404 && polls < 30) {
+          bru.setVar("periodEnPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          const params = document.evidence_json.lineage[0].parameters;
+          const fromDate = params.find((p) => p.name === "from_date");
+          const toDate = params.find((p) => p.name === "to_date");
+          test("FIN-135 period-en: '" + bru.getVar("periodEnRequestText") + "' binds the stated period, clamped to today", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(fromDate.value).to.equal(bru.getVar("periodEnExpectedFrom"));
+            expect(toDate.value).to.equal(bru.getVar("periodEnExpectedTo"));
+          });
+          test("FIN-135 period-en: the parsed period is disclosed in a note block (D2)", function () {
+            const note = document.blocks_json.find((b) => b.block_id === "slots_auto_bound");
+            expect(note, "blok slots_auto_bound tidak ada").to.exist;
+            const slot = note.auto_bound_slots.find((s) => s.field_id === "period");
+            expect(slot, "slot period tidak diungkap").to.exist;
+            expect(slot.provenance).to.equal("deterministic_parse");
+          });
+        }

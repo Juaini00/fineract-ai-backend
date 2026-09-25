@@ -1,0 +1,38 @@
+info:
+  name: year-only job
+  type: http
+  seq: 9
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+    - name: Idempotency-Key
+      value: "{{yearOnlyIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{yearOnlySessionId}}",
+        "request_text": "{{yearOnlyRequestText}}"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        const today = new Date();
+        const year = today.getUTCFullYear();
+        const isoToday = today.toISOString().slice(0, 10);
+        bru.setVar("yearOnlyIdemKey", "fin135-year-only-" + Date.now());
+        bru.setVar("yearOnlyRequestText", `Monthly office openings for ${year}.`);
+        bru.setVar("yearOnlyExpectedFrom", `${year}-01-01`);
+        bru.setVar("yearOnlyExpectedTo", isoToday);
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("yearOnlyJobId", res.getBody().data.job_id);

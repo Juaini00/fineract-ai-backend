@@ -445,7 +445,10 @@ pub async fn open_form_of(pool: &PgPool, job_id: Uuid) -> sqlx::Result<Option<Fo
 /// ditanyakan ulang. Jawaban `option_id` tidak punya `raw_text` sama sekali —
 /// yang mengikat adalah `binding_json`, dan itulah maksud pemisahan kolomnya
 /// (C10/K1).
-pub async fn accepted_answers(pool: &PgPool, job_id: Uuid) -> sqlx::Result<BTreeMap<String, String>> {
+pub async fn accepted_answers(
+    pool: &PgPool,
+    job_id: Uuid,
+) -> sqlx::Result<BTreeMap<String, String>> {
     let rows = sqlx::query_as::<_, (String, Option<String>)>(
         "SELECT a.field_id, COALESCE(a.binding_json->>'value', a.raw_text)
          FROM clarification_answers a
@@ -517,7 +520,11 @@ pub async fn auto_bound_slots(pool: &PgPool, job_id: Uuid) -> sqlx::Result<Vec<A
 
     Ok(rows
         .into_iter()
-        .map(|(field_id, label)| AutoBound { field_id, label })
+        .map(|(field_id, label)| AutoBound {
+            field_id,
+            label,
+            provenance: "resolver_unique",
+        })
         .collect())
 }
 

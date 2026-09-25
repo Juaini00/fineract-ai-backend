@@ -462,7 +462,16 @@ async fn run_job(
 
             // K5 — dibaca dari yang tersimpan, bukan dari ingatan proses ini:
             // job yang dilanjutkan worker lain tetap mengungkap auto-bind-nya.
-            let auto_bound = clarification_repository::auto_bound_slots(pool, job.id).await?;
+            // FIN-135 — slot yang terurai deterministik dari teks permintaan
+            // digabung di sini: sumbernya `plan` (dapat dihitung ulang dari
+            // `request_text` + katalog, sama seperti binding lain), bukan
+            // tabel jawaban klarifikasi — tidak pernah ada form untuknya.
+            let mut auto_bound = clarification_repository::auto_bound_slots(pool, job.id).await?;
+            auto_bound.extend(
+                plan.deterministic_binds
+                    .iter()
+                    .map(compose::AutoBound::from_deterministic),
+            );
 
             let (visible, withheld) = compose::visible_fields(&plan, pii_enabled);
 

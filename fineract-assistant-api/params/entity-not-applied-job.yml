@@ -1,0 +1,32 @@
+info:
+  name: entity-not-applied job
+  type: http
+  seq: 18
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+    - name: Idempotency-Key
+      value: "{{entityNotAppliedIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{entityNotAppliedSessionId}}",
+        "request_text": "Show me all clients from Head Office"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("entityNotAppliedIdemKey", "fin135-entity-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("entityNotAppliedJobId", res.getBody().data.job_id);

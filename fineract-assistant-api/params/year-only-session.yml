@@ -1,0 +1,24 @@
+info:
+  name: year-only session
+  type: http
+  seq: 8
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{paramsToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-135 year only" }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("201", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("yearOnlySessionId", res.getBody().data.id);

@@ -1,0 +1,17 @@
+info:
+  name: params
+  seq: 19
+  description: |
+    FIN-135 — planner tidak lagi mengabaikan parameter yang dinyatakan
+    pengguna (periode, top-N/limit, mata uang) tanpa pengungkapan. Setiap
+    request di sini menyatakan sebuah nilai secara eksplisit dalam teks;
+    lineage `evidence_json.lineage[0].parameters` membuktikan nilai itu yang
+    diikat (bukan default manifest), dan blok `note`/`limitation` membuktikan
+    pengungkapannya (D2/I5). `office-name-not-applied` membuktikan sisi lain:
+    entitas bernama (K1) tetap TIDAK diikat dari teks bebas, tetapi
+    penyebutannya diungkap lewat blok `limitation` `params_not_applied`.
+    Periode dibangun dinamis dari tanggal berjalan (bulan/tahun ini) supaya
+    koleksi ini tidak busuk seiring waktu — assertion-nya adalah "periode yang
+    disebut, dijepit ke hari ini", bukan tanggal absolut yang di-hardcode.
+    Dijalankan dengan worker menyala (klaster
+    engine/clarification/resolver/sse/retrieval-selection).

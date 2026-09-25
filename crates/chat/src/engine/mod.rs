@@ -7,6 +7,7 @@ pub mod compose;
 pub mod dataset;
 pub mod executor;
 pub mod memory;
+pub mod param_parse;
 pub mod planner;
 pub mod reaper;
 pub mod repository;
