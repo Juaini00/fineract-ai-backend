@@ -1371,10 +1371,14 @@ Update after FIN-65/61/63 (L5.6, Lane C — `chart_spec` and dataset-backed
   Nov 2025–Sep 2026 deposits) and `engine/resp-large-response.yml` /
   `resp-large-rows.yml` ("top 100 deposits per month": 450 rows → handle-backed
   table, first page of 200 readable through its `rows_path`).
+- **FIN-61 (RESP-8.7 at HTTP).** `engine/resp-downgrade-response.yml`: the same
+  charted capability over June–September 2026 has deposits only in September —
+  one point on the time axis — and serves `table` + `note` `chart_downgraded`,
+  no `chart_spec`, still `Answered`/`Complete`/`passed`.
 - **Deviation from the brief's ownership list:** the ledger query in
   `engine/repository.rs` now also reads `output_json` for the §7 check.
-- §5.1 stays **36/59**: no new scenario ID. L5 stays 🔨 until RESP-8.7/8.9
-  are proven at HTTP (FIN-61, FIN-63).
+- §5.1 stays **36/59**: no new scenario ID. L5 stays 🔨 until RESP-8.9 is
+  proven at HTTP (FIN-63).
 
 ### 5.1 Scenario coverage
 

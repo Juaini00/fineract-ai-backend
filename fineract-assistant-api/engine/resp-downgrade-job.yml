@@ -1,0 +1,30 @@
+info:
+  name: FIN-61 deret waktu satu bulan
+  type: http
+  seq: 50.6
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{downgradeIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{respSessionId}}",
+        "request_text": "Monthly deposit totals from June to September 2026."
+      }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("downgradeIdemKey", "bruno-downgradeIdemKey-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-61 deret waktu satu bulan: job diterima", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("downgradeJobId", res.getBody().data.job_id);
