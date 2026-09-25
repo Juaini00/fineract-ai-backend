@@ -187,9 +187,10 @@ column. Query results are dumped inline into `job_node_runs.output_json`.
 direct SQL on Fineract and matches, and every L4-owned OVR scenario (OVR-6.1,
 OVR-6.3…6.7) carries a test naming its ID. OVR-6.2 (multi-node fan-in) is owned
 by L8 — owner decision 2026-09-25, see §5.1.
-**Status**: 🔨 — the job machinery (8 lifecycle states, fencing, idempotency,
-reaper) runs and is tested. **The correctness of the answers has never been
-tested by anyone.**
+**Status**: 🧪 — since 2026-09-25: the answer-correctness gate (FIN-52 `answers`
+stage, every reachable capability vs direct SQL) and every L4-owned OVR scenario
+(6.1, 6.3–6.7) pass at the HTTP surface on `main`; see the §5 update of that date.
+Ceiling is 🧪 because L1 and L3 are 🧪, not ✅.
 
 ### L5 — Response documents match the contract
 
@@ -260,7 +261,7 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | L1 Correct catalog | 🧪 | L0 🔨 |
 | L2 Retrieval | 🧪 | L1 🧪 |
 | L3 Datasets | 🧪 | L0 🔨 |
-| L4 Correct answers | 🔨 | L1 🧪, L3 🧪 |
+| L4 Correct answers | 🧪 | L1 🧪, L3 🧪 |
 | L5 Response shape | 🔨 | L0 🔨 |
 | L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
@@ -1318,6 +1319,30 @@ Update after FIN-148 (terse Indonesian ranking phrase left open by FIN-142):
   a stale pre-fix build, also stealing 37 of a sibling ticket's (FIN-144)
   jobs in the same window — a shared-runner infra incident, not a defect in
   this fix.
+
+Update after the 2026-09-25 wave (FIN-135, FIN-137, FIN-140, FIN-144, FIN-147 and
+the harness fixes FIN-138/145/146/149/150):
+
+- **L4 🔨 → 🧪.** Every L4 ticket is closed and the gate holds on `main`
+  (`ea116d0`): a full locked run with the fixed wrapper exits 0 — every stage
+  green, including `answers` (FIN-52: job answers vs direct SQL), `params`
+  (FIN-135: stated period/limit/currency bound and disclosed), the OVR-6.3…6.7
+  chains, `worker-error`/`crash-*` (OVR-6.4 with FIN-141/144), the supersede
+  regression (FIN-147) and `retrieval-healthy` after the harness's own
+  embedding backfill (FIN-149); OVR-6.7 zero isolation violations. OVR-6.2 is
+  L8-owned (owner decision, see above). Ceiling is 🧪: L1 and L3 are 🧪; ✅ is
+  the owner's call.
+- **Shared-Postgres runner integrity.** Results between ~15:15 and ~15:45
+  (UTC+8) on 2026-09-25 were unreliable: the workspace wrapper
+  `scripts/jarvis-bruno-locked.sh` (outside this repo) deleted locks it no
+  longer owned and reclaimed stale locks non-atomically, so runs overlapped and
+  worker-enabled apps claimed each other's jobs. The wrapper now releases only
+  its own lock, serialises reclaim, and keeps the lock while its runner lives.
+  An app started outside the wrapper still steals jobs (seen 16:20–16:24): the
+  rule stays "never start the app against the shared Postgres except through
+  the wrapper". Diagnose a suspicious failure with `audit_events`
+  (`action='job.claimed'`, `detail_json->>'worker'`) and the catalog hash in
+  `job_plans.contract_versions_json`.
 
 ### 5.1 Scenario coverage
 
