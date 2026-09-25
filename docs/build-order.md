@@ -760,6 +760,40 @@ Update after owner decisions of 2026-09-25 (FIN-54, FIN-143, FIN-144):
   (Indonesian secret-field paraphrases and deferred-domain routing) and
   FIN-144 are open.
 
+Update after FIN-138 (flaky `retrieval-healthy` stage — mechanism gate, no
+scenario ID):
+
+- **Found:** `retrieval-vector/response.yml`, `retrieval-healthy/response.yml`
+  and `retrieval-unavailable/response.yml` (all three written together by
+  FIN-134) polled `GET /chat/jobs/:id/response` with a hand-rolled,
+  count-bounded loop (`polls < 20`, `bru.setNextRequest`) and no sleep between
+  attempts. `bru run --delay` only paces distinct requests in sequence, not a
+  request re-queuing itself via `setNextRequest` — so all 20 attempts burned
+  in single-digit milliseconds of wall time, far under the real latency of the
+  external Voyage AI embedding call `retrieval-vector`/`retrieval-healthy`
+  wait on. `retrieval-unavailable` never showed the flake only because its arm
+  is disabled (`EMBEDDING_API_KEY=`) and settles before the first poll. This
+  is the same class of problem `lib/poll.js`'s `awaitJob` (introduced for
+  FIN-141's crash-recovery stages) already solves with a time-bounded
+  (90 s), per-iteration `setTimeout`-based sleep.
+- **Fix:** switched all three `response.yml` files to `lib/poll.js`'s
+  `awaitJob`. `awaitJob` needs `setTimeout`, which the default `quickjs` Bruno
+  sandbox does not provide (confirmed by reproducing `'setTimeout' is not
+  defined'` locally) — `scripts/integration-test.sh` already runs every other
+  external-call-bound stage (`answers`, `redis-down`, `crash-*`) under
+  `BRU_SANDBOX=developer` for the same reason, so the `retrieval-unavailable`
+  and `retrieval-healthy` (bundles `retrieval-vector` + `retrieval-healthy`)
+  invocations now do too.
+- **Verified:** reproduced the flake on the first attempt against
+  `origin/main` (`retrieval-vector/response` failed "expected 404 to equal
+  200" after 20 polls that completed in ~60 ms while the job settled 4+ s
+  later). After the fix, `retrieval-vector` passed **10/10** consecutive
+  targeted runs plus a full `retrieval-unavailable` + `retrieval-vector` +
+  `retrieval-healthy` bundle run, all through the shared-Postgres lock
+  wrapper. Classification: test-script bug (Bruno poll script), not an engine
+  bug — `planner::semantic_capability`'s retrieval_miss/out_of_scope mapping
+  (FIN-42) is unchanged and untouched.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

@@ -12,14 +12,13 @@ runtime:
   scripts:
     - type: tests
       code: |
-        // FIN-134 — response baru ada sesudah job settle; semantic arm memanggil
-        // API embedding sehingga latensinya bisa melewati jeda runner. Tunggu
-        // (dibatasi), jangan membaca 404 sebagai jawaban.
-        const polls = Number(bru.getVar("retrievalUnavailablePolls") || 0);
-        if (res.getStatus() === 404 && polls < 20) {
-          bru.setVar("retrievalUnavailablePolls", polls + 1);
-          bru.setNextRequest(req.getName());
-        } else {
+        // FIN-138 — poll berbasis hitungan (FIN-134) habis dalam ~puluhan ms
+        // karena setNextRequest mengulang tanpa jeda `--delay`. Tidak flaky di
+        // sini (arm semantik dimatikan, job selesai cepat) tapi pola yang sama
+        // flaky di retrieval-vector/retrieval-healthy — diseragamkan ke
+        // lib/poll.js (batas WAKTU 90 s, tidur per-poll) yang sudah dipakai FIN-141.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
           const document = res.getBody().data;
           test("FIN-42: unavailable semantic arm is retrieval_miss", function () {
             expect(res.getStatus()).to.equal(200);
