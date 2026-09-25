@@ -1,0 +1,44 @@
+info:
+  name: RESP-8.9 tabel atas dataset purged menyatakan detail tidak tersedia
+  type: http
+  seq: 50.9
+  description: |
+    responses.md §7 / dataset-lifecycle.md §7 / RESP-8.9 — response yang sama
+    dibaca ulang sesudah dataset-nya dipurge. Blok `table` berhandle menyatakan
+    detail tidak lagi tersedia (bukan nol baris), angka ringkasnya tetap
+    terbaca dengan `as_of`.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{largeJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const table = document.blocks_json.find(function (b) { return b.type === "table"; });
+        const datasetId = bru.getVar("largeDatasetId");
+
+        test("RESP-8.9: tabel menyatakan detail tidak lagi tersedia, bukan nol baris", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(table.block_id).to.equal("result");
+          expect(table.detail_available).to.equal(false);
+          expect(table.handle_state).to.equal("purged");
+          expect(table.rows).to.equal(null);
+          expect(table.body).to.contain("no longer available");
+          expect(table.derived_from).to.deep.equal([{ dataset_id: datasetId }]);
+        });
+
+        test("RESP-8.9: angka ringkas tetap terbaca dengan as_of", function () {
+          expect(table.row_count).to.equal(Number(bru.getVar("largeRowCount")));
+          expect(table.as_of).to.be.a("string");
+          expect(Number.isNaN(Date.parse(table.as_of))).to.equal(false);
+          expect(document.evidence_json.lineage[0].row_count).to.equal(Number(bru.getVar("largeRowCount")));
+        });
+
+        test("RESP-8.9: dokumen tetap Answered — kedaluwarsa bukan kegagalan", function () {
+          expect(document.outcome).to.equal("Answered");
+          expect(document.validation_status).to.equal("passed");
+        });

@@ -262,7 +262,7 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | L2 Retrieval | 🧪 | L1 🧪 |
 | L3 Datasets | 🧪 | L0 🔨 |
 | L4 Correct answers | 🧪 | L1 🧪, L3 🧪 |
-| L5 Response shape | 🔨 | L0 🔨 |
+| L5 Response shape | 🧪 | L0 🔨 |
 | L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
 | L8 Above | ⬜ | L7 ❌ |
@@ -1347,6 +1347,11 @@ the harness fixes FIN-138/145/146/149/150):
 Update after FIN-65/61/63 (L5.6, Lane C — `chart_spec` and dataset-backed
 `table` wired into the served path; RESP-8.7 / RESP-8.9 proven at HTTP):
 
+- **L5 🔨 → 🧪.** The two scenarios the FIN-60/62/64 update left without a live
+  emitter now have one and pass at HTTP, so all ten RESP scenarios are proven
+  against served documents. 🧪, not ✅: the prerequisite L0 is still 🔨
+  (Rule 2). L6 is not re-rated here — its gate (responses.md §3–§6) was not
+  re-assessed by this ticket.
 - **FIN-65 (emission).** Owner decision 2026-09-25: a chart is **declared per
   capability** in `knowledge/` — `chart: { kind: time_series }` — never
   triggered by user phrasing. The time axis is the query's **declared grain**
@@ -1375,10 +1380,20 @@ Update after FIN-65/61/63 (L5.6, Lane C — `chart_spec` and dataset-backed
   charted capability over June–September 2026 has deposits only in September —
   one point on the time axis — and serves `table` + `note` `chart_downgraded`,
   no `chart_spec`, still `Answered`/`Complete`/`passed`.
-- **Deviation from the brief's ownership list:** the ledger query in
+- **FIN-63 (RESP-8.9 at HTTP).** The response read path
+  (`GET /chat/jobs/{id}/response`) now checks the state of every handle a
+  `table` block references; an `expired`/`purged` handle is served as
+  `expired_dataset_table` (`detail_available: false`, `rows: null`,
+  `handle_state`, `as_of` from the dataset snapshot, `row_count` kept). The
+  stored document is unchanged. `engine/resp-expired-purge.yml` purges the large
+  table's handle through the FIN-44 local seam, and
+  `engine/resp-expired-response.yml` reads the same response again.
+- **Deviation from the brief's ownership list:** `crates/chat/src/job/service.rs`
+  and `crates/chat/src/engine/dataset/service.rs` were edited — the response read
+  path lives there, and RESP-8.9 is a read-time disclosure. The ledger query in
   `engine/repository.rs` now also reads `output_json` for the §7 check.
-- §5.1 stays **36/59**: no new scenario ID. L5 stays 🔨 until RESP-8.9 is
-  proven at HTTP (FIN-63).
+- §5.1 stays **36/59**: no new scenario ID; RESP-8.7/8.9 moved from unit-tested
+  to HTTP-proven.
 
 ### 5.1 Scenario coverage
 
@@ -1411,7 +1426,8 @@ T13 plus unit tests; DS-8.6 is proven at the release predicate
 (`crates/chat/src/engine/dataset/`). RESP is now complete at the unit level, but "has a test" is a coverage
 figure, not a conformance one — `acceptance-check.sh` cannot tell whether the
 test actually proves its scenario, and RESP-8.7/8.9 in particular prove
-composition logic that no live path emits yet.
+composition logic that no live path emitted until FIN-65/61/63 — both are now
+proven at HTTP as well.
 
 **The count is 59, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).**
 One ID was given per scenario as the document actually writes it — one bullet or

@@ -1,0 +1,21 @@
+info:
+  name: FIN-63 seam lokal mem-purge dataset tabel besar
+  type: http
+  seq: 50.8
+  description: |
+    FIN-44 — seam `POST /_local/datasets/{id}/purge` (APP_ENV=local) memakai
+    aturan reaper T11 tanpa menunggu TTL: chunk dihapus, handle bertahan.
+http:
+  method: post
+  url: "{{baseUrl}}/_local/datasets/{{largeDatasetId}}/purge"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-63: handle tabel besar kini purged", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.status).to.equal("purged");
+        });

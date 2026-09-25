@@ -5,7 +5,10 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::job::repository::{self, Accepted, CreateError, Job};
+use crate::{
+    engine::{compose, dataset},
+    job::repository::{self, Accepted, CreateError, Job},
+};
 
 /// Hasil penerimaan job: baru, atau replay acknowledgement yang tersimpan.
 #[derive(Debug)]
@@ -91,10 +94,21 @@ pub async fn response(
     let job = owned(foundation, job_id, owner_user_id).await?;
     let version = job.final_response_version.ok_or(ApiError::NotFound)?;
 
-    crate::engine::repository::find_response(foundation.app_db().pool(), job_id, version)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or(ApiError::NotFound)
+    let mut document =
+        crate::engine::repository::find_response(foundation.app_db().pool(), job_id, version)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or(ApiError::NotFound)?;
+
+    // RESP-8.9 — tabel yang merujuk handle mati dinyatakan kedaluwarsa pada
+    // saat dibaca, bukan disajikan seolah detailnya masih dapat dipaginasi.
+    let ids = compose::table_dataset_ids(&document.blocks_json);
+    if !ids.is_empty() {
+        let dead = dataset::service::dead_handles(foundation, &ids).await?;
+        document.blocks_json = compose::disclose_dead_handles(document.blocks_json, &dead);
+    }
+
+    Ok(document)
 }
 
 /// Sidik jari payload kanonik — bukan body mentah, karena yang perlu diketahui
