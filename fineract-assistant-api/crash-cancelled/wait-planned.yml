@@ -1,0 +1,25 @@
+info:
+  name: tunggu plan durable sebelum cancel
+  type: http
+  seq: 4
+  description: |
+    Sequence 1 `job.accepted`, 2 fase `understanding` (klaim), 3 fase
+    `planning` (T3). Admisi mengikuti T3 tanpa panggilan eksternal di antaranya;
+    jeda 1 s memastikan attempt sudah `Running` saat cancel tiba.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashCancelledJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashCancelledToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, function (job) { return job.last_event_sequence >= 3; })) {
+          await poll.sleep(1000);
+          test("OVR-6.4 (FIN-141): plan durable sebelum cancel", function () {
+            expect(res.getBody().data.plan_version).to.equal(1);
+          });
+        }

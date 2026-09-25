@@ -54,8 +54,9 @@ pub async fn run(
     };
     let worker = worker_identity();
     let poll = Duration::from_millis(config.worker_poll_interval_ms);
-    let mut crash = CrashSeam {
-        remaining: config.local_crash_after_external_call.unwrap_or(0),
+    let mut seams = Seams {
+        crash_after_external_call: Countdown::new(config.local_crash_after_external_call),
+        error_before_admission: Countdown::new(config.local_worker_error_before_admission),
     };
 
     info!(%worker, "worker berjalan");
@@ -81,7 +82,7 @@ pub async fn run(
                     &embedding,
                     &worker,
                     job,
-                    &mut crash,
+                    &mut seams,
                 )
                 .await
                 {
@@ -108,15 +109,27 @@ pub async fn run(
     info!(%worker, "worker berhenti");
 }
 
-/// Seam `LOCAL_CRASH_AFTER_EXTERNAL_CALL` (FIN-56; config menolaknya di luar
-/// `APP_ENV=local`). `remaining` = berapa panggilan sumber lagi yang
-/// ditinggalkan; nol di luar test, sehingga [`CrashSeam::fire`] tidak pernah
-/// benar.
-struct CrashSeam {
+/// Seam kegagalan lokal (config menolaknya di luar `APP_ENV=local`):
+/// `LOCAL_CRASH_AFTER_EXTERNAL_CALL` (FIN-56) dan
+/// `LOCAL_WORKER_ERROR_BEFORE_ADMISSION` (FIN-141).
+struct Seams {
+    crash_after_external_call: Countdown,
+    error_before_admission: Countdown,
+}
+
+/// `remaining` = berapa kali lagi seam menyala; nol di luar test, sehingga
+/// [`Countdown::fire`] tidak pernah benar.
+struct Countdown {
     remaining: u32,
 }
 
-impl CrashSeam {
+impl Countdown {
+    fn new(count: Option<u32>) -> Self {
+        Self {
+            remaining: count.unwrap_or(0),
+        }
+    }
+
     fn fire(&mut self) -> bool {
         let fire = self.remaining > 0;
         self.remaining = self.remaining.saturating_sub(1);
@@ -131,7 +144,7 @@ async fn process(
     embedding: &EmbeddingClient,
     worker: &str,
     job: ClaimedJob,
-    crash: &mut CrashSeam,
+    seams: &mut Seams,
 ) -> anyhow::Result<()> {
     let pool = foundation.app_db().pool().clone();
     let config = foundation.config();
@@ -148,22 +161,32 @@ async fn process(
         fenced.clone(),
     ));
 
-    let settled = if repository::cancel_requested(&pool, job.id).await? {
-        repository::settle_cancelled(&pool, job.id, job.session_id, job.lease_token).await?
-    } else {
-        run_job(
-            foundation,
-            catalog,
-            catalog_version_id,
-            embedding,
-            &job,
-            crash,
-        )
-        .await?
-    };
+    let settled = async {
+        if repository::cancel_requested(&pool, job.id).await? {
+            Ok(
+                repository::settle_cancelled(&pool, job.id, job.session_id, job.lease_token)
+                    .await?,
+            )
+        } else {
+            run_job(
+                foundation,
+                catalog,
+                catalog_version_id,
+                embedding,
+                &job,
+                seams,
+            )
+            .await
+        }
+    }
+    .await;
 
+    // Heartbeat berhenti pada SETIAP jalan keluar, termasuk error (FIN-141):
+    // renewal yang hidup terus menahan lease sampai TTL, sehingga reaper tidak
+    // pernah dapat memulihkan job yang worker-nya sudah menyerah.
     fenced.cancel();
     let _ = heartbeat.await;
+    let settled = settled?;
 
     if settled {
         info!(job_id = %job.id, %worker, "job diselesaikan");
@@ -211,7 +234,7 @@ async fn run_job(
     catalog_version_id: Uuid,
     embedding: &EmbeddingClient,
     job: &ClaimedJob,
-    crash: &mut CrashSeam,
+    seams: &mut Seams,
 ) -> anyhow::Result<bool> {
     let pool = foundation.app_db().pool();
 
@@ -363,6 +386,13 @@ async fn run_job(
         }
     }
 
+    // FIN-141 — seam lokal: error worker sesudah plan durable, sebelum admisi.
+    // Tidak ada yang tidak pasti (tidak ada query terkirim); yang teruji adalah
+    // heartbeat yang berhenti dan recovery pra-admisi yang dibatasi TTL.
+    if seams.error_before_admission.fire() {
+        anyhow::bail!("LOCAL_WORKER_ERROR_BEFORE_ADMISSION: error worker sebelum admisi node");
+    }
+
     // Admisi TEPAT sebelum query dikirim: sejak baris ini `Running`, lease
     // yang hilang berarti outcome-nya tidak pasti (I4), dan reaper
     // menandainya `Abandoned`, bukan `Failed`.
@@ -394,7 +424,7 @@ async fn run_job(
     // OVR-6.4 — query sudah kembali, T4 belum commit. Seam lokal meninggalkan
     // attempt di titik ini persis seperti worker yang mati: heartbeat berhenti
     // (lihat `process`) dan tidak ada yang ditulis.
-    if crash.fire() {
+    if seams.crash_after_external_call.fire() {
         warn!(
             job_id = %job.id,
             attempt,

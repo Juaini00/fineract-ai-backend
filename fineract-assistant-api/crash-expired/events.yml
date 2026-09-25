@@ -1,0 +1,38 @@
+info:
+  name: replay menutup attempt Running sebelum Expired
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashExpiredJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashExpiredToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        const events = poll.replay(res);
+        const names = events.map(function (event) { return event.event; });
+        const nodes = events.filter(function (event) { return event.event === "node.status_changed"; });
+
+        test("OVR-6.4 (FIN-141): replay utuh 1..last_event_sequence", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("crashExpiredLastSequence")));
+          events.forEach(function (event, index) { expect(event.sequence).to.equal(index + 1); });
+        });
+
+        test("OVR-6.4 (FIN-141): settlement Expired menutup attempt Running sebagai Abandoned — tidak ada Running basi", function () {
+          expect(nodes.map(function (event) { return [event.node_attempt, event.status]; }))
+            .to.deep.equal([[1, "Abandoned"]]);
+          expect(nodes[0].node_id).to.equal("main");
+          expect(nodes[0].plan_version).to.equal(1);
+          // Abandoned mendahului event terminal: satu transaksi settlement.
+          expect(names.indexOf("node.status_changed")).to.be.below(names.indexOf("job.expired"));
+        });
+
+        test("OVR-6.4 (FIN-141): job terminal tidak diulang — tidak ada attempt 2", function () {
+          expect(names).to.not.include("job.notice");
+          expect(events[events.length - 1].event).to.equal("job.expired");
+        });

@@ -636,6 +636,48 @@ Update after FIN-56 (OVR-6.4):
   `Cancelled` by the reaper stay `Running` in the ledger.
 - L4 stays 🔨: OVR-6.2 has no test.
 
+Update after FIN-141 (OVR-6.4 recovery bugs):
+
+- **Classification: code bug, all three.** Each new assertion below was run
+  against the pre-fix state machine (fix hunks reverted, seam kept) and failed:
+  `worker-error` saw 0 reaper notices (heartbeat held the lease until TTL);
+  with only the heartbeat fixed, the job never reached a terminal state within
+  90 s (every re-claim reset `expires_at`); `crash-expired`/`crash-cancelled`
+  replays had no `Abandoned` frame (attempt 1 stayed `Running`).
+- **Heartbeat stops on every worker exit** (`engine/worker.rs` `process`): the
+  heartbeat is cancelled and joined before the job result (including an `Err`)
+  is propagated. A worker that gives up now lets the lease lapse, so the reaper
+  recovers the job one lease later instead of at the TTL.
+- **Pre-admission recovery is bounded by the original TTL.** The claim writes
+  `expires_at = COALESCE(expires_at, now() + JOB_TTL_RUNNING)`: the first claim
+  sets the deadline (T2), T6/auto-resolve already recompute it on resume (K3,
+  `migration/carry-over.md` amendment "`expires_at` dihitung ulang per fase"),
+  and a re-claim after a lost lease is the same `Running` phase, not a new one,
+  so it keeps the deadline (owner decision, FIN-141). Expiry is checked before
+  requeue, so a job that always fails before admission ends `Expired`.
+- **Terminal settlement leaves no `Running` attempt.** The reaper's `Expired`
+  and `Cancelled` settlements close `Running` attempts as `Abandoned` (+
+  `node.status_changed` + `node.abandoned` audit) in the same transaction as
+  the job transition, before the terminal event. There is no node `Cancelled`
+  status in the contract, and the outcome of a dispatched query is unknown (I4).
+- **Cap semantics unchanged and confirmed** (owner decision): `NODE_ATTEMPT_CAP=3`
+  means attempts 1, 2, 3 — retry while the abandoned attempt is below the cap,
+  never attempt 4. engine.md step (4)'s `attempt + 1 < cap` stays for the
+  owner's separate `docs:` correction.
+- **Proof** — seam `LOCAL_WORKER_ERROR_BEFORE_ADMISSION=<n>` (same rules as
+  `LOCAL_CRASH_AFTER_EXTERNAL_CALL`: `APP_ENV=local` only, startup fails
+  elsewhere or at 0): the first `n` claims of the process end in a worker error
+  after T3 and before admission. Three new stages, lease 6 s / heartbeat 2 s /
+  reaper 2 s: `worker-error` (n = 1000, TTL 24 s) — ≥ 2 reaper notices without
+  `retry`, one re-claim per notice, no `node.status_changed`, `Expired` with
+  `terminal_at − created_at` in [24 s, 30 s) and exactly one `job.expired`;
+  `crash-expired` (crash n = 1, TTL 4 s < lease) — `Expired`, replay
+  `[[1, "Abandoned"]]` before `job.expired`, no retry; `crash-cancelled`
+  (crash n = 1) — cancel while attempt 1 is `Running`, reaper `Cancelled`,
+  replay `[[1, "Abandoned"]]` before `job.cancelled`, no retry.
+  `crash-recovery` and `crash-exhausted` stay green.
+- L4 stays 🔨: OVR-6.2 has no test.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

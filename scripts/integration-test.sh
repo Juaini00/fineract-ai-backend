@@ -32,6 +32,12 @@
 #      sumber pertama ditinggalkan sesudah query kembali dan sebelum T4 —
 #      seperti worker yang mati di titik itu. Satu crash harus pulih lewat
 #      attempt baru; crash sebanyak NODE_ATTEMPT_CAP harus berhenti di cap.
+#      `crash-expired` dan `crash-cancelled` (FIN-141) memakai seam yang sama:
+#      job yang ditutup reaper `Expired`/`Cancelled` saat attempt-nya `Running`
+#      wajib menutup attempt itu `Abandoned`, bukan membiarkannya `Running`.
+#      `worker-error` (FIN-141) memakai seam LOCAL_WORKER_ERROR_BEFORE_ADMISSION:
+#      setiap klaim berakhir error sebelum admisi; heartbeat wajib berhenti dan
+#      klaim ulang tidak boleh menggeser deadline TTL.
 #   8. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
 #      tersedia dan versi katalog sudah memiliki embedding lengkap.
@@ -79,8 +85,8 @@ fi
 
 # Seam crash (FIN-56) sama: hanya milik tahap crash-*. Terbaca di tahap lain,
 # ia diam-diam membuang hasil query pertama setiap app yang dinyalakan.
-if [ -n "${LOCAL_CRASH_AFTER_EXTERNAL_CALL+x}" ]; then
-    echo "LOCAL_CRASH_AFTER_EXTERNAL_CALL tidak boleh di-set di .env/environment; runner menyetelnya hanya untuk tahap crash-*" >&2
+if [ -n "${LOCAL_CRASH_AFTER_EXTERNAL_CALL+x}" ] || [ -n "${LOCAL_WORKER_ERROR_BEFORE_ADMISSION+x}" ]; then
+    echo "LOCAL_CRASH_AFTER_EXTERNAL_CALL/LOCAL_WORKER_ERROR_BEFORE_ADMISSION tidak boleh di-set di .env/environment; runner menyetelnya hanya untuk tahap crash-*/worker-error" >&2
     exit 1
 fi
 
@@ -98,7 +104,9 @@ if [ "$#" -gt 0 ]; then
             ANSWERS_FOLDERS+=("$folder")
         elif [ "$folder" = "redis-down" ]; then
             REDIS_DOWN_FOLDERS+=("$folder")
-        elif [ "$folder" = "crash-recovery" ] || [ "$folder" = "crash-exhausted" ]; then
+        elif [ "$folder" = "crash-recovery" ] || [ "$folder" = "crash-exhausted" ] \
+            || [ "$folder" = "crash-expired" ] || [ "$folder" = "crash-cancelled" ] \
+            || [ "$folder" = "worker-error" ]; then
             CRASH_FOLDERS+=("$folder")
         elif [ "$folder" = "dataset-capped" ]; then
             DATASET_CAPPED_FOLDERS+=("$folder")
@@ -118,7 +126,7 @@ else
     DATASET_CAPPED_FOLDERS=(dataset-capped)
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)
-    CRASH_FOLDERS=(crash-recovery crash-exhausted)
+    CRASH_FOLDERS=(crash-recovery crash-exhausted crash-expired crash-cancelled worker-error)
     RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
     RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
 fi
@@ -274,18 +282,24 @@ if [ "${#CRASH_FOLDERS[@]}" -gt 0 ]; then
     # lease, ditegakkan config) dan K2 (reaper ≤ lease / 2) tetap terpenuhi.
     for folder in "${CRASH_FOLDERS[@]}"; do
         case "$folder" in
-            crash-recovery) crashes=1 ;;
+            crash-recovery | crash-cancelled) seam=(LOCAL_CRASH_AFTER_EXTERNAL_CALL=1) ;;
             # = NODE_ATTEMPT_CAP (runtime.md §1): setiap attempt yang diizinkan
             # ditinggalkan, jadi yang teruji adalah batasnya, bukan pemulihannya.
-            crash-exhausted) crashes=3 ;;
+            crash-exhausted) seam=(LOCAL_CRASH_AFTER_EXTERNAL_CALL=3) ;;
+            # TTL < lease: `expires_at` lewat sebelum lease, jadi reaper menutup
+            # job `Expired` saat attempt-nya masih `Running`.
+            crash-expired) seam=(LOCAL_CRASH_AFTER_EXTERNAL_CALL=1 JOB_TTL_RUNNING_SECS=4) ;;
+            # Setiap klaim error sebelum admisi; TTL 24 s memberi ±2 siklus
+            # lease-hilang sebelum deadline asli (lihat worker-error/job-state).
+            worker-error) seam=(LOCAL_WORKER_ERROR_BEFORE_ADMISSION=1000 JOB_TTL_RUNNING_SECS=24) ;;
         esac
         stop_app
         start_app true \
-            LOCAL_CRASH_AFTER_EXTERNAL_CALL="$crashes" \
+            "${seam[@]}" \
             WORKER_LEASE_DURATION_SECS=6 \
             WORKER_LEASE_HEARTBEAT_INTERVAL_SECS=2 \
             REAPER_INTERVAL_SECS=2
-        echo "==> bru run $folder (worker ditinggalkan sesudah query sumber, $crashes kali)"
+        echo "==> bru run $folder (${seam[*]})"
         BRU_SANDBOX=developer run_folders 500 "$folder"
     done
 fi

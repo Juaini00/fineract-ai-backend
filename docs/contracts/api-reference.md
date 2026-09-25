@@ -943,6 +943,18 @@ pertama prosesnya tepat sesudah query kembali dan sebelum T4 — heartbeat
 berhenti dan tidak ada yang ditulis, seperti worker yang mati di titik itu.
 Startup ditolak bila ia di-set di luar `local`, atau bernilai `0`.
 
+Job yang ditutup reaper `Expired` atau `Cancelled` saat attempt-nya masih
+`Running` (FIN-141) memancarkan `node.status_changed` `Abandoned` untuk attempt
+itu **sebelum** `job.expired`/`job.cancelled`, dalam transaksi yang sama —
+tanpa `job.notice` dan tanpa attempt baru. Klaim ulang sesudah lease hilang
+tidak memperpanjang batas waktu job: job yang terus gagal sebelum query
+dikirim berakhir `job.expired` pada batas waktu aslinya.
+
+Seam kedua, `LOCAL_WORKER_ERROR_BEFORE_ADMISSION=<n>` (FIN-141, aturan yang
+sama: hanya `local`, bukan `0`), membuat `n` klaim pertama proses berakhir
+dengan error worker sesudah plan durable dan sebelum admisi node — tidak ada
+query sumber yang dikirim.
+
 ### Fase publik
 
 `queued`, `understanding`, `mapping_knowledge`, `planning`, `validating`,

@@ -1,0 +1,26 @@
+info:
+  name: job ditutup reaper sebagai Cancelled
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{crashCancelledJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{crashCancelledToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, function (job) { return poll.TERMINAL.includes(job.lifecycle); })) {
+          const job = res.getBody().data;
+          test("OVR-6.4 (FIN-141): reaper menutup job Cancelled/Unknown", function () {
+            expect(job.lifecycle).to.equal("Cancelled");
+            expect(job.outcome).to.equal("Cancelled");
+            expect(job.completeness).to.equal("Unknown");
+            expect(job.completeness_reason).to.equal("cancelled_by_user");
+            expect(job.plan_version).to.equal(1);
+          });
+          bru.setVar("crashCancelledLastSequence", job.last_event_sequence);
+        }

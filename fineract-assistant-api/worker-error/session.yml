@@ -1,0 +1,22 @@
+info:
+  name: session untuk yang worker-nya selalu error sebelum admisi
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{workerErrorToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-141 yang worker-nya selalu error sebelum admisi" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("workerErrorSession", res.getBody().data.id);
