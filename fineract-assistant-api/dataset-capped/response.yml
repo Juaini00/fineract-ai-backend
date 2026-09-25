@@ -17,35 +17,39 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const document = res.getBody().data;
-        const blocks = document.blocks_json;
-        const table = blocks.find((b) => b.type === "table");
-        const lineage = document.evidence_json.lineage[0];
-        const disclosed = blocks.find((b) => b.block_id === "dataset_truncated");
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          const blocks = document.blocks_json;
+          const table = blocks.find((b) => b.type === "table");
+          const lineage = document.evidence_json.lineage[0];
+          const disclosed = blocks.find((b) => b.block_id === "dataset_truncated");
 
-        test("DS-8.1: jawaban Complete lolos validator, dihitung atas seluruh baris", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(document.kind).to.equal("analysis");
-          expect(document.completeness).to.equal("Complete");
-          expect(document.validation_status).to.equal("passed");
-          expect(document.response_version).to.equal(1);
-          // Cap retensi 1 baris; jawaban tetap memuat semua baris node.
-          expect(table.rows.length).to.be.above(1);
-          expect(table.row_count).to.equal(table.rows.length);
-          expect(lineage.row_count).to.equal(table.row_count);
-        });
+          test("DS-8.1: jawaban Complete lolos validator, dihitung atas seluruh baris", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("analysis");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+            expect(document.response_version).to.equal(1);
+            // Cap retensi 1 baris; jawaban tetap memuat semua baris node.
+            expect(table.rows.length).to.be.above(1);
+            expect(table.row_count).to.equal(table.rows.length);
+            expect(lineage.row_count).to.equal(table.row_count);
+          });
 
-        test("DS-8.1: batas handle dinyatakan di blok limitation, dengan jumlahnya", function () {
-          expect(disclosed).to.be.an("object");
-          expect(disclosed.type).to.equal("limitation");
-          expect(disclosed.schema_version).to.equal(1);
-          expect(disclosed.reason).to.equal("dataset_row_cap_reached");
-          expect(disclosed.row_count_available).to.equal(1);
-          expect(disclosed.row_count_total).to.equal(table.row_count);
-          expect(disclosed.dataset_id).to.equal(lineage.dataset_id);
-          expect(disclosed.body).to.contain("dataset_row_cap_reached");
-        });
+          test("DS-8.1: batas handle dinyatakan di blok limitation, dengan jumlahnya", function () {
+            expect(disclosed).to.be.an("object");
+            expect(disclosed.type).to.equal("limitation");
+            expect(disclosed.schema_version).to.equal(1);
+            expect(disclosed.reason).to.equal("dataset_row_cap_reached");
+            expect(disclosed.row_count_available).to.equal(1);
+            expect(disclosed.row_count_total).to.equal(table.row_count);
+            expect(disclosed.dataset_id).to.equal(lineage.dataset_id);
+            expect(disclosed.body).to.contain("dataset_row_cap_reached");
+          });
 
-        bru.setVar("cappedDatasetId", lineage.dataset_id);
-        bru.setVar("cappedTableRows", JSON.stringify(table.rows));
-        bru.setVar("cappedTableColumns", JSON.stringify(table.columns));
+          bru.setVar("cappedDatasetId", lineage.dataset_id);
+          bru.setVar("cappedTableRows", JSON.stringify(table.rows));
+          bru.setVar("cappedTableColumns", JSON.stringify(table.columns));
+        }

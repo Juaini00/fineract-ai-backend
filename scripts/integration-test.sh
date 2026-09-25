@@ -235,7 +235,10 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
     echo "==> bru run ${ENGINE_FOLDERS[*]} (worker menyala)"
     # Jeda memberi worker kesempatan mengklaim dan menyelesaikan job sebelum
     # request berikutnya membacanya.
-    run_folders 1500 "${ENGINE_FOLDERS[@]}"
+    # FIN-146 — engine/ dan resolver/ sekarang memuat request yang poll lewat
+    # lib/poll.js (setTimeout); sandbox quickjs default tidak mengenal
+    # setTimeout, sama seperti FIN-138 (retrieval-*) dan crash-*/answers/redis-down.
+    BRU_SANDBOX=developer run_folders 1500 "${ENGINE_FOLDERS[@]}"
 
     # Tahap 3 — SSE tanpa notifikasi sama sekali. Assertion-nya sama; yang
     # berubah hanya dari mana stream tahu ada event baru.
@@ -263,7 +266,8 @@ if [ "${#DATASET_CAPPED_FOLDERS[@]}" -gt 0 ]; then
     stop_app
     start_app true LOCAL_DATASET_MAX_ROWS=1
     echo "==> bru run dataset-capped (cap retensi dataset disempitkan ke 1 baris)"
-    run_folders 1500 "${DATASET_CAPPED_FOLDERS[@]}"
+    # FIN-146 — response.yml sekarang poll lewat lib/poll.js (setTimeout).
+    BRU_SANDBOX=developer run_folders 1500 "${DATASET_CAPPED_FOLDERS[@]}"
 fi
 
 if [ "${#ANSWERS_FOLDERS[@]}" -gt 0 ]; then

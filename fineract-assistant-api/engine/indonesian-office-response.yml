@@ -14,8 +14,14 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("FIN-40: daftar kantor Indonesia memilih capability terindeks", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(res.getBody().data.evidence_json.lineage[0].capability_id)
-            .to.equal("office_list_basic");
-        });
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state
+        // di antaranya (beda dari read-response.yml/answered-response.yml).
+        // lib/poll.js sudah dipakai FIN-138/FIN-141 untuk masalah yang sama.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          test("FIN-40: daftar kantor Indonesia memilih capability terindeks", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(res.getBody().data.evidence_json.lineage[0].capability_id)
+              .to.equal("office_list_basic");
+          });
+        }

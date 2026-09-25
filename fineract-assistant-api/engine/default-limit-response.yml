@@ -12,25 +12,29 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const document = res.getBody().data;
-        const blocks = document.blocks_json;
-        const lineage = document.evidence_json.lineage[0];
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
+          const blocks = document.blocks_json;
+          const lineage = document.evidence_json.lineage[0];
 
-        test("FIN-133: capability client_random_sample menjawab", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(document.kind).to.equal("analysis");
-          expect(document.outcome).to.equal("Answered");
-          expect(lineage.capability_id).to.equal("client_random_sample");
-        });
+          test("FIN-133: capability client_random_sample menjawab", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.kind).to.equal("analysis");
+            expect(document.outcome).to.equal("Answered");
+            expect(lineage.capability_id).to.equal("client_random_sample");
+          });
 
-        test("FIN-133: 5 baris, Complete, tanpa blok row_cap_reached", function () {
-          const table = blocks.find(function (b) { return b.type === "table"; });
-          expect(table.rows).to.have.lengthOf(5);
-          expect(document.completeness).to.equal("Complete");
-          expect(blocks.find(function (b) { return b.block_id === "row_cap_reached"; })).to.equal(undefined);
-        });
+          test("FIN-133: 5 baris, Complete, tanpa blok row_cap_reached", function () {
+            const table = blocks.find(function (b) { return b.type === "table"; });
+            expect(table.rows).to.have.lengthOf(5);
+            expect(document.completeness).to.equal("Complete");
+            expect(blocks.find(function (b) { return b.block_id === "row_cap_reached"; })).to.equal(undefined);
+          });
 
-        test("FIN-133: lineage mencatat limit = default_limit (5)", function () {
-          const limit = lineage.parameters.find(function (p) { return p.name === "limit"; });
-          expect(limit.value).to.equal(5);
-        });
+          test("FIN-133: lineage mencatat limit = default_limit (5)", function () {
+            const limit = lineage.parameters.find(function (p) { return p.name === "limit"; });
+            expect(limit.value).to.equal(5);
+          });
+        }

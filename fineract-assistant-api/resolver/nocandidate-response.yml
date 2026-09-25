@@ -14,18 +14,22 @@ runtime:
   scripts:
     - type: tests
       code: |
-        const document = res.getBody().data;
+        // FIN-146 — dibaca langsung sesudah create-job, tanpa poll job-state.
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const document = res.getBody().data;
 
-        test("NotFound + Complete: pencariannya selesai, bukan terpotong", function () {
-          expect(res.getStatus()).to.equal(200);
-          expect(document.outcome).to.equal("NotFound");
-          // engine.md melarang NotFound + Partial.
-          expect(document.completeness).to.equal("Complete");
-          expect(document.completeness_reason).to.equal("resolver_no_candidates");
-        });
+          test("NotFound + Complete: pencariannya selesai, bukan terpotong", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.outcome).to.equal("NotFound");
+            // engine.md melarang NotFound + Partial.
+            expect(document.completeness).to.equal("Complete");
+            expect(document.completeness_reason).to.equal("resolver_no_candidates");
+          });
 
-        test("alasannya menyebut resolver yang dipakai", function () {
-          const block = document.blocks_json[0];
-          expect(block.block_id).to.equal("resolver_no_candidates");
-          expect(block.body).to.contain("client.identity_resolve");
-        });
+          test("alasannya menyebut resolver yang dipakai", function () {
+            const block = document.blocks_json[0];
+            expect(block.block_id).to.equal("resolver_no_candidates");
+            expect(block.body).to.contain("client.identity_resolve");
+          });
+        }
