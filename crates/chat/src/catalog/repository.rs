@@ -64,7 +64,7 @@ pub async fn upsert_version(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let version_id = match existing {
+    let (version_id, is_new) = match existing {
         Some(id) => {
             // Status boleh berubah (validated -> failed setelah schema Fineract
             // berubah, misalnya); isinya tidak, karena hash-nya sama.
@@ -79,10 +79,10 @@ pub async fn upsert_version(
             .bind(&metadata)
             .execute(&mut *tx)
             .await?;
-            id
+            (id, false)
         }
         None => {
-            sqlx::query_scalar::<_, Uuid>(
+            let id = sqlx::query_scalar::<_, Uuid>(
                 "INSERT INTO knowledge_catalog_versions
                     (content_hash, status, document_count, metadata_json, synced_at)
                  VALUES ($1, $2, $3, $4, now())
@@ -93,17 +93,20 @@ pub async fn upsert_version(
             .bind(catalog.document_count() as i32)
             .bind(&metadata)
             .fetch_one(&mut *tx)
-            .await?
+            .await?;
+            (id, true)
         }
     };
 
-    // Indeks retrieval ditulis ulang untuk versi ini. Aman karena baris indeks
-    // adalah turunan isi katalog, bukan bukti audit — buktinya ada pada baris
-    // versi dan content_hash-nya.
-    sqlx::query("DELETE FROM knowledge_index WHERE catalog_version_id = $1")
-        .bind(version_id)
-        .execute(&mut *tx)
-        .await?;
+    // Baris indeks ditulis hanya untuk versi yang BARU. Sama content_hash berarti
+    // sama isi, jadi menulis ulang baris versi yang sudah ada tidak menambah apa
+    // pun selain membuang embedding yang sudah dihitung (FIN-149) — backfill
+    // eksternal (mahal, per API call) tidak boleh dibatalkan oleh sync berikutnya
+    // atas versi yang tidak berubah.
+    if !is_new {
+        tx.commit().await?;
+        return Ok(version_id);
+    }
 
     for loaded in &catalog.capabilities {
         let capability = &loaded.entry;

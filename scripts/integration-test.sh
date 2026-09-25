@@ -40,7 +40,20 @@
 #      klaim ulang tidak boleh menggeser deadline TTL.
 #   8. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
 #      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
-#      tersedia dan versi katalog sudah memiliki embedding lengkap.
+#      tersedia. Sebelum menyalakan app untuk kedua tahap ini, runner sendiri
+#      yang menegakkan prasyarat "versi katalog sudah memiliki embedding
+#      lengkap" (FIN-149): setiap perubahan `knowledge/` melahirkan versi
+#      katalog baru lewat `catalog::prepare` saat app start, dan versi baru itu
+#      tidak pernah punya vector sampai seseorang menjalankan backfill — tanpa
+#      langkah ini kedua tahap gagal deterministik dengan `retrieval_miss`
+#      setiap kali `knowledge/` berubah. Runner menjalankan
+#      `app catalog --sync --embed --no-probe` (backfill, di dalam lock Bruno)
+#      lalu memverifikasi lewat `psql` bahwa versi aktif (content_hash checkout
+#      ini) benar-benar nol baris `embedding IS NULL` sebelum start_app —
+#      gagal keras bila tidak. Backfill ini aman dijalankan berulang: sejak
+#      FIN-149, `upsert_version` tidak lagi menulis ulang `knowledge_index`
+#      untuk versi yang content_hash-nya sudah tercatat, jadi run kedua tidak
+#      membuang embedding yang baru saja dihitung.
 #
 # Setelah tahap terakhir, log app seluruh tahap diperiksa untuk penanda
 # `commit_isolation_violation` (OVR-6.7, I1 — crates/core/src/commit_isolation.rs):
@@ -152,7 +165,9 @@ cargo build -p app --quiet
 # dieksekusi, dan menemukannya setelah puluhan request HTTP hanya menunda kabar
 # buruk.
 echo "==> memeriksa katalog"
-"$ROOT/target/debug/app" catalog
+CATALOG_CHECK_OUTPUT="$("$ROOT/target/debug/app" catalog)"
+echo "$CATALOG_CHECK_OUTPUT"
+CONTENT_HASH="$(echo "$CATALOG_CHECK_OUTPUT" | sed -n 's/^content_hash *: //p')"
 
 APP_PID=""
 
@@ -334,6 +349,23 @@ fi
 if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
     stop_app
     if [ -n "${EMBEDDING_API_KEY:-}" ]; then
+        # FIN-149 — prasyarat tahap ini adalah "versi katalog aktif sudah
+        # punya embedding lengkap", bukan sekadar API key terisi. Sebuah
+        # perubahan `knowledge/` melahirkan versi baru tanpa satu pun vector;
+        # tanpa backfill di sini, retrieval-healthy gagal deterministik
+        # dengan retrieval_miss setiap kali knowledge berubah.
+        echo "==> backfill embedding untuk versi katalog aktif ($CONTENT_HASH)"
+        "$ROOT/target/debug/app" catalog --sync --embed --no-probe
+        NULL_EMBEDDINGS="$(psql -X -A -t -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -c \
+            "SELECT count(*) FROM knowledge_index i
+             JOIN knowledge_catalog_versions v ON v.id = i.catalog_version_id
+             WHERE v.content_hash = '$CONTENT_HASH' AND i.embedding IS NULL")"
+        if [ "$NULL_EMBEDDINGS" != "0" ]; then
+            echo "retrieval-healthy: versi katalog $CONTENT_HASH masih punya $NULL_EMBEDDINGS baris embedding NULL setelah backfill" >&2
+            exit 1
+        fi
+        echo "==> backfill selesai: 0 baris embedding NULL pada versi aktif"
+
         start_app true
         echo "==> bru run retrieval-healthy (embedding terkonfigurasi dan terindeks)"
         # FIN-138 — lihat catatan sandbox di atas: response.yml di sini menunggu

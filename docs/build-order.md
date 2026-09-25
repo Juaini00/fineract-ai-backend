@@ -1176,6 +1176,44 @@ Update after FIN-144 (OVR-6.4 never-admitted attempts on terminal jobs):
   shared helper rather than by a deterministic Bruno request.
 - L4 stays 🔨: FIN-135 is still open.
 
+Update after FIN-149 (test-harness bug — `retrieval-healthy` gone
+deterministically red after any `knowledge/` change):
+
+- **Symptom:** every `knowledge/` edit changes the catalog's `content_hash`,
+  and `chat::catalog::prepare` (app startup) records that as a brand-new
+  `knowledge_catalog_versions` row with zero embedded `knowledge_index` rows —
+  vectors are filled only by `app catalog --sync --embed`, which
+  `scripts/integration-test.sh` never ran. `retrieval-vector`/`retrieval-healthy`
+  (FIN-41/FIN-42) then settled `Unsupported`/`retrieval_miss` on the semantic
+  arm every time, regardless of the API key being configured — the runner's own
+  header claimed the precondition was "embedding lengkap", but only checked the
+  key was non-empty.
+- **Root cause, part 2:** `catalog::repository::upsert_version` unconditionally
+  `DELETE`d and re-inserted a version's `knowledge_index` rows on every call —
+  even when the version already existed with the same `content_hash` — so a
+  backfill (`app catalog --sync --embed`) run a second time against an
+  unchanged catalog would wipe the embeddings it had just computed. Proven with
+  `embedded_at` timestamps: identical across two consecutive full locked runs
+  after the fix (no rewrite), and a wipe reproduced before the fix.
+- **Fix:** `upsert_version` now writes `knowledge_index` rows only for a
+  version it just inserted; an existing version (same `content_hash`) only gets
+  its `status`/`metadata_json`/`synced_at` refreshed, leaving computed
+  embeddings untouched (`crates/chat/src/catalog/repository.rs`).
+  `scripts/integration-test.sh`'s `retrieval-healthy` stage now runs
+  `app catalog --sync --embed --no-probe` before starting the app, then queries
+  `knowledge_index`/`knowledge_catalog_versions` directly for the active
+  `content_hash` and fails loudly if any row is still `embedding IS NULL` —
+  EMBEDDING_API_KEY empty still skips the stage as before.
+- **Regression proof:** a throwaway one-line edit to
+  `knowledge/capabilities/savings/deposit_total.yaml` (reverted before commit)
+  changed the content hash; a full locked run then backfilled the new version
+  (98 rows) and both FIN-41/FIN-42 assertions passed. A second consecutive
+  locked run left `embedded_at` unchanged (0 rows re-embedded), proving the
+  fix is idempotent and does not re-spend the embedding API budget on an
+  unchanged catalog.
+- **Not built:** nothing deferred; this ticket moves no scenario ID in §5.1
+  (test-harness fix, not a new capability).
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -1355,3 +1393,13 @@ Frontend: start from [contracts/api-reference.md](contracts/api-reference.md) �
 the surface that genuinely exists, with payloads copied from the running
 application. Remember that "exists" does not mean "conforms": read §6.2 before
 locking any render shape to it.
+
+Embeddings (FIN-149): any `knowledge/` edit creates a new catalog version with
+zero vectors until `app catalog --sync --embed` runs — `retrieval-vector`/
+`retrieval-healthy` fail deterministically until it does. Locally this is a
+manual step (`cargo run -p app -- catalog --sync --embed`);
+`scripts/integration-test.sh` runs it automatically for its own
+`retrieval-healthy` stage. It is safe to run repeatedly: `upsert_version` only
+writes `knowledge_index` rows for a version it just created, so re-running the
+backfill against an unchanged catalog does not re-spend the embedding API
+budget.
