@@ -1,0 +1,27 @@
+info:
+  name: response paraphrase withdrawal top-n
+  type: http
+  seq: 4
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{withdrawalParaphraseJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("withdrawalParaphrasePolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("withdrawalParaphrasePolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-136: paraphrase 'Top withdrawals per month in the last 12 months.' memilih savings_withdrawal_monthly_top_n, bukan client_activation_top_n_offices", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_withdrawal_monthly_top_n");
+          });
+        }

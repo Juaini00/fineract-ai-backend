@@ -1,0 +1,27 @@
+info:
+  name: response manifest example deposit breakdown
+  type: http
+  seq: 7
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{depositBreakdownJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("depositBreakdownPolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("depositBreakdownPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-136: manifest example 'Show savings deposits per month for this year.' memilih savings_deposit_monthly_breakdown, bukan savings_deposit_monthly_top_n", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_deposit_monthly_breakdown");
+          });
+        }

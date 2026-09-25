@@ -678,6 +678,62 @@ Update after FIN-141 (OVR-6.4 recovery bugs):
   `crash-recovery` and `crash-exhausted` stay green.
 - L4 stays 🔨: OVR-6.2 has no test.
 
+Update after FIN-136 (L2 lexical scoring bug):
+
+- **Found:** `planner::best_capability`'s lexical arm ranked candidates by raw
+  `overlap.matched_terms` (a bag-of-words count with `to_tsquery('simple', …)`,
+  no stopword removal) before `ts_rank_cd`. Two failure shapes: (1) generic
+  filler words ("the", "in", "last", "top", "month") counted the same as
+  domain terms, so an unrelated capability could tie a genuine match on
+  matched-term count and win the `source_id ASC` tie-break by alphabetical
+  luck — e.g. "Top withdrawals per month in the last 12 months." selected
+  `client_activation_top_n_offices` instead of
+  `savings_withdrawal_monthly_top_n`; (2) a capability whose examples repeat a
+  domain word many times (e.g. "client" across six examples) out-scored a
+  sibling capability's own **verbatim** example, because `ts_rank_cd`'s
+  default normalization (`0`) counts raw term frequency with no length or
+  document-frequency correction — e.g. `client_lifecycle_summary`'s own
+  example "Show client lifecycle summary." lost to
+  `client_summary_by_office`/`organization_office_client_summary`.
+- **Now (engine/planner.rs `best_capability`):** `matched_terms DESC` stays
+  the primary sort key (unchanged mechanism). Two changes to the tie-break: the
+  indexed tsvector weights `knowledge_index.title` (Postgres label `'A'`, full
+  weight) above the rest of `retrieval_text` — description + examples,
+  label `'C'` — so a capability's own name/identity counts for more than
+  incidental word repetition across its example prose; and `ts_rank_cd`
+  normalization `2` (divide by document length) replaces the unnormalized
+  default, penalizing capabilities whose score is inflated by having more
+  (or longer) examples rather than a denser match. `to_tsquery('simple', …)`
+  is unchanged — no stemming/stopword dictionary was introduced, keeping the
+  bilingual (ID/EN) catalog behavior the retrieval design deliberately relies
+  on (`lexical_terms` doc comment).
+- **Verified:** all four FIN-136-named repros now select their authoritative
+  capability (`savings_withdrawal_monthly_top_n`,
+  `savings_deposit_monthly_breakdown`, `client_lifecycle_summary`,
+  `client_activation_top_n_offices` for the Indonesian control) — proven at
+  the HTTP surface by the new `retrieval-selection` Bruno stage. A corpus-wide
+  sweep of all 187 `examples:` across every capability manifest plus the 41
+  phrase/capability pairs already asserted by the `answers` Bruno stage
+  (`fineract-assistant-api/answers/**/*-answer.yml`) confirms **zero**
+  regressions: the sweep's mismatch count dropped from 5 (pre-fix) to 1
+  (post-fix).
+- **Known residual (not a FIN-136-named repro, left open):**
+  `savings_withdrawal_monthly_breakdown`'s own example "Show savings
+  withdrawals per month for this year." still narrowly loses to
+  `savings_withdrawal_monthly_top_n` (score margin ~0.075 vs ~0.069 in the
+  post-fix corpus sweep). Its sibling on the deposit side is fixed by the same
+  change; the withdrawal side's `_top_n` example ("Top 3 deposits per month
+  this year." pattern) happens to be a slightly denser near-duplicate phrase
+  of the `_breakdown` example. This is the same class of near-duplicate
+  example wording between sibling ranking/breakdown capabilities noted for
+  the deposit pair — a catalog-wording ambiguity, not a routing regression;
+  flagged for the owner rather than chased with a phrase-specific rule (no
+  allowlist/denylist, per the ticket's constraint).
+- L2 stays 🧪: the §3 gate (Indonesian question finds its capability;
+  `retrieval_miss` distinguishable from `out_of_scope`) was already proven
+  and is untouched by this fix — this was a ranking-precision bug inside an
+  already-passing mechanism, not a missing capability of L2 itself.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

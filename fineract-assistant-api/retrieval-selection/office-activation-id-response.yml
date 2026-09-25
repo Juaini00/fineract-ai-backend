@@ -1,0 +1,27 @@
+info:
+  name: response contoh Indonesia office activation
+  type: http
+  seq: 13
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{officeActivationIdJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("officeActivationIdPolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("officeActivationIdPolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-136: contoh Indonesia 'Kantor dengan aktivasi nasabah baru terbanyak.' tetap memilih client_activation_top_n_offices (jalur non-Inggris tidak regresi)", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("client_activation_top_n_offices");
+          });
+        }

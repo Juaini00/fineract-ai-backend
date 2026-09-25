@@ -1,0 +1,27 @@
+info:
+  name: response manifest example client lifecycle
+  type: http
+  seq: 10
+
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{clientLifecycleJobId}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const polls = Number(bru.getVar("clientLifecyclePolls") || 0);
+        if (res.getStatus() === 404 && polls < 20) {
+          bru.setVar("clientLifecyclePolls", polls + 1);
+          bru.setNextRequest(req.getName());
+        } else {
+          const document = res.getBody().data;
+          test("FIN-136: manifest example 'Show client lifecycle summary.' memilih client_lifecycle_summary, bukan capability office-grouped bertetangga", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("client_lifecycle_summary");
+          });
+        }

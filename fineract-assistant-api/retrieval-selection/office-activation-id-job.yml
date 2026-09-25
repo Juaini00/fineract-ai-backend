@@ -1,0 +1,32 @@
+info:
+  name: job contoh Indonesia office activation
+  type: http
+  seq: 12
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{officeActivationIdIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{officeActivationIdSessionId}}",
+        "request_text": "Kantor dengan aktivasi nasabah baru terbanyak."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("officeActivationIdIdemKey", "bruno-office-activation-id-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("officeActivationIdJobId", res.getBody().data.job_id);

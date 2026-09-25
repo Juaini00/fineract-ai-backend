@@ -1,0 +1,32 @@
+info:
+  name: job manifest example client lifecycle
+  type: http
+  seq: 9
+
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{retrievalSelectionToken}}"
+    - name: Idempotency-Key
+      value: "{{clientLifecycleIdemKey}}"
+  body:
+    type: json
+    data: |
+      {
+        "session_id": "{{clientLifecycleSessionId}}",
+        "request_text": "Show client lifecycle summary."
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("clientLifecycleIdemKey", "bruno-client-lifecycle-" + Date.now());
+    - type: tests
+      code: |
+        test("202", function () { expect(res.getStatus()).to.equal(202); });
+        bru.setVar("clientLifecycleJobId", res.getBody().data.job_id);
