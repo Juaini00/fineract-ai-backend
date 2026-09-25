@@ -3,7 +3,7 @@ info:
   type: http
   seq: 2.4
   description: |
-    CLR-7 — rekening 2 (account_no 'Branch 001000000002', masked ****0002) is
+    FIN-137 — rekening 2 (account_no 'Branch 001000000002', masked ****0002) is
     the only match for q=0002 in the whole authorized scope.
 http:
   method: get
@@ -19,7 +19,7 @@ runtime:
         if (await answers.awaitResponse(bru, req, res)) {
           const page = res.getBody().data;
           const option = page.options.find(function (o) { return String(o.option_id) === "2"; });
-          test("FIN-137 CLR-7: q=0002 mempersempit ke tepat satu kandidat (rekening 2, ****0002)", function () {
+          test("FIN-137: q=0002 mempersempit ke tepat satu kandidat (rekening 2, ****0002)", function () {
             expect(res.getStatus()).to.equal(200);
             expect(page.matched_total).to.equal(1);
             expect(page.truncated).to.equal(false);

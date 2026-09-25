@@ -1004,7 +1004,7 @@ Update after FIN-137 (savings_account_identity_lookup / savings_account_terms_lo
   `right(account_no, 4)` is unique for the two adjacent accounts used as
   fixtures (`'0001'`/`'0002'`), so `q=0001`/`q=0002` on
   `/clarification/options` narrows to exactly one candidate without widening
-  scope (CLR-7) — proven by the `account-identity-lookup-options.yml` /
+  scope — proven by the `account-identity-lookup-options.yml` /
   `account-terms-lookup-options.yml` Bruno stages, and the full account/terms
   answer chains (`account-identity-lookup-answer.yml`,
   `account-terms-lookup-answer.yml`) now compare the resolved answer against
@@ -1033,8 +1033,11 @@ Update after FIN-137 (savings_account_identity_lookup / savings_account_terms_lo
   savings-specific fixtures.
 - L1 stays 🧪: this closes two of the nine originally-failing/incorrect
   identity-slot capabilities' catalog shape, not a new acceptance scenario for
-  L1 itself. `CLR-7` gets its first test (coverage moves in §5.1); L7 stays ❌
-  since CLR-7 alone does not clear the layer's prerequisites.
+  L1 itself. The options search (`q` narrowing) proven here is **not** CLR-7:
+  CLR-7 requires that suggestions never auto-submit and that a no-match can be
+  refined through the `refine_search` answer kind, which is still unbuilt
+  (`contracts/clarifications.md:11`, `:108`) — CLR-7 stays untested (FIN-79,
+  L7). The test names that first claimed it were corrected in a follow-up.
 
 ### 5.1 Scenario coverage
 
@@ -1044,7 +1047,7 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **37 of 59 scenarios have a test**:
+Latest run — **36 of 59 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
@@ -1053,10 +1056,10 @@ Latest run — **37 of 59 scenarios have a test**:
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 (OVR-6.2 → L8) |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
-| `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 1 | L7 |
+| `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **37** | |
+| | **Total** | **59** | **36** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
