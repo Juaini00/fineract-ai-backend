@@ -10,7 +10,7 @@ Jangan pulihkan pola lama itu.
 
 ## Sebelum menulis kode
 
-0. Baca [docs/build-order.md](docs/build-order.md) — tangga lapisan L0–L8, gerbang kelulusan, dan **empat aturan mengikat** di bawah. Ia menentukan lapisan mana yang boleh Anda sentuh. Jangan menyimpulkan status dari `docs/checklist.md`: ia melacak kelengkapan dokumentasi, dan `[x]` di sana berarti **tertulis**, bukan **terbangun**.
+0. Baca [docs/build-order.md](docs/build-order.md) — tangga lapisan L0–L8 plus gerbang cakupan katalog **L1C**, gerbang kelulusan, dan **empat aturan mengikat** di bawah. Ia menentukan lapisan mana yang boleh Anda sentuh. Jangan menyimpulkan status dari `docs/checklist.md`: ia melacak kelengkapan dokumentasi, dan `[x]` di sana berarti **tertulis**, bukan **terbangun**.
 1. Baca [docs/data/database-design.md](docs/data/database-design.md) **§1 Invarian** dan **§2 Matriks koneksi**.
 2. Bila perubahan Anda menyentuh salah satu hand-off di §2, periksa penegaknya masih berlaku.
 3. Bila menambah FK, periksa **§5 matriks referential action** — lihat invarian I2.
@@ -163,7 +163,7 @@ bru run engine -r --env local --env-var baseUrl=http://127.0.0.1:3107 \
 
 ## Yang mudah salah
 
-- `knowledge/` dan `queries/` **dibawa apa adanya dan belum direview** — baca `CARRY-OVER.md` di masing-masing folder. Memuat YAML dan `PREPARE` SQL membuktikan sintaks, **bukan** kebenaran.
+- `knowledge/` dan `queries/` **dibawa apa adanya dan belum direview** — baca `CARRY-OVER.md` di masing-masing folder. Memuat YAML dan `PREPARE` SQL membuktikan sintaks, **bukan** kebenaran. Katalog benar ≠ katalog **cukup**: `knowledge/data-scope/` dan `knowledge/domains/` masih cakupan MVP lama dan bukan otoritas cakupan — otoritasnya [dataset-scope-decisions.md](docs/product/2026-09-09-dataset-scope-decisions.md) (gerbang L1C).
 - Angka di `docs/operations/runtime.md` adalah **nilai awal**, bukan hasil tuning. Setiap angka punya pemicu revisi terukur; jangan ubah tanpa memenuhi pemicunya.
 - Beberapa parameter saling terikat dan **tidak boleh diubah sendiri-sendiri** — lihat §10 pemeriksaan konsistensi di dokumen itu, terutama K1, K11 dan K12.
 - Jangan menyalin `migrations/` atau kode dari repo lama. Schema-nya berbeda fundamental.

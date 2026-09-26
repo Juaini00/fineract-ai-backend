@@ -111,6 +111,12 @@ There is no "partial". If a qualifier is needed, put it in the notes column.
 This ordering is a **dependency chain**, not a product priority list. The numbers
 cannot be swapped without editing this document first.
 
+**L1C** (catalog coverage, added 2026-09-26) sits between L1 and L2: L1 asks
+whether the catalog's entries are correct, L1C asks whether the catalog covers
+the agreed scope. Every layer that consumes the catalog (L2, L4, L7) depends on
+both. `acceptance-check.sh` reads only `L<digit>` rows, so the L1C row is
+ignored by it; L1C owns no numbered scenario (its gate is in §3).
+
 ### L0 — Foundation, schema, auth, transport
 
 **Goal**: migrations, invariants I1–I8, response envelope, auth, SSE, lease/fencing.
@@ -145,12 +151,51 @@ validation rules, and currency semantics.
 those four points **must not be used to answer questions that are trusted**.
 Every answer produced so far comes from entries that have not cleared them.
 
+### L1C — Catalog coverage (Linear epic FIN-107)
+
+**Goal**: the catalog covers the **full-release data scope**, not only the 48
+(now 49) capabilities carried over from `ai_report`. L1 proves those entries are
+*correct*; it never measured whether they are *enough*.
+**Owning docs**: [product/2026-09-09-dataset-scope-decisions.md](product/2026-09-09-dataset-scope-decisions.md)
+§1 + D01–D15 (§5 steps 2–4) · [product/prd.md](product/prd.md) §2 ·
+[data/analytical-contracts.md](data/analytical-contracts.md) (Mode 1 / Mode 2)
+**Prerequisites**: L1 (mechanically correct catalog)
+**Done when**, for every domain in the scope document except the two deferred
+to deployment onboarding (D10 custom datatables FIN-119, D15 surveys/credit
+bureau FIN-125):
+
+1. The formal inventory (`docs/data/dataset-inventory.md`, FIN-152) has a row
+   for every §1 line and every D01–D15 decision: requirement → source →
+   grain → field/measure → relations/cardinality → office-scope path →
+   time/as-of/currency → evidence rule → acceptance → capability status.
+2. `knowledge/data-scope/` and `knowledge/domains/` agree with the scope
+   documents (no MVP vocabulary, no contradiction with D09/D12/§1), and a
+   documented domain without a contract answers `Unsupported` instead of
+   being misrouted to a savings capability (FIN-153).
+3. Each domain's capabilities (Mode 1 now; Mode 2 waits on FIN-98 in L8) pass
+   the four `knowledge/CARRY-OVER.md` rules, recorded two-numbers-side-by-side
+   in `knowledge/VERIFICATION.md`.
+
+**Status**: ⬜ — 4 of ~20 domains have any capability (client, savings,
+organization, group); the catalog reads 13 Fineract tables out of ~220
+(D15 audit). Loan, products, FD/RD (except one maturity capability), share,
+GL traceability, tax, teller, standing instructions, provisioning, source
+audit and scheduler have **none**. The formal inventory was never written.
+**Order inside L1C** is the `blocks` relations on FIN-107's children: FIN-152
+inventory → FIN-153 knowledge alignment → FIN-109 products → loan / FD-RD /
+share / savings → client, linking resources, GL, provisioning, audit →
+cross-domain (completeness, history, branch attribution, currency) → FIN-154
+retrieval re-proof → FIN-155 answers re-proof.
+
 ### L2 — Retrieval finds the capability that exists
 
 **Goal**: a user's question reaches the capability the system actually has.
 **Owning docs**: [architecture/tech-stack.md](architecture/tech-stack.md) ·
 [migration/carry-over.md](migration/carry-over.md) #7
-**Prerequisites**: L1
+**Prerequisites**: L1, L1C — retrieval can only be proven against the catalog it
+searches. Every L2 proof so far (FIN-40/41/42, tuning FIN-136/142/148) was
+measured on the 49 carried-over capabilities; it is re-proven over the full
+catalog in FIN-154 once L1C's domains exist.
 **Done when**: an Indonesian-language question whose capability exists finds it,
 and "we failed to find it" is reported differently from "it is out of scope"
 (see §6.5).
@@ -182,7 +227,7 @@ column. Query results are dumped inline into `job_node_runs.output_json`.
 **Goal**: the numbers coming out are proven right, not merely produced.
 **Owning docs**: [architecture/engine.md](architecture/engine.md) ·
 [architecture/overview.md](architecture/overview.md) §6
-**Prerequisites**: L1, L3
+**Prerequisites**: L1, L1C, L3
 **Done when**: for every capability in use, the job's result is compared against
 direct SQL on Fineract and matches, and every L4-owned OVR scenario (OVR-6.1,
 OVR-6.3…6.7) carries a test naming its ID. OVR-6.2 (multi-node fan-in) is owned
@@ -190,7 +235,10 @@ by L8 — owner decision 2026-09-25, see §5.1.
 **Status**: 🧪 — since 2026-09-25: the answer-correctness gate (FIN-52 `answers`
 stage, every reachable capability vs direct SQL) and every L4-owned OVR scenario
 (6.1, 6.3–6.7) pass at the HTTP surface on `main`; see the §5 update of that date.
-Ceiling is 🧪 because L1 and L3 are 🧪, not ✅.
+Ceiling is 🧪 because L1 and L3 are 🧪, not ✅. **Scope of that claim**: "every
+reachable capability" means the 49 carried-over capabilities in four domains;
+it says nothing about questions the catalog cannot yet answer (L1C ⬜). The
+gate is re-run over the full catalog in FIN-155.
 
 ### L5 — Response documents match the contract
 
@@ -217,7 +265,7 @@ is rejected.
 **Goal**: a conversation, rather than a series of unrelated questions.
 **Owning docs**: [contracts/clarifications.md](contracts/clarifications.md) (15 scenarios) ·
 [architecture/memory-context.md](architecture/memory-context.md) (7 scenarios)
-**Prerequisites**: L1, L2, L3, L4, L5, L6
+**Prerequisites**: L1, L1C, L2, L3, L4, L5, L6
 **Done when**: all 22 scenarios pass, including promotion on T8 skip (§7-3),
 non-optional `handle_state` (§5, C13), budgeted context selection (§5), and
 incremental summaries with a watermark (§4).
@@ -245,11 +293,25 @@ Several agents at once is **allowed**, as long as no one skips a prerequisite.
 | **B — Datasets (L3)** | `datasets` / `dataset_chunks`, a pure storage layer | nothing |
 | **C — Document shape (L5+L6)** | `compose.rs`, `validate.rs`, `evidence_json` | do not run alongside any other lane that touches `compose.rs` |
 | **D — Scenario mapping** | give IDs to the 86 scenarios, write `scripts/acceptance-check.sh` | touches all of `docs/` — run it **alone** |
+| **E — Catalog coverage (L1C)** | FIN-107 children in `blocks` order, starting with FIN-152 (inventory) and FIN-153 (knowledge alignment) | anything that edits `knowledge/` or retrieval wording; one domain per agent after FIN-153 |
 
 Lane D should be **done first and finished before the others start**: without the
 scenario map, lanes A, B and C have no way to prove they are done.
 
-L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
+L2 waits for L1 and L1C. L4 waits for L1, L1C and L3. L7 waits for all of them.
+
+**Priority since 2026-09-26 (owner decision): lane E comes first.** A system
+cannot return correct answers for the agreed scope while its catalog covers four
+of ~20 domains, so completing the catalog precedes further testing of anything
+that consumes it. Concretely:
+
+- **Frozen until L1C closes:** retrieval tuning and catalog-wording fixes
+  (FIN-151 is `Bloked` and folded into FIN-154), new L4 answer-correctness
+  claims, and new L7/L8 work (FIN-9, FIN-12 and FIN-106 are blocked by FIN-155).
+- **May continue** because it does not depend on catalog breadth: L0 SSE
+  tickets already in progress, L3, L5, L6.
+- No Bruno run is part of this re-ordering; the runner scripts are being
+  updated separately.
 
 ---
 
@@ -259,9 +321,10 @@ L2 waits for L1. L4 waits for L1 and L3. L7 waits for all of them.
 | --- | --- | --- |
 | L0 Foundation | 🔨 | — |
 | L1 Correct catalog | 🧪 | L0 🔨 |
-| L2 Retrieval | 🧪 | L1 🧪 |
+| L1C Catalog coverage | ⬜ | L1 🧪 |
+| L2 Retrieval | 🧪 | L1 🧪, L1C ⬜ |
 | L3 Datasets | 🧪 | L0 🔨 |
-| L4 Correct answers | 🧪 | L1 🧪, L3 🧪 |
+| L4 Correct answers | 🧪 | L1 🧪, L1C ⬜, L3 🧪 |
 | L5 Response shape | 🧪 | L0 🔨 |
 | L6 Validator | 🔨 | L5 🔨 |
 | L7 Clarification + memory | ❌ | six layers below are not ✅ |
@@ -1395,6 +1458,46 @@ Update after FIN-65/61/63 (L5.6, Lane C — `chart_spec` and dataset-backed
 - §5.1 stays **36/59**: no new scenario ID; RESP-8.7/8.9 moved from unit-tested
   to HTTP-proven.
 
+Update 2026-09-26 — diagnosis: the catalog was never measured for coverage
+(owner decision; no code change, no Bruno run):
+
+- **What was found.** `knowledge/` still holds the carried-over catalog: 49
+  capabilities in four domains (client 15, savings 22, organization 11, group 1
+  resolver), reading 13 Fineract tables. `git log` since 2026-09-13 shows only
+  fixes, no new domain. The scope document (§1 + D01–D15) requires ~20 domains.
+  Local `fineract_default` already holds data for most of them (116 loans,
+  37,077 journal entries, 61 standing instructions, 308,960 job runs); client
+  charges and provisioning entries have 0 rows and share accounts only 2.
+- **Why it went unnoticed**, root first:
+  1. The formal inventory required by `dataset-scope-decisions.md` §5 step 2
+     was never written, so there was no yardstick for "complete".
+  2. L1 measured *correctness* of the carried-over entries and was then read
+     as "the catalog is done"; L2–L4 were built and tuned on top of it.
+  3. `knowledge/data-scope/` and `knowledge/domains/` (MVP scope from
+     `ai_report`) were treated as authority, against "docs are authority,
+     carried-over code is a suspect". FIN-140's deferred-domain guard is built
+     on those carried-over statuses.
+  4. `app catalog` validates the catalog against itself (YAML ↔ SQL ↔ schema),
+     never against the scope documents, so contradictions with D09, D12 and
+     §1 passed (listed in FIN-153).
+  5. The coverage epic FIN-107 (2026-09-20, 23 children) was never added to
+     this document, so no resume/work-ticket pass could pick it, and the L2/L4
+     🧪 rows read as further along than they are.
+  6. Retrieval tuning (FIN-136/142/148) was fitted to a 49-entry catalog and
+     will shift when new domains compete for the same vocabulary.
+  7. `dataset-scope-decisions.md:7` still said "implementation not allowed"
+     after the owner's 2026-09-20 decisions were final.
+- **Changes.** New gate L1C (§3), lane E with priority and freeze rules (§4),
+  status row (above). Linear: FIN-152 (inventory), FIN-153 (knowledge
+  alignment + `Unsupported` for documented domains without a contract),
+  FIN-154 (retrieval re-proof), FIN-155 (answers re-proof); FIN-107's children
+  carry `blocks` relations in wave order; FIN-9, FIN-12, FIN-106 are blocked by
+  FIN-155; FIN-151 is `Bloked`.
+- **Unproven risk, recorded not tested:** a question about share, FD/RD,
+  teller, standing instructions or provisioning has no deferred-domain file,
+  so it may be misrouted to a savings capability as loan questions were before
+  FIN-140. To be proven in FIN-153 once the Bruno runner update lands.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -1440,7 +1543,8 @@ The discrepancy is a difference in counting, not a missing scenario — no
 scenario present in the eight documents is unmapped.
 
 L1 and L2 own no acceptance scenario of their own: their gate is the four rules
-in `knowledge/CARRY-OVER.md` and §6.5, not a numbered list.
+in `knowledge/CARRY-OVER.md` and §6.5, not a numbered list. L1C's gate is the
+formal inventory plus the per-domain verification in §3.
 
 ---
 

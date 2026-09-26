@@ -34,3 +34,19 @@ delapan capability tanpa `display_name`/`description`.
 4. Semantik cutoff/as-of-nya dideklarasikan ([database-design.md](../docs/data/database-design.md) §2.2 D4 dan keputusan #14).
 
 Entri yang belum melewati empat hal di atas boleh dipakai untuk pengembangan lokal, **tidak** untuk menjawab pertanyaan yang dipercaya.
+
+## Cakupan: `data-scope/` dan `domains/` masih cakupan MVP lama (2026-09-26)
+
+Empat aturan di atas membuktikan sebuah entri **benar**, bukan bahwa katalog
+**cukup**. Katalog ini masih 49 kapabilitas pada 4 domain (client, savings,
+organization, group), sedangkan cakupan rilis penuh ada di
+[dataset-scope-decisions.md](../docs/product/2026-09-09-dataset-scope-decisions.md)
+§1 dan D01–D15.
+
+`data-scope/*.yaml` dan `domains/*.yaml` adalah cakupan **MVP** dari `ai_report`
+dan **bukan otoritas**: `source_doc`-nya menunjuk `docs/reporting-data-scope.md`
+dan `docs/reporting-data/*.md` yang tidak ada di repo ini, dan beberapa isinya
+bertentangan dengan dokumen scope (trial balance vs D12, penolakan audit
+pengguna vs D09, penolakan address vs §1 Client, tax `deferred` vs §1).
+Bila bertentangan, dokumen scope yang menang. Penyelarasan = FIN-153; gerbang
+cakupan = L1C di [build-order.md](../docs/build-order.md) §3.

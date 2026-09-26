@@ -1,15 +1,20 @@
 # Jarvis — keputusan cakupan data dan titik lanjut
 
-Tanggal: 2026-09-09. Status: keputusan kebutuhan produk disepakati; inventaris dataset formal dan kontrak teknis belum final. Dokumen ini menyimpan handoff dan lanjutan diskusi hingga persetujuan analisis kelengkapan data.
+Tanggal: 2026-09-09. Status: keputusan kebutuhan produk disepakati; inventaris dataset formal dan kontrak teknis belum final. Dokumen ini menyimpan handoff dan lanjutan diskusi hingga persetujuan analisis kelengkapan data. Pembaruan 2026-09-20 dan 2026-09-26: lihat "Status implementasi" di bawah.
 
 ## Cara melanjutkan
 
-- Target adalah aplikasi siap rilis penuh dan maintenance, bukan MVP. Implementasi belum diizinkan.
+- Target adalah aplikasi siap rilis penuh dan maintenance, bukan MVP. Implementasi cakupan ini **diizinkan sejak 2026-09-26** (keputusan owner), dengan urutan pada "Status implementasi" di bawah — dimulai dari inventaris formal, bukan dari SQL.
 - Baca dokumen ini bersama [PRD](prd.md) dan [checklist](../checklist.md). PRD tetap menjadi baseline produk; dokumen ini memiliki rincian keputusan cakupan data dari diskusi ini.
 - Jangan meminta ulang persetujuan cakupan di bawah. Bedakan kebutuhan yang sudah disepakati, mapping sumber yang harus diperiksa, dan keputusan bisnis yang masih terbuka.
 - Gunakan repository/dokumen untuk menjawab detail yang dapat diverifikasi. Pandu diskusi satu topik setiap kali dengan contoh pertanyaan admin.
 - Persetujuan kebutuhan tidak membuktikan ketersediaan data, kelengkapan riwayat, atau kesiapan kontrak eksekusi. Data contoh/demo tidak membuktikan penggunaan pada tenant aktual.
 - Tidak ada kode, script, migration, dataset eksekusi, atau pilihan storage baru yang ditetapkan oleh dokumen ini.
+
+## Status implementasi (keputusan owner)
+
+- **2026-09-20.** Aturan baku lintas domain disepakati dan dicatat pada epic Linear FIN-107: currency dipisah per mata uang tanpa konversi otomatis; deklarasi grain dan agregasi child sebelum join; pagination keyset; masking PII; office scope dari entitlement sesi; `as_of`/freshness dengan `Partial` bila batch wajib belum jalan; aturan evidence §1; Mode 1 vs Mode 2. D10 (datatables) dan D15 (surveys/credit bureau) ditunda ke onboarding deployment; D01 hanya posisi recomputed; D02 cabang pada tanggal posisi bila riwayat ada, selain itu cabang sekarang.
+- **2026-09-26.** Diagnosis: katalog `knowledge/` masih 49 kapabilitas warisan pada 4 domain karena inventaris formal (§5 langkah 2) tidak pernah ditulis, sehingga kelengkapan tidak pernah diukur. Keputusan: **pelengkapan katalog didahulukan** sebelum sistem diuji lebih jauh. Gerbang baru L1C di [build-order.md](../build-order.md) §3; urutan kerja = relasi `blocks` pada anak FIN-107: inventaris formal (FIN-152) → penyelarasan `knowledge/` dengan dokumen ini (FIN-153) → Products → Loan / FD-RD / Share / Savings → Client, resource penghubung, GL, provisioning, audit sumber → lintas domain (D01, D02, D03, D11) → pembuktian ulang retrieval dan jawaban.
 
 ## 1. Baseline cakupan dari handoff
 
@@ -204,8 +209,8 @@ Checkout ai_report: /Users/tabrezakhlaque/project/personal/rust/projects/ai_repo
 
 Tinjauan celah fungsional (gap-review) DITUTUP pada D15 setelah audit sistematis atas seluruh permukaan Fineract. Jangan menganggap daftar dataset sudah final atau mengulang persetujuan D01–D15. Langkah berikutnya adalah menyusun inventaris formal; penutupan gap-review bukan finalisasi kontrak atau bukti ketersediaan data deployment.
 
-1. Lanjutkan tinjauan celah kebutuhan yang belum terwakili. Periksa bukti repository dahulu; tanyakan hanya keputusan bisnis yang belum terselesaikan.
-2. Susun inventaris formal setelah tinjauan: kebutuhan → resource/sumber → grain → field/measure → relasi → scope → waktu/currency → evidence → acceptance.
+1. ~~Lanjutkan tinjauan celah kebutuhan yang belum terwakili.~~ Ditutup pada D15. Temuan baru dicatat sebagai baris inventaris, bukan tinjauan ulang.
+2. Susun inventaris formal setelah tinjauan: kebutuhan → resource/sumber → grain → field/measure → relasi → scope → waktu/currency → evidence → acceptance. Rumahnya `docs/data/dataset-inventory.md` (FIN-152); langkah ini gerbang semua langkah berikutnya.
 3. Verifikasi schema dan penggunaan pada deployment, terutama history, kurs, custom datatables, realisasi pertemuan dan audit sumber.
 4. Lengkapi kontrak lintas dataset: anti-fanout, filtering/sorting/pagination, completeness, budgets, masking/PII, historical authorization, versi dan maintenance schema.
-5. Desain storage laporan/hasil, retention/revisi, acceptance dan operasi tetap mengikuti readiness gate. Penyimpanan catatan ini tidak mengizinkan implementasi.
+5. Desain storage laporan/hasil, retention/revisi, acceptance dan operasi tetap mengikuti readiness gate. Izin implementasi mengikuti "Status implementasi" di atas; catatan ini sendiri tidak menetapkan kode, SQL atau storage.
