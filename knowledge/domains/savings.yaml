@@ -2,6 +2,13 @@ id: savings
 status: approved_mvp
 display_name: Savings
 description: Savings account and transaction reporting.
+inventory_refs:
+  - SAV-1
+  - SAV-3
+  - SAV-4
+  - SAV-5
+  - SAV-7
+  - SAV-11
 data_areas:
   - organization_foundation
   - client_foundation

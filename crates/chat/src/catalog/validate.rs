@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::catalog::{
     loader::Catalog,
-    model::{CHART_KINDS, Capability, QueryManifest},
+    model::{CHART_KINDS, Capability, DataScopeArea, Domain, QueryManifest},
 };
 
 /// Tingkat temuan. `Error` berarti entri tidak boleh dianggap approved;
@@ -101,6 +101,7 @@ pub fn validate(catalog: &Catalog) -> Report {
     }
 
     check_resolvers(catalog, &mut findings);
+    check_domain_alignment(catalog, &mut findings);
 
     // SQL yatim: ada di `queries/` tetapi tidak dirujuk manifest mana pun.
     // Bukan sekadar kerapian — SQL yang tidak punya kontrak tidak punya
@@ -362,6 +363,180 @@ fn grain_is_subset(grain: &[String], output_names: &BTreeSet<&str>) -> bool {
     grain
         .iter()
         .all(|column| output_names.contains(column.as_str()))
+}
+
+/// FIN-153 (L1C): `knowledge/domains/*.yaml` dan `knowledge/data-scope/areas/*.yaml`
+/// harus selaras dengan `docs/data/dataset-inventory.md` dan
+/// `docs/product/2026-09-09-dataset-scope-decisions.md`. Enam kontradiksi
+/// spesifik ditemukan pada audit FIN-153 dan tidak boleh masuk lagi; daftar
+/// di bawah membuat kegagalannya mekanis, bukan hanya prosa `CARRY-OVER.md`.
+fn check_domain_alignment(catalog: &Catalog, findings: &mut Vec<Finding>) {
+    for loaded in &catalog.domains {
+        check_domain(&loaded.entry, &loaded.path, findings);
+    }
+    for loaded in &catalog.areas {
+        check_area(&loaded.entry, &loaded.path, findings);
+    }
+}
+
+/// Domain yang cakupannya disepakati baseline §1/D01–D15 tetapi belum punya
+/// capability disetujui — `deferred` (istilah MVP) mengaburkan ini dengan
+/// domain onboarding-dependent (D10). Reintroduksi kontradiksi #1/#4.
+const MUST_BE_GAP_NOT_DEFERRED: &[&str] = &["loan", "tax", "accounting", "audit"];
+
+/// Intent yang secara eksplisit dan permanen dikecualikan dokumen (D12: tanpa
+/// trial balance/laporan keuangan penuh; §1: bukan savings-only) tetapi
+/// pernah muncul di `supported_intents`/`gap_intents` — kontradiksi #1, #6.
+const FORBIDDEN_GAP_OR_SUPPORTED_PHRASES: &[(&str, &[&str])] = &[
+    (
+        "accounting",
+        &[
+            "trial balance",
+            "balance sheet",
+            "income statement",
+            "profit and loss",
+            "financial statements",
+        ],
+    ),
+    (
+        "group_center",
+        &["group-owned savings reporting", "center-level savings summaries"],
+    ),
+];
+
+/// Intent yang disepakati cakupannya (selektif/gap, bukan ditolak kebijakan)
+/// tetapi pernah muncul di `unsupported_intents` — kontradiksi #3 (address).
+const FORBIDDEN_HARD_REJECT_PHRASES: &[(&str, &[&str])] = &[(
+    "client",
+    &["address-level reporting", "address level reporting"],
+)];
+
+fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
+    let subject = format!("{} ({path})", domain.id);
+
+    if domain.inventory_refs.is_empty() {
+        findings.push(Finding::error(
+            &subject,
+            "domain_requires_inventory_ref",
+            "domain tidak merujuk satu pun baris docs/data/dataset-inventory.md",
+        ));
+    }
+
+    if MUST_BE_GAP_NOT_DEFERRED.contains(&domain.id.as_str())
+        && domain.status.as_deref() == Some("deferred")
+    {
+        findings.push(Finding::error(
+            &subject,
+            "gap_domain_not_mislabeled_deferred",
+            "domain ini cakupan disepakati tanpa capability (gap, dataset-inventory.md), \
+             bukan deferred ke onboarding deployment (D10/D15a/b)",
+        ));
+    }
+
+    let gap_or_supported: Vec<String> = domain
+        .supported_intents
+        .iter()
+        .chain(domain.gap_intents.iter())
+        .map(|intent| intent.to_lowercase())
+        .collect();
+
+    if let Some((_, forbidden)) = FORBIDDEN_GAP_OR_SUPPORTED_PHRASES
+        .iter()
+        .find(|(id, _)| *id == domain.id)
+    {
+        for phrase in *forbidden {
+            if gap_or_supported.iter().any(|text| text.contains(phrase)) {
+                findings.push(Finding::error(
+                    &subject,
+                    "gap_intents_exclude_out_of_scope_phrases",
+                    format!(
+                        "intent '{phrase}' dikecualikan permanen oleh dokumen scope dan tidak \
+                         boleh muncul di supported_intents/gap_intents"
+                    ),
+                ));
+            }
+        }
+    }
+
+    if let Some((_, forbidden)) = FORBIDDEN_HARD_REJECT_PHRASES
+        .iter()
+        .find(|(id, _)| *id == domain.id)
+    {
+        for phrase in *forbidden {
+            if domain
+                .unsupported_intents
+                .iter()
+                .any(|intent| intent.to_lowercase().contains(phrase))
+            {
+                findings.push(Finding::error(
+                    &subject,
+                    "gap_item_not_hard_rejected",
+                    format!(
+                        "'{phrase}' cakupannya disepakati (selektif/gap), bukan ditolak \
+                         kebijakan — jangan cantumkan di unsupported_intents"
+                    ),
+                ));
+            }
+        }
+    }
+
+    if domain.id == "client"
+        && !domain.gap_intents.iter().any(|intent| {
+            let lower = intent.to_lowercase();
+            lower.contains("loan") || lower.contains("share")
+        })
+    {
+        findings.push(Finding::error(
+            &subject,
+            "client_all_account_types_declared",
+            "client mencakup seluruh jenis account milik client (§1, CLI-5) — gap_intents \
+             harus menyatakan loan/share account roster, bukan hanya savings",
+        ));
+    }
+}
+
+fn check_area(area: &DataScopeArea, path: &str, findings: &mut Vec<Finding>) {
+    let subject = format!("{} ({path})", area.id);
+
+    if area.inventory_refs.is_empty() {
+        findings.push(Finding::error(
+            &subject,
+            "area_requires_inventory_ref",
+            "area tidak merujuk satu pun baris docs/data/dataset-inventory.md",
+        ));
+    }
+
+    // D09: audit tindakan Fineract sendiri (`m_portfolio_command_source`)
+    // cakupannya disepakati — kontradiksi #2 bila ia masuk excluded_tables.
+    if area.id == "audit_users_operations"
+        && area
+            .excluded_tables
+            .iter()
+            .any(|table| table == "m_portfolio_command_source")
+    {
+        findings.push(Finding::error(
+            &subject,
+            "audit_source_command_in_scope",
+            "'m_portfolio_command_source' adalah D09 (source audit Fineract, cakupan \
+             disepakati) — tidak boleh masuk excluded_tables",
+        ));
+    }
+
+    // CLI-6: alamat client selektif/gap — kontradiksi #3 bila ia masuk
+    // excluded_tables (BlockedByPolicy), bukan conditional_tables (gap).
+    if area.id == "client_foundation"
+        && area
+            .excluded_tables
+            .iter()
+            .any(|table| table == "m_client_address")
+    {
+        findings.push(Finding::error(
+            &subject,
+            "client_address_not_hard_excluded",
+            "'m_client_address' adalah CLI-6 (selektif/gap, §1) — tidak boleh masuk \
+             excluded_tables, pindahkan ke conditional_tables",
+        ));
+    }
 }
 
 /// Integritas tautan resolver — I6: koneksi yang hanya hidup sebagai prosa
@@ -706,7 +881,8 @@ pub fn coverage() -> &'static [&'static str] {
         "queries/**/*.sql (non-dataset): keterhubungan ke manifest",
         "resolver: resolves: -> dataset/shape ada, satu manifest per shape, parameter hanya authorized_scope, entity dideklarasikan",
         "capabilities/**: probe: -> resolver ada dan output_slot benar-benar kolom hasilnya",
-        "BELUM DIVALIDASI: datasets/** selain entity+shape resolver, fragment *.frag.sql, metrics/**, schema/**, parameters/**, domains/**, responses/**",
+        "domains/**, data-scope/areas/**: inventory_refs wajib ada; enam kontradiksi FIN-153 (D12 trial balance, D09 audit source, address selektif, gap vs deferred, client seluruh jenis account, group/center di luar savings) tidak boleh masuk lagi",
+        "BELUM DIVALIDASI: datasets/** selain entity+shape resolver, fragment *.frag.sql, metrics/**, schema/**, parameters/**, responses/**",
         "BELUM DIBUKTIKAN oleh validator mana pun: kebenaran angka, grain, dan semantik as-of (jalankan contohnya)",
     ]
 }
@@ -870,5 +1046,138 @@ mod tests {
         // Tanpa deklarasi chart tidak ada yang diperiksa.
         let plain: Capability = serde_yaml::from_str("id: c\nquery_id: q\n").unwrap();
         assert!(chart_problem(&plain, &manifest(&["office_id"])).is_none());
+    }
+
+    fn parsed_domain(yaml: &str) -> Domain {
+        serde_yaml::from_str(yaml).unwrap()
+    }
+
+    fn parsed_area(yaml: &str) -> DataScopeArea {
+        serde_yaml::from_str(yaml).unwrap()
+    }
+
+    fn has_check(findings: &[Finding], check: &str) -> bool {
+        findings.iter().any(|finding| finding.check == check)
+    }
+
+    // FIN-153 (L1C): domain/area tanpa rujukan inventaris tidak punya
+    // otoritas cakupan — build-order.md §3 L1C "Done when" poin 1.
+    #[test]
+    fn domain_without_inventory_ref_is_rejected() {
+        let domain = parsed_domain("id: loan\nstatus: gap\n");
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(has_check(&findings, "domain_requires_inventory_ref"));
+    }
+
+    #[test]
+    fn area_without_inventory_ref_is_rejected() {
+        let area = parsed_area("id: tax\n");
+        let mut findings = Vec::new();
+        check_area(&area, "path", &mut findings);
+        assert!(has_check(&findings, "area_requires_inventory_ref"));
+    }
+
+    // Kontradiksi #4: tax/loan/accounting/audit "deferred" (istilah MVP)
+    // mengaburkan gap (disepakati, belum dikontrak) dengan deferred-onboarding
+    // (D10/D15a/b).
+    #[test]
+    fn loan_and_tax_mislabeled_deferred_are_rejected() {
+        for id in ["loan", "tax", "accounting", "audit"] {
+            let domain = parsed_domain(&format!(
+                "id: {id}\nstatus: deferred\ninventory_refs: [X-1]\n"
+            ));
+            let mut findings = Vec::new();
+            check_domain(&domain, "path", &mut findings);
+            assert!(
+                has_check(&findings, "gap_domain_not_mislabeled_deferred"),
+                "{id} seharusnya ditolak sebagai deferred"
+            );
+        }
+
+        // Domain onboarding-dependent yang sungguh deferred (bukan di daftar
+        // MUST_BE_GAP_NOT_DEFERRED) tidak boleh ikut ditolak.
+        let custom_datatables = parsed_domain(
+            "id: custom_datatables\nstatus: deferred\ninventory_refs: [D10]\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&custom_datatables, "path", &mut findings);
+        assert!(!has_check(&findings, "gap_domain_not_mislabeled_deferred"));
+    }
+
+    // Kontradiksi #1: D12 mengecualikan trial balance secara permanen; ia
+    // tidak boleh muncul di supported_intents/gap_intents accounting.
+    #[test]
+    fn accounting_trial_balance_reintroduced_is_rejected() {
+        let domain = parsed_domain(
+            "id: accounting\nstatus: gap\ninventory_refs: [D12]\nsupported_intents:\n  - trial balance\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
+    }
+
+    // Kontradiksi #6: group/center mencakup seluruh jenis account (§1), tidak
+    // savings-only — supported_intents tidak boleh mengklaim sebaliknya.
+    #[test]
+    fn group_center_savings_only_reintroduced_is_rejected() {
+        let domain = parsed_domain(
+            "id: group_center\nstatus: candidate\ninventory_refs: [CLI-4]\nsupported_intents:\n  - group-owned savings reporting\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
+    }
+
+    // Kontradiksi #3: alamat client selektif/gap (§1 CLI-6), bukan ditolak
+    // kebijakan — tidak boleh masuk unsupported_intents (BlockedByPolicy).
+    #[test]
+    fn client_address_hard_reject_reintroduced_is_rejected() {
+        let domain = parsed_domain(
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\ngap_intents:\n  - client loan account roster\nunsupported_intents:\n  - address-level reporting\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(has_check(&findings, "gap_item_not_hard_rejected"));
+    }
+
+    // Kontradiksi #5: client mencakup seluruh jenis account (§1, CLI-5) —
+    // gap_intents harus menyatakan loan/share, bukan hanya savings.
+    #[test]
+    fn client_missing_all_account_types_is_rejected() {
+        let domain = parsed_domain("id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\n");
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(has_check(&findings, "client_all_account_types_declared"));
+    }
+
+    // Kontradiksi #2: D09 (source audit Fineract) cakupannya disepakati; tidak
+    // boleh masuk excluded_tables area audit_users_operations.
+    #[test]
+    fn audit_area_excluding_source_command_reintroduced_is_rejected() {
+        let area = parsed_area(
+            "id: audit_users_operations\ninventory_refs: [D09]\nexcluded_tables:\n  - m_portfolio_command_source\n",
+        );
+        let mut findings = Vec::new();
+        check_area(&area, "path", &mut findings);
+        assert!(has_check(&findings, "audit_source_command_in_scope"));
+    }
+
+    // Katalog yang sudah selaras (bentuk hasil FIN-153) tidak boleh dilaporkan.
+    #[test]
+    fn aligned_domain_and_area_pass_clean() {
+        let domain = parsed_domain(
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1, CLI-5, CLI-6]\ngap_intents:\n  - client loan account roster\n  - client share account roster\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &mut findings);
+        assert!(findings.is_empty());
+
+        let area = parsed_area(
+            "id: audit_users_operations\ninventory_refs: [D09]\nexcluded_tables:\n  - m_appuser\n",
+        );
+        let mut findings = Vec::new();
+        check_area(&area, "path", &mut findings);
+        assert!(findings.is_empty());
     }
 }

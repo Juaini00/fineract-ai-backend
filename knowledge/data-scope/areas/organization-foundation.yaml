@@ -1,6 +1,9 @@
 id: organization_foundation
 status: included_mvp_foundation
-source_doc: docs/reporting-data-scope.md#31-organization-foundation
+source_doc: docs/data/dataset-inventory.md#2-domain-a--organization
+inventory_refs:
+  - ORG-1
+  - ORG-3
 detail_doc: docs/reporting-data/organization-foundation.md
 description: Office and staff foundation for office-scoped reporting.
 included_tables:

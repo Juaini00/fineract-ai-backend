@@ -267,10 +267,12 @@ async fn run_job(
         .await;
     }
 
-    // OVR-6.6 — subjek domain berstatus deferred (loans, tax, accounting_gl)
-    // dijawab Unsupported sebelum retrieval, bukan jatuh ke capability baca
-    // terdekat (mis. savings) yang menjawab data subjek yang salah. Berbeda
-    // dari guard di atas: ini bukan penolakan kebijakan (FIN-140).
+    // OVR-6.6 — subjek domain berstatus deferred (onboarding-dependent, D10)
+    // atau gap (cakupan disepakati tanpa capability, mis. loan, tax,
+    // accounting, audit — FIN-153) dijawab Unsupported sebelum retrieval,
+    // bukan jatuh ke capability baca terdekat (mis. savings) yang menjawab
+    // data subjek yang salah. Berbeda dari guard di atas: ini bukan
+    // penolakan kebijakan (FIN-140).
     if let Some(term) = catalog.deferred_domains.find(&job.request_text) {
         warn!(job_id = %job.id, source = term.source, term = %term.name, "subjek domain deferred diminta; dijawab unsupported");
         return settle_unsupported(

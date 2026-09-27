@@ -1,8 +1,13 @@
 id: group_center_foundation
 status: conditional
-source_doc: docs/reporting-data-scope.md#33-group-and-center-foundation
-detail_doc: docs/reporting-data/group-center-foundation.md
-description: Group and center context for deployments that use group-based organization.
+source_doc: docs/data/dataset-inventory.md#4-domain-c--client--ownership
+inventory_refs:
+  - CLI-4
+description: >-
+  Group and center context for deployments that use group-based organization
+  — CLI-4. Covers every account type a member may hold (loan, savings,
+  share), not savings alone (§1); `allowed_domains` lists every affected
+  domain so the guard for each stays reachable through this area.
 included_tables:
   - m_group
   - m_group_client
@@ -12,7 +17,10 @@ conditional_tables:
   - m_staff_assignment_history
 excluded_tables: []
 allowed_domains:
+  - group_center
   - savings
+  - loan
+  - share
 default_rules:
   - Enable only when the local Fineract deployment uses groups or centers.
 checks:

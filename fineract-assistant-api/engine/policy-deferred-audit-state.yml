@@ -1,0 +1,28 @@
+info:
+  name: "OVR-6.6 domain gap (audit, D09) — job state"
+  type: http
+  seq: 38.971
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_audit_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("OVR-6.6/FIN-153 (gap, audit D09): Completed + Unsupported + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Unsupported");
+          expect(job.completeness).to.equal("Unknown");
+          // Alasan gap harus beda dari out_of_scope, retrieval_miss, dan
+          // surface_not_approved (forbidden surface) — FIN-153 acceptance.
+          expect(job.completeness_reason).to.equal("domain_deferred");
+          expect(job.completeness_reason).to.not.equal("out_of_scope");
+          expect(job.completeness_reason).to.not.equal("retrieval_miss");
+          expect(job.completeness_reason).to.not.equal("surface_not_approved");
+          expect(job.plan_version).to.equal(null);
+        });

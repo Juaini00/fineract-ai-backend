@@ -186,8 +186,13 @@ local read found 300 public tables and flags the 220↔300 gap for the owner,
 unresolved). Loan, products, FD/RD (except one maturity capability), share,
 GL traceability, tax, teller, standing instructions, provisioning, source
 audit and scheduler have **none**. FIN-153 (`knowledge/` alignment against
-the inventory) is next; L1C itself does not move above ⬜ until point 2 and
-point 3 of "Done when" above are also met.
+the inventory, point 2 of "Done when" above) is merged: `knowledge/domains/`
+and `knowledge/data-scope/areas/` now agree with the scope documents (six
+contradictions fixed, `inventory_refs` mechanically checked — see the
+"Update after FIN-153" note below), and every gap domain answers `Unsupported`
+before retrieval, never misrouted to an unrelated approved capability. Point
+3 (each domain's Mode-1 capabilities passing the four `CARRY-OVER.md` rules)
+is still open — that is FIN-109 onward — so L1C itself does not move above ⬜.
 **Order inside L1C** is the `blocks` relations on FIN-107's children: FIN-152
 inventory → FIN-153 knowledge alignment → FIN-109 products → loan / FD-RD /
 share / savings → client, linking resources, GL, provisioning, audit →
@@ -1504,6 +1509,62 @@ Update 2026-09-26 — diagnosis: the catalog was never measured for coverage
   teller, standing instructions or provisioning has no deferred-domain file,
   so it may be misrouted to a savings capability as loan questions were before
   FIN-140. To be proven in FIN-153 once the Bruno runner update lands.
+
+Update after FIN-153 (`knowledge/` alignment against the inventory):
+
+- **`knowledge/domains/` and `knowledge/data-scope/areas/` realigned with the
+  scope documents.** Six contradictions the ticket named, fixed: (1) `accounting`
+  no longer lists `trial balance` in `supported_intents` — D12 excludes full
+  financial statements permanently (moved to `unsupported_intents`, stays
+  `BlockedByPolicy`); single-named-account GL/journal traceability is a new
+  `gap_intents` entry. (2) D09 (Fineract's own source-audit table,
+  `m_portfolio_command_source`) is no longer in `audit-users-operations.yaml`
+  `excluded_tables` — it moved to a new area `source-audit.yaml` and a new
+  `knowledge/domains/audit.yaml` (`gap`), distinct from the still-excluded
+  `m_appuser`/`m_role`/`m_permission` administration tables and from Jarvis's
+  own execution audit. (3) `client.yaml` no longer hard-rejects "address-level
+  reporting" via `unsupported_intents` (`BlockedByPolicy`) — CLI-6 is
+  selective/agreed, moved to `gap_intents` (`Unsupported`, gap reason). (4)
+  `loan`, `tax`, and `accounting` domains changed status `deferred` → `gap`:
+  every LOAN-*/D12/SAV-9/PROD-10 row in the inventory is agreed baseline scope
+  with no approved capability, not an onboarding-dependent domain like D10 —
+  `deferred` stays reserved for that (`custom_datatables`, status renamed
+  `deferred_onboarding` for clarity). (5) `client.yaml` now states CLI-5 (all
+  account types) and declares `gap_intents` for the loan/share sides; a new
+  `knowledge/domains/share.yaml` (`gap`, SHARE-1..8) exists so a share question
+  is never misrouted to the savings capability the way loan questions once
+  were (FIN-140's original bug). (6) `group_center.yaml` `supported_intents`
+  no longer claims "group-owned savings reporting"/"center-level savings
+  summaries" — the only approved capability is `group_identity_resolve`;
+  status widened to feed the same guard as `gap`/`deferred` (candidate domains
+  answer `Unsupported` by default per their own `default_rules`), and
+  `gap_intents` cover group/center account summaries across every product.
+- **Mechanism, not prose.** `Domain`/`DataScopeArea` gained `inventory_refs`
+  (non-empty, cites `dataset-inventory.md` row IDs) and `Domain` gained
+  `gap_intents` (feeds the same `Unsupported`/gap-reason guard as a
+  whole-domain `deferred`/`gap` status, at intent granularity — e.g. one
+  concept inside an otherwise-`approved_mvp` domain). `catalog::validate`
+  checks both fields exist and rejects the six contradictions' exact shape if
+  reintroduced (`gap_domain_not_mislabeled_deferred`,
+  `gap_intents_exclude_out_of_scope_phrases`, `gap_item_not_hard_rejected`,
+  `audit_source_command_in_scope`, `client_address_not_hard_excluded`,
+  `client_all_account_types_declared`), each with a unit test that reproduces
+  the contradiction and asserts the finding. `cargo run -p app -- catalog` →
+  **0 error** on the realigned catalog.
+- **Proven live.** Four new Bruno scenarios
+  (`engine/policy-deferred-{audit,client-address,client-share,group-center}-{job,state}.yml`)
+  each assert `Completed` + `Unsupported` + `completeness_reason ==
+  "domain_deferred"` **and** `!= out_of_scope`, `!= retrieval_miss`, `!=
+  surface_not_approved` — the ticket's "distinct reason" acceptance line — for
+  D09 audit, client address (CLI-6), share (SHARE-1..8/CLI-5), and group/center
+  beyond savings (CLI-4). Existing `policy-deferred-{loan,tax,accounting}-*`
+  and the FIN-140 control (`policy-deferred-savings-credit-control-*`, "credit"
+  ambiguity) still pass unchanged. Full locked run: 598 requests, 0 failed.
+- **Not done here (out of this ticket's boundary).** No domain SQL, capability,
+  or migration for LC.1–LC.23; L1C stays ⬜ until point 3 of its "Done when"
+  (each domain's Mode-1 capabilities passing the four `CARRY-OVER.md` rules,
+  recorded in `knowledge/VERIFICATION.md`) is also met — that is FIN-109
+  onward.
 
 ### 5.1 Scenario coverage
 

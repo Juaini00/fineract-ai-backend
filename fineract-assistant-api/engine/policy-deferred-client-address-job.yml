@@ -1,0 +1,34 @@
+info:
+  name: "OVR-6.6 domain gap (client address, CLI-6) — job"
+  type: http
+  seq: 38.98
+  description: |
+    Alamat client (CLI-6, `knowledge/domains/client.yaml` `gap_intents`) selektif/gap
+    per §1 — sebelum FIN-153 ia justru tercantum di `unsupported_intents` client dan
+    ditolak sebagai kebijakan (`BlockedByPolicy`, kontradiksi #3). Sekarang dijawab
+    `Unsupported` dengan alasan gap, bukan ditolak sebagai permukaan yang dilarang.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_client_address_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show every client address in Head Office.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_client_address_key", "fin153-deferred-client-address-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_client_address_job", res.getBody().data.job_id);

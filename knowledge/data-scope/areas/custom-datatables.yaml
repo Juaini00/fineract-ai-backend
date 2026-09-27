@@ -1,7 +1,13 @@
 id: custom_datatables
-status: deferred
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: User-defined Fineract data tables and dynamic column extensions.
+status: deferred_onboarding
+source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
+inventory_refs:
+  - D10
+description: >-
+  User-defined Fineract data tables and dynamic column extensions — deferred
+  to deployment onboarding (D10), since the actual table/field set is
+  per-tenant and cannot be closed generically (unlike `gap` domains, which
+  merely lack a capability against an already-known schema).
 included_tables: []
 conditional_tables: []
 excluded_tables:

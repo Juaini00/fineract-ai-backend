@@ -1,7 +1,13 @@
 id: loans
-status: deferred
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: Loan portfolio reporting — disbursement, repayment, arrears, write-offs.
+status: gap
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs:
+  - LOAN-1
+  - LOAN-5
+  - LOAN-6
+  - LOAN-9
+  - LOAN-11
+description: Loan portfolio — identity, disbursement, schedule, transactions, arrears, write-offs (agreed baseline scope, `gap`).
 included_tables: []
 conditional_tables: []
 excluded_tables:
@@ -13,10 +19,9 @@ excluded_tables:
 allowed_domains:
   - loan
 default_rules:
-  - Loan reporting is deferred until a dedicated loan capability set is approved.
-  - Loan tables must not be referenced by approved MVP capabilities or queries.
+  - Loan is agreed baseline scope with no approved capability yet; loan tables must not be referenced by approved MVP capabilities or queries until one is authored.
 checks:
-  - id: deferred_not_runtime
+  - id: gap_not_runtime
     rule: this area must not be referenced by approved_mvp capabilities or queries.
-  - id: domain_status_deferred
-    rule: matching loan domain must remain deferred.
+  - id: domain_status_gap
+    rule: matching loan domain must remain gap, not approved_mvp, until its rows move to inherited.

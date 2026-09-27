@@ -1,7 +1,10 @@
 id: tax
-status: deferred
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: Tax components, groups, and transaction-level tax details.
+status: gap
+source_doc: docs/data/dataset-inventory.md#3-domain-b--products
+inventory_refs:
+  - SAV-9
+  - PROD-10
+description: Tax components, groups, and applied tax — agreed baseline scope (§1 Savings/FD-RD), no approved capability yet.
 included_tables: []
 conditional_tables: []
 excluded_tables:
@@ -13,9 +16,9 @@ excluded_tables:
 allowed_domains:
   - tax
 default_rules:
-  - Tax reporting is deferred until tax-aware capabilities and policies are approved.
+  - Applied tax is agreed baseline scope with no approved capability yet; tax tables must not be used until a capability and its output-sensitivity policy are approved.
 checks:
-  - id: deferred_not_runtime
+  - id: gap_not_runtime
     rule: this area must not be referenced by approved_mvp capabilities or queries.
-  - id: domain_status_deferred
-    rule: matching tax domain must remain deferred.
+  - id: domain_status_gap
+    rule: matching tax domain must remain gap, not approved_mvp, until its rows move to inherited.

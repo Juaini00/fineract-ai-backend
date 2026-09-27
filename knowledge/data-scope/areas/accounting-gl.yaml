@@ -1,7 +1,12 @@
 id: accounting_gl
-status: deferred
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: Accounting general ledger — chart of accounts, journal entries, period closure.
+status: gap
+source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
+inventory_refs:
+  - D12
+description: >-
+  Accounting general ledger — journal entries and one named GL account's
+  balance/movement (D12). Full trial balance/financial statements stay
+  excluded by D12 itself; see `knowledge/domains/accounting.yaml`.
 included_tables: []
 conditional_tables: []
 excluded_tables:
@@ -13,10 +18,9 @@ excluded_tables:
 allowed_domains:
   - accounting
 default_rules:
-  - GL reporting is deferred until approved accounting capabilities are added.
-  - Journal entry retrieval must respect financial reporting boundaries when approved.
+  - GL traceability is agreed baseline scope (D12) with no approved capability yet; journal entry retrieval must still respect the D12 boundary (no trial balance/financial statements) once a capability is authored.
 checks:
-  - id: deferred_not_runtime
-    rule: this area must not be referenced by approved_mvp capabilities or queries.
-  - id: domain_status_deferred
-    rule: matching accounting domain must remain deferred.
+  - id: gap_not_runtime
+    rule: this area must not be referenced by approved_mvp capabilities or queries until a Mode-1 capability is authored.
+  - id: domain_status_gap
+    rule: matching accounting domain must remain gap, not approved_mvp, until D12's row moves to inherited.

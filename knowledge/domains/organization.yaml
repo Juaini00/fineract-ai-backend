@@ -2,6 +2,9 @@ id: organization
 status: approved_mvp
 display_name: Organization
 description: Office and branch context used for office-scoped reporting.
+inventory_refs:
+  - ORG-1
+  - ORG-3
 data_areas:
   - organization_foundation
 concepts:

@@ -1,7 +1,14 @@
 id: reporting_scope
-version: 0.1.0
-source_doc: docs/reporting-data-scope.md
-description: Approved reporting data surface for the MVP catalog.
+version: 0.2.0
+source_doc: docs/data/dataset-inventory.md
+inventory_refs:
+  - CLI-1
+description: >-
+  Reporting data surface for the full-release catalog (FIN-153, superseding
+  the MVP-only version 0.1.0). `gap_areas` is new: agreed baseline scope
+  (dataset-inventory.md, every cited row) with no approved capability yet —
+  distinct from `deferred_areas` (onboarding-dependent, D10 only) and from
+  `out_of_scope` (permanently excluded, D13).
 included_areas:
   - organization_foundation
   - client_foundation
@@ -11,24 +18,25 @@ conditional_areas:
   - group_center_foundation
 secondary_areas:
   - savings_charges_fees
-deferred_areas:
+gap_areas:
   - loans
   - accounting_gl
   - tax
+  - source_audit
+deferred_areas:
   - custom_datatables
-  - audit_users_operations
 out_of_scope:
   - arbitrary_sql_exploration
   - full_fineract_schema_search
   - document_image_file_reporting
   - identity_document_reporting
-  - address_level_reporting
-  - user_audit_reporting
+  - application_user_administration
   - fineract_write_actions
+  - stretchy_report_execution
 checks:
   - id: areas_have_files
-    rule: every included, conditional, secondary, deferred, and out_of_scope id must have a matching area file or group entry.
-  - id: runtime_scope_excludes_deferred
-    rule: deferred_areas and out_of_scope entries must not be referenced by approved_mvp capabilities or queries.
+    rule: every included, conditional, secondary, gap, deferred, and out_of_scope id must have a matching area file or group entry.
+  - id: runtime_scope_excludes_uncontracted
+    rule: gap_areas, deferred_areas, and out_of_scope entries must not be referenced by approved_mvp capabilities or queries.
   - id: schema_within_scope
-    rule: schema table families must belong to included, conditional, or secondary data areas only.
+    rule: schema table families must belong to included, conditional, secondary, or gap data areas only.

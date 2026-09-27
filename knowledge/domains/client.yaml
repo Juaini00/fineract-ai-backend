@@ -1,24 +1,47 @@
 id: client
 status: approved_mvp
 display_name: Client
-description: Client ownership context for savings reporting and PII-aware output.
-data_areas:
-  - client_foundation
+description: >-
+  Client ownership context across every account type the client holds, per §1
+  baseline ("Client/kepemilikan ... dan seluruh jenis account") and
+  dataset-inventory.md CLI-1..8. Identity, lifecycle, and office/staff
+  assignment (CLI-1..3) are approved Mode-1 capabilities. The client's full
+  account roster spans loan, savings, and share (CLI-5); only the savings
+  side has an approved capability today (`clients_with_account_counts`) — the
+  loan and share sides answer unsupported with a gap reason rather than a
+  savings-only count presented as the whole roster. Contact/address (CLI-6)
+  is selectively agreed, not default-on, and not yet an approved capability.
+inventory_refs:
+  - CLI-1
+  - CLI-2
+  - CLI-3
+  - CLI-5
+  - CLI-6
+  - CLI-7
 concepts:
   - id: client
     meaning: Customer or member in Fineract.
     synonyms: [client, customer, member, account holder]
 supported_intents:
-  - client-owned savings reporting
+  - client identity resolve and name lookup
   - client lifecycle summary
   - active pending and closed client counts by authorized office scope
+gap_intents:
+  - client loan account roster
+  - client share account roster
+  - client address
 unsupported_intents:
   - identity document reporting
-  - address-level reporting
 default_rules:
   - Client identity output requires explicit capability approval.
+  - All account types owned by a client are agreed baseline scope (CLI-5); only the savings roster has an approved capability today, so a request for a client's loan or share accounts answers unsupported with a gap reason instead of returning the savings-only count as if it were the whole roster.
+  - Client address/contact is selectively agreed (§1), not default-on, and not yet an approved capability (CLI-6); it answers unsupported with a gap reason, never a hard policy rejection — address is not the same as a secret field or an out-of-scope table.
 checks:
   - id: data_area_exists
     rule: data_areas must reference client_foundation.
   - id: pii_safe_default
     rule: client identity concepts must not become output fields unless a capability explicitly allows them.
+  - id: address_not_hard_rejected
+    rule: unsupported_intents must not contain 'address-level reporting' — address is selective/gap (CLI-6), not policy-forbidden.
+  - id: all_account_types_declared
+    rule: gap_intents must acknowledge the loan and share sides of CLI-5, not only the approved savings side.

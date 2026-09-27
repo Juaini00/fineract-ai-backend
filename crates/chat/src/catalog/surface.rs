@@ -76,7 +76,7 @@ impl Surfaces {
     ) -> Self {
         let deferred_areas: BTreeSet<&str> = domains
             .iter()
-            .filter(|domain| domain.status.as_deref() == Some("deferred"))
+            .filter(|domain| is_uncontracted(domain))
             .flat_map(|domain| domain.data_areas.iter().map(String::as_str))
             .collect();
 
@@ -126,15 +126,21 @@ impl Surfaces {
     }
 }
 
-/// Kosakata subjek domain berstatus `deferred` (loans, tax, accounting_gl) —
-/// FIN-140, `default_rules` masing-masing: "respond as unsupported with a
-/// deferred reason". Beda dari [`Surfaces`]: ini bukan penolakan kebijakan,
-/// jadi outcome-nya `Unsupported`, bukan `BlockedByPolicy`.
+/// Domain berstatus `deferred` (deferred ke onboarding deployment, mis. D10)
+/// atau `gap` (cakupan disepakati §1/D01–D15 tetapi belum punya capability
+/// disetujui, mis. loan, tax, accounting, audit — FIN-153) — FIN-140,
+/// `default_rules` masing-masing: "respond as unsupported with a
+/// deferred/gap reason". Beda dari [`Surfaces`]: ini bukan penolakan
+/// kebijakan, jadi outcome-nya `Unsupported`, bukan `BlockedByPolicy`.
 ///
-/// Kosakatanya `concepts[].synonyms` domain deferred sendiri (EN + ID
-/// bercampur, konvensi yang sama dipakai `savings.yaml`, `loan.yaml`, dst).
-/// Istilah yang juga menjadi synonym konsep domain yang TIDAK deferred
-/// dibuang — "credit" adalah synonym `loan` (deferred) sekaligus synonym
+/// Kosakatanya dua sumber: `concepts[].synonyms` domain uncontracted sendiri
+/// (subjek utuh domain, EN + ID bercampur, konvensi yang sama dipakai
+/// `savings.yaml`, `loan.yaml`, dst), dan `gap_intents` **setiap** domain
+/// (termasuk domain `approved_mvp`/`candidate` — satu intent spesifik boleh
+/// gap sementara domainnya sendiri sebagian sudah punya capability, mis.
+/// alamat client atau ringkasan akun group di luar savings, FIN-153).
+/// Istilah yang juga menjadi synonym konsep domain yang TIDAK uncontracted
+/// dibuang — "credit" adalah synonym `loan` (gap) sekaligus synonym
 /// `deposit` di `savings.yaml` (approved_mvp), jadi ia tidak boleh memicu
 /// guard ini dan membisukan pertanyaan savings yang sah.
 #[derive(Debug, Clone, Default)]
@@ -162,7 +168,7 @@ impl DeferredDomains {
         excluded.extend(
             domains
                 .iter()
-                .filter(|domain| domain.status.as_deref() != Some("deferred"))
+                .filter(|domain| !is_uncontracted(domain))
                 .flat_map(|domain| domain.concepts.iter())
                 .flat_map(|concept| concept.synonyms.iter())
                 .map(|synonym| tokens(synonym)),
@@ -170,11 +176,18 @@ impl DeferredDomains {
 
         let mut terms: Vec<Term> = domains
             .iter()
-            .filter(|domain| domain.status.as_deref() == Some("deferred"))
+            .filter(|domain| is_uncontracted(domain))
             .flat_map(|domain| domain.concepts.iter())
             .flat_map(|concept| concept.synonyms.iter())
             .map(|synonym| Term::phrase(DOMAIN_DEFERRED_SOURCE, synonym))
             .collect();
+
+        terms.extend(
+            domains
+                .iter()
+                .flat_map(|domain| domain.gap_intents.iter())
+                .map(|intent| Term::phrase(DOMAIN_DEFERRED_SOURCE, intent)),
+        );
 
         terms.retain(|term| !excluded.iter().any(|text| term.occurs_in(text)));
         terms.sort_by(|left, right| left.name.cmp(&right.name));
@@ -183,11 +196,24 @@ impl DeferredDomains {
         Self { terms }
     }
 
-    /// Istilah pertama yang menandai subjek domain deferred di `text`, bila ada.
+    /// Istilah pertama yang menandai subjek domain deferred/gap di `text`, bila ada.
     pub fn find(&self, text: &str) -> Option<&Term> {
         let tokens = tokens(text);
         self.terms.iter().find(|term| term.occurs_in(&tokens))
     }
+}
+
+/// Domain tanpa capability disetujui secara umum: `deferred`
+/// (onboarding-dependent, D10), `gap` (cakupan disepakati, belum dikontrak —
+/// FIN-153), atau `candidate` (mis. group/center — hanya aktif bila
+/// deployment memverifikasi area yang mendasarinya; default_rules-nya sendiri
+/// menuntut "respond as unsupported" selama belum diverifikasi). Ketiganya
+/// dijawab `Unsupported`, bukan `BlockedByPolicy`.
+fn is_uncontracted(domain: &Domain) -> bool {
+    matches!(
+        domain.status.as_deref(),
+        Some("deferred") | Some("gap") | Some("candidate")
+    )
 }
 
 /// Asal istilah [`DeferredDomains`] — untuk log, sama seperti `Term::source`
@@ -335,7 +361,6 @@ mod tests {
             // FIN-140 — padanan Indonesia field rahasia, sensitivity.yaml `synonyms`.
             "Tampilkan kata sandi semua pengguna aplikasi.",
             "Tampilkan hash kata sandi pengguna.",
-            "Show every client address in Head Office.",
             "List client identifiers for my clients.",
             "Show rows of m_role.",
             "Reverse transaction 5512.",
@@ -368,8 +393,10 @@ mod tests {
         }
     }
 
-    /// OVR-6.6 (FIN-140) — subjek domain deferred (loans, tax, accounting_gl)
-    /// dikenali lintas bahasa, tanpa menanam istilah di Rust.
+    /// OVR-6.6 (FIN-140/FIN-153) — subjek domain deferred/gap (loan, tax,
+    /// accounting, audit, share, client address/loan/share roster,
+    /// group/center di luar savings) dikenali lintas bahasa, tanpa menanam
+    /// istilah di Rust.
     #[test]
     fn deferred_domain_subjects_are_recognized() {
         let deferred = deferred_domains();
@@ -380,6 +407,15 @@ mod tests {
             "Berapa pajak yang terkumpul bulan ini?",
             "What is the tax rate for this account?",
             "Show journal entries for this month.",
+            // FIN-153 — client address (CLI-6, selektif/gap, bukan ditolak kebijakan).
+            "Show every client address in Head Office.",
+            // FIN-153 — share domain (SHARE-1..8, gap).
+            "Show the share account balance for this client.",
+            // FIN-153 — group/center di luar savings (CLI-4/CLI-5, gap).
+            "Show the group savings summary for this branch.",
+            "Show the center savings summary for this branch.",
+            // FIN-153 — D09 source audit Fineract sendiri (gap, bukan raw payload).
+            "Who performed this action on the account?",
             "Tampilkan saldo akun buku besar.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");

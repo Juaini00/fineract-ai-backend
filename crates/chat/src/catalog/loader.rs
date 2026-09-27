@@ -26,6 +26,11 @@ pub struct Catalog {
     pub capabilities: Vec<Loaded<Capability>>,
     pub queries: Vec<Loaded<QueryManifest>>,
     pub datasets: Vec<Loaded<Dataset>>,
+    /// `knowledge/domains/*.yaml`, dengan path asalnya — dipakai validator
+    /// katalog untuk memeriksa keselarasan cakupan (FIN-153 L1C).
+    pub domains: Vec<Loaded<Domain>>,
+    /// `knowledge/data-scope/areas/*.yaml`, dengan path asalnya — sama alasan.
+    pub areas: Vec<Loaded<DataScopeArea>>,
     pub safety_policy: SafetyPolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
@@ -65,8 +70,8 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     let mut sensitivity_classes = BTreeSet::new();
     let mut sql_files = BTreeMap::new();
     let mut secret_fields = Vec::new();
-    let mut areas: Vec<DataScopeArea> = Vec::new();
-    let mut domains: Vec<Domain> = Vec::new();
+    let mut areas: Vec<Loaded<DataScopeArea>> = Vec::new();
+    let mut domains: Vec<Loaded<Domain>> = Vec::new();
 
     // Diurutkan: hash tidak boleh bergantung pada urutan pembacaan direktori.
     let mut yaml_paths = collect(knowledge_root, &["yaml", "yml"])?;
@@ -123,12 +128,18 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
             }
         } else if relative.contains("/data-scope/areas/") {
             match serde_yaml::from_str::<DataScopeArea>(&text) {
-                Ok(area) => areas.push(area),
+                Ok(entry) => areas.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if under("domains") {
             match serde_yaml::from_str::<Domain>(&text) {
-                Ok(domain) => domains.push(domain),
+                Ok(entry) => domains.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         }
@@ -144,19 +155,25 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         sql_files.insert(relative, text);
     }
 
+    let area_entries: Vec<DataScopeArea> =
+        areas.iter().map(|loaded| loaded.entry.clone()).collect();
+    let domain_entries: Vec<Domain> = domains.iter().map(|loaded| loaded.entry.clone()).collect();
+
     let unapproved_surfaces = Surfaces::build(
         &secret_fields,
-        &areas,
-        &domains,
+        &area_entries,
+        &domain_entries,
         capabilities.iter().map(|loaded| &loaded.entry),
     );
     let deferred_domains =
-        DeferredDomains::build(&domains, capabilities.iter().map(|loaded| &loaded.entry));
+        DeferredDomains::build(&domain_entries, capabilities.iter().map(|loaded| &loaded.entry));
 
     Ok(Catalog {
         capabilities,
         queries,
         datasets,
+        domains,
+        areas,
         safety_policy,
         sensitivity_classes,
         unapproved_surfaces,

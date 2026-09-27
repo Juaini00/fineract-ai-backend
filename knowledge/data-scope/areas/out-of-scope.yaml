@@ -1,14 +1,24 @@
 id: out_of_scope_areas
 status: rejected_group
-source_doc: docs/reporting-data-scope.md#5-explicitly-out-of-scope-for-mvp
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#d13--existing-fineract-reports-di-luar-eksekusi
+inventory_refs:
+  - D13
+description: >-
+  Permanently and fully excluded surfaces — never merely uncontracted.
+  `address_level_reporting` was removed (FIN-153): client address is
+  selective/gap (§1, CLI-6), not policy-forbidden — see
+  `knowledge/domains/client.yaml`. `user_audit_reporting` was narrowed to
+  application-user administration only: Fineract's own source
+  command/action audit (D09) is agreed scope — see
+  `knowledge/domains/audit.yaml`.
 areas:
   - arbitrary_sql_exploration
   - full_fineract_schema_search
   - document_image_file_reporting
   - identity_document_reporting
-  - address_level_reporting
-  - user_audit_reporting
+  - application_user_administration
   - fineract_write_actions
+  - stretchy_report_execution
 rule: Out-of-scope areas must produce hard validation failures if referenced by runtime catalog files.
 checks:
   - id: rejected_not_runtime

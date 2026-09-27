@@ -1,15 +1,28 @@
 id: client_foundation
 status: included_mvp_foundation
-source_doc: docs/reporting-data-scope.md#32-client-foundation
-detail_doc: docs/reporting-data/client-foundation.md
-description: Client ownership and lifecycle context for savings reporting.
+source_doc: docs/data/dataset-inventory.md#4-domain-c--client--ownership
+inventory_refs:
+  - CLI-1
+  - CLI-2
+  - CLI-3
+  - CLI-5
+  - CLI-6
+  - CLI-7
+description: >-
+  Client ownership and lifecycle context across every account type (§1, not
+  savings alone — CLI-5). `m_client_address` is selectively agreed (CLI-6),
+  not a hard exclusion, so it sits in `conditional_tables`, not
+  `excluded_tables` — a Surfaces excluded-table term there would hard-reject
+  an agreed-scope request instead of answering it unsupported-gap via the
+  `client` domain guard. `m_client_identifier` (identity documents, CLI-7) and
+  `m_client_transfer_details` stay excluded by design.
 included_tables:
   - m_client
 conditional_tables:
   - m_client_non_person
+  - m_client_address
 excluded_tables:
   - m_client_identifier
-  - m_client_address
   - m_client_transfer_details
 allowed_domains:
   - client
@@ -24,3 +37,5 @@ checks:
     rule: account_no and external_id must not appear in approved MVP output fields.
   - id: row_level_identity_requires_capability
     rule: row-level client fields require both can_view_pii and capability approval.
+  - id: address_not_hard_excluded
+    rule: m_client_address must stay in conditional_tables, never excluded_tables — CLI-6 is selective/gap, not policy-forbidden.

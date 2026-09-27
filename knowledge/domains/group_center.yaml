@@ -1,7 +1,17 @@
 id: group_center
 status: candidate
 display_name: Group and Center
-description: Group-based and center-based organizational reporting for deployments that use group lending or center structures.
+description: >-
+  Group-based and center-based organizational context per §1 baseline
+  ("group/center jika digunakan") and dataset-inventory.md CLI-4 — a client's
+  group/center membership, and group/center-scoped versions of any account
+  type a member holds (loan, savings, share), not savings alone. Only enabled
+  when the local Fineract deployment uses group_center_foundation. Today only
+  group identity resolution is an approved capability
+  (`group_identity_resolve`); account-level group/center summaries across any
+  product remain agreed baseline scope without an approved capability.
+inventory_refs:
+  - CLI-4
 data_areas:
   - group_center_foundation
 concepts:
@@ -12,15 +22,22 @@ concepts:
     meaning: A higher-level grouping that contains multiple groups.
     synonyms: [center, centre, pusat]
 supported_intents:
-  - group-owned savings reporting
-  - center-level savings summaries
+  - resolve a group entity by name within authorized office scope
+gap_intents:
+  - group savings summary
+  - group loan summary
+  - center savings summary
+  - center loan summary
 unsupported_intents:
   - create group
   - assign client to group
 default_rules:
   - Only enabled when the local Fineract deployment uses group_center_foundation; otherwise respond as unsupported with a conditional-not-enabled reason.
+  - Group/center scope covers every account type a member may hold (CLI-4/CLI-5), not savings alone; group identity resolve is the only approved capability today — any group/center-scoped account summary answers unsupported with a gap reason rather than being misrouted to the office-wide savings capability.
 checks:
   - id: conditional_domain
     rule: this domain must remain candidate unless group_center_foundation is explicitly enabled.
   - id: no_mvp_capability_by_default
     rule: approved_mvp capabilities must not require group_center unless explicitly enabled.
+  - id: not_savings_only
+    rule: supported_intents/gap_intents must not claim group/center account reporting is limited to savings — CLI-4/CLI-5 cover every account type.

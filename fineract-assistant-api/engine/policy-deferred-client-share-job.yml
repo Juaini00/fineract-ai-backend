@@ -1,0 +1,34 @@
+info:
+  name: "OVR-6.6 domain gap (share account, CLI-5/SHARE) — job"
+  type: http
+  seq: 38.99
+  description: |
+    Share accounts (SHARE-1..8, `knowledge/domains/share.yaml`, FIN-153) adalah salah
+    satu dari seluruh jenis account yang dicakup client baseline (CLI-5, §1). Sebelum
+    FIN-153 tidak ada domain `share`, sehingga pertanyaan share bisa jatuh ke retrieval
+    biasa alih-alih dijawab unsupported beralasan gap yang eksplisit.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_client_share_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the share account balance for this client.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_client_share_key", "fin153-deferred-client-share-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_client_share_job", res.getBody().data.job_id);

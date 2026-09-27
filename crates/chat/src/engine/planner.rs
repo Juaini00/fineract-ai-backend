@@ -1096,6 +1096,8 @@ mod tests {
             capabilities: Vec::new(),
             queries: Vec::new(),
             datasets: Vec::new(),
+            domains: Vec::new(),
+            areas: Vec::new(),
             safety_policy: Default::default(),
             sensitivity_classes: Default::default(),
             unapproved_surfaces: Default::default(),
