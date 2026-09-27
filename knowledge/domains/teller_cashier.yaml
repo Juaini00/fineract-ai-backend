@@ -19,9 +19,9 @@ concepts:
     synonyms: [teller assignment, cashier assignment]
 supported_intents: []
 gap_intents:
-  - teller assignment
-  - cashier assignment
-  - inter-office cash transaction
+  - { phrase: "teller assignment", inventory_ref: D06 }
+  - { phrase: "cashier assignment", inventory_ref: D06 }
+  - { phrase: "inter-office cash transaction", inventory_ref: D15e }
 unsupported_intents:
   - open teller shift
   - close teller shift

@@ -26,8 +26,8 @@ concepts:
     synonyms: [closure, period close, tutup buku]
 supported_intents: []
 gap_intents:
-  - general ledger balance for one named account
-  - journal entries for one account or transaction
+  - { phrase: "general ledger balance for one named account", inventory_ref: D12 }
+  - { phrase: "journal entries for one account or transaction", inventory_ref: D12 }
 default_rules:
   - Single named GL account traceability is agreed baseline scope with no approved capability yet (D12, dataset-inventory.md D12 `gap`); it answers unsupported with a gap reason, never routed to an unrelated approved capability.
   - Trial balance, balance sheet, and profit-and-loss reports are excluded by D12 itself, not merely uncontracted — never add them to gap_intents or supported_intents; they belong in unsupported_intents only.

@@ -45,9 +45,9 @@ concepts:
     synonyms: [floating rate, suku bunga mengambang]
 supported_intents: []
 gap_intents:
-  - loan product master list
-  - savings product master list
-  - share product master list
+  - { phrase: "loan product master list", inventory_ref: PROD-1 }
+  - { phrase: "savings product master list", inventory_ref: PROD-2 }
+  - { phrase: "share product master list", inventory_ref: PROD-3 }
 unsupported_intents:
   - create loan product
   - create savings product

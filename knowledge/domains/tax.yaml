@@ -21,9 +21,9 @@ concepts:
     synonyms: [tax group, group pajak]
 supported_intents: []
 gap_intents:
-  - tax collected by period
-  - tax by component or group
-  - applied tax on an account
+  - { phrase: "tax collected by period", inventory_ref: PROD-10 }
+  - { phrase: "tax by component or group", inventory_ref: PROD-10 }
+  - { phrase: "applied tax on an account", inventory_ref: SAV-9 }
 unsupported_intents:
   - create tax component
   - update tax rate

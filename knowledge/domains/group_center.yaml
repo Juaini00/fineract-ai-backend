@@ -25,11 +25,11 @@ concepts:
 supported_intents:
   - resolve a group entity by name within authorized office scope
 gap_intents:
-  - group savings summary
-  - group loan summary
-  - center savings summary
-  - center loan summary
-  - group meeting attendance
+  - { phrase: "group savings summary", inventory_ref: CLI-4 }
+  - { phrase: "group loan summary", inventory_ref: CLI-4 }
+  - { phrase: "center savings summary", inventory_ref: CLI-4 }
+  - { phrase: "center loan summary", inventory_ref: CLI-4 }
+  - { phrase: "group meeting attendance", inventory_ref: D08 }
 unsupported_intents:
   - create group
   - assign client to group

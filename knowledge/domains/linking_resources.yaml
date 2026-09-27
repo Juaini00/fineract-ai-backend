@@ -32,9 +32,9 @@ concepts:
     synonyms: [charge settlement, pelunasan biaya]
 supported_intents: []
 gap_intents:
-  - linked account association
-  - actual account transfer
-  - payment allocation breakdown
+  - { phrase: "linked account association", inventory_ref: LINK-3 }
+  - { phrase: "actual account transfer", inventory_ref: LINK-4 }
+  - { phrase: "payment allocation breakdown", inventory_ref: LINK-5 }
 unsupported_intents:
   - create account link
   - execute account transfer

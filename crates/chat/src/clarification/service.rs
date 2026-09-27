@@ -736,6 +736,7 @@ mod tests {
             datasets: Vec::new(),
             domains: Vec::new(),
             areas: Vec::new(),
+            inventory: Default::default(),
             safety_policy: Default::default(),
             sensitivity_classes: Default::default(),
             unapproved_surfaces: Default::default(),

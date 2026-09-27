@@ -18,7 +18,7 @@ concepts:
     synonyms: [provisioning result, provisioning history, hasil provisi]
 supported_intents: []
 gap_intents:
-  - provisioning result history
+  - { phrase: "provisioning result history", inventory_ref: D07 }
 unsupported_intents:
   - create provisioning entry
 default_rules:

@@ -97,7 +97,7 @@ impl Surfaces {
             domains
                 .iter()
                 .flat_map(|domain| domain.unsupported_intents.iter())
-                .map(|intent| Term::unsupported_intent(intent)),
+                .map(|intent| Term::unsupported_intent(intent.phrase())),
         );
 
         let approved: Vec<Vec<String>> = capabilities
@@ -190,7 +190,7 @@ impl DeferredDomains {
             domain
                 .gap_intents
                 .iter()
-                .map(move |intent| Term::phrase(reason_for(domain), intent))
+                .map(move |intent| Term::phrase(reason_for(domain), intent.phrase()))
         }));
 
         terms.retain(|term| !excluded.iter().any(|text| term.occurs_in(text)));

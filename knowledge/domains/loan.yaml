@@ -45,10 +45,10 @@ concepts:
     synonyms: [write off, write-off, charge off]
 supported_intents: []
 gap_intents:
-  - loan disbursement totals
-  - loan repayment totals
-  - largest outstanding loans
-  - arrears summary
+  - { phrase: "loan disbursement totals", inventory_ref: LOAN-4 }
+  - { phrase: "loan repayment totals", inventory_ref: LOAN-6 }
+  - { phrase: "largest outstanding loans", inventory_ref: LOAN-8 }
+  - { phrase: "arrears summary", inventory_ref: LOAN-9 }
 unsupported_intents:
   - create loan account
   - disburse loan

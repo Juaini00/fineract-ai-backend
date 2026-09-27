@@ -29,8 +29,8 @@ concepts:
     synonyms: [dividend, dividen]
 supported_intents: []
 gap_intents:
-  - share purchase and redemption
-  - share account balance
+  - { phrase: "share purchase and redemption", inventory_ref: SHARE-4 }
+  - { phrase: "share account balance", inventory_ref: SHARE-3 }
 default_rules:
   - Share accounts are agreed baseline scope with no approved capability yet (dataset-inventory.md SHARE-1..8, every row `gap`); every share request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
 checks:

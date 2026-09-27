@@ -16,7 +16,7 @@ concepts:
     synonyms: [standing instruction, instruksi transfer berkala]
 supported_intents: []
 gap_intents:
-  - standing instruction execution history
+  - { phrase: "standing instruction execution history", inventory_ref: D05 }
 unsupported_intents:
   - create standing instruction
   - cancel standing instruction

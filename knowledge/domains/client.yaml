@@ -26,16 +26,16 @@ concepts:
     meaning: Customer or member in Fineract.
     synonyms: [client, customer, member, account holder]
 supported_intents:
-  - client identity resolve and name lookup
-  - client lifecycle summary
-  - active pending and closed client counts by authorized office scope
+  - { phrase: "client identity resolve and name lookup", inventory_ref: CLI-1 }
+  - { phrase: "client lifecycle summary", inventory_ref: CLI-2 }
+  - { phrase: "active pending and closed client counts by authorized office scope", inventory_ref: CLI-3 }
 gap_intents:
-  - client loan account roster
-  - client share account roster
-  - client address
-  - client charge
-  - family member detail
-  - historical office as of a past date
+  - { phrase: "client loan account roster", inventory_ref: CLI-5 }
+  - { phrase: "client share account roster", inventory_ref: CLI-5 }
+  - { phrase: "client address", inventory_ref: CLI-6 }
+  - { phrase: "client charge", inventory_ref: D04 }
+  - { phrase: "family member detail", inventory_ref: D15d }
+  - { phrase: "historical office as of a past date", inventory_ref: D02 }
 unsupported_intents:
   - identity document reporting
 default_rules:

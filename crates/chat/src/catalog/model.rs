@@ -235,6 +235,8 @@ pub struct SensitivityClass {
 pub struct DataScopeArea {
     pub id: String,
     #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
     pub excluded_tables: Vec<String>,
     /// Rujukan baris `docs/data/dataset-inventory.md` (mis. `D09`, `SAV-9`)
     /// yang menjadi dasar area ini — FIN-153 L1C. Wajib tidak kosong: sebuah
@@ -254,18 +256,27 @@ pub struct Domain {
     /// Intent yang sudah punya capability disetujui — dulu hanya prosa,
     /// sekarang dibaca validator (FIN-153) supaya sebuah intent yang justru
     /// dikecualikan dokumen (mis. "trial balance", D12) tidak dapat menyelip
-    /// ke sini tanpa terdeteksi.
+    /// ke sini tanpa terdeteksi. Entri boleh mengutip `inventory_ref`-nya
+    /// sendiri (map `{phrase, inventory_ref}`) — validator lalu memeriksa
+    /// baris itu benar-benar berstatus `inherited` di
+    /// `docs/data/dataset-inventory.md`, bukan sekadar prosa yang mengklaim.
     #[serde(default)]
-    pub supported_intents: Vec<String>,
+    pub supported_intents: Vec<IntentRef>,
     /// Intent yang disepakati cakupannya (baseline §1 / D01–D15) tetapi belum
     /// punya capability disetujui — FIN-153. Beda dari `unsupported_intents`:
     /// istilah di sini dijawab `Unsupported` beralasan gap
     /// ([`crate::catalog::surface::DeferredDomains`]), bukan penolakan
-    /// kebijakan (`BlockedByPolicy`).
+    /// kebijakan (`BlockedByPolicy`). Setiap entri wajib mengutip
+    /// `inventory_ref`-nya — validator memeriksa baris itu benar-benar
+    /// berstatus `gap` (bukan `inherited`/`excluded`/palsu).
     #[serde(default)]
-    pub gap_intents: Vec<String>,
+    pub gap_intents: Vec<IntentRef>,
+    /// Intent yang ditolak sebagai kebijakan (`BlockedByPolicy`). Entri yang
+    /// mengutip `inventory_ref` diperiksa baris itu benar-benar `excluded` —
+    /// menolak keras baris `gap` (agreed-tapi-uncontracted) adalah kontradiksi
+    /// yang sama bentuknya dengan kasus alamat client (#3).
     #[serde(default)]
-    pub unsupported_intents: Vec<String>,
+    pub unsupported_intents: Vec<IntentRef>,
     /// Kosakata subjek domain — dipakai guard domain deferred (FIN-140) untuk
     /// mengenali subjeknya lintas bahasa, tanpa menanam istilah di Rust.
     #[serde(default)]
@@ -280,6 +291,38 @@ pub struct Domain {
 pub struct DomainConcept {
     #[serde(default)]
     pub synonyms: Vec<String>,
+}
+
+/// Satu entri `supported_intents`/`gap_intents`/`unsupported_intents` — teks
+/// polos (kompatibel dengan seluruh file lama), atau map `{phrase,
+/// inventory_ref}` bila entri itu ingin diperiksa terhadap status baris
+/// `docs/data/dataset-inventory.md` yang sebenarnya (FIN-153). `inventory_ref`
+/// tidak wajib: banyak entri (mis. "create loan account") bukan pernyataan
+/// atas satu baris inventaris tertentu.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum IntentRef {
+    Plain(String),
+    Ref {
+        phrase: String,
+        inventory_ref: String,
+    },
+}
+
+impl IntentRef {
+    pub fn phrase(&self) -> &str {
+        match self {
+            Self::Plain(phrase) => phrase,
+            Self::Ref { phrase, .. } => phrase,
+        }
+    }
+
+    pub fn inventory_ref(&self) -> Option<&str> {
+        match self {
+            Self::Plain(_) => None,
+            Self::Ref { inventory_ref, .. } => Some(inventory_ref),
+        }
+    }
 }
 
 /// `knowledge/policies/query_safety.yaml`.

@@ -16,8 +16,8 @@ concepts:
     synonyms: [job run history, batch job status, riwayat job]
 supported_intents: []
 gap_intents:
-  - job run history
-  - batch job status
+  - { phrase: "job run history", inventory_ref: D14 }
+  - { phrase: "batch job status", inventory_ref: D14 }
 unsupported_intents:
   - trigger job
   - rerun job

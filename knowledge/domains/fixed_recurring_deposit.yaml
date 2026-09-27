@@ -29,10 +29,10 @@ concepts:
     synonyms: [preclosure, pre-closure, pencairan dini]
 supported_intents: []
 gap_intents:
-  - fixed deposit funding
-  - fixed deposit preclosure
-  - recurring deposit contribution
-  - recurring deposit shortfall
+  - { phrase: "fixed deposit funding", inventory_ref: FDRD-3 }
+  - { phrase: "fixed deposit preclosure", inventory_ref: FDRD-6 }
+  - { phrase: "recurring deposit contribution", inventory_ref: FDRD-8 }
+  - { phrase: "recurring deposit shortfall", inventory_ref: FDRD-10 }
 unsupported_intents:
   - create fixed deposit account
   - create recurring deposit account

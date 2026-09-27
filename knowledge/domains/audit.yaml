@@ -22,10 +22,10 @@ concepts:
     synonyms: [source audit, audit trail, command source, jejak audit]
 supported_intents: []
 gap_intents:
-  - who performed this action
-  - reason recorded for this action
-  - siapa membebaskan biaya
-  - alasan yang tercatat
+  - { phrase: "who performed this action", inventory_ref: D09 }
+  - { phrase: "reason recorded for this action", inventory_ref: D09 }
+  - { phrase: "siapa membebaskan biaya", inventory_ref: D09 }
+  - { phrase: "alasan yang tercatat", inventory_ref: D09 }
 unsupported_intents:
   - raw command payload
   - jarvis execution audit log

@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::catalog::{
     loader::Catalog,
-    model::{CHART_KINDS, Capability, DataScopeArea, Domain, QueryManifest},
+    model::{CHART_KINDS, Capability, DataScopeArea, Domain, IntentRef, QueryManifest},
 };
 
 /// Tingkat temuan. `Error` berarti entri tidak boleh dianggap approved;
@@ -372,11 +372,29 @@ fn grain_is_subset(grain: &[String], output_names: &BTreeSet<&str>) -> bool {
 /// di bawah membuat kegagalannya mekanis, bukan hanya prosa `CARRY-OVER.md`.
 fn check_domain_alignment(catalog: &Catalog, findings: &mut Vec<Finding>) {
     for loaded in &catalog.domains {
-        check_domain(&loaded.entry, &loaded.path, findings);
+        check_domain(&loaded.entry, &loaded.path, &catalog.inventory, findings);
     }
     for loaded in &catalog.areas {
-        check_area(&loaded.entry, &loaded.path, findings);
+        check_area(&loaded.entry, &loaded.path, &catalog.inventory, findings);
     }
+}
+
+/// Status baris `docs/data/dataset-inventory.md` (`catalog::inventory::parse`)
+/// yang konsisten dengan sebuah domain berstatus `gap`: agreed-tapi-uncontracted.
+const GAP_ROW_STATUS: &str = "gap";
+/// ... dengan domain berstatus `deferred`: onboarding-dependent (D10/D15a/b).
+const DEFERRED_ROW_STATUS: &str = "deferred-onboarding";
+/// ... dengan sebuah `supported_intents`/capability disetujui.
+const INHERITED_ROW_STATUS: &str = "inherited";
+/// ... dengan sebuah `unsupported_intents` (hard reject, `BlockedByPolicy`).
+const EXCLUDED_ROW_STATUS: &str = "excluded";
+
+/// Lookup satu `inventory_ref` terhadap peta status sungguhan
+/// (`catalog.inventory`, diparse dari dokumen — bukan konstanta yang
+/// diduplikasi). `None` berarti id itu tidak menamai baris nyata mana pun,
+/// mis. `FAKE-999`.
+fn row_status<'a>(inventory: &'a BTreeMap<String, String>, id: &str) -> Option<&'a str> {
+    inventory.get(id).map(String::as_str)
 }
 
 /// Domain yang cakupannya disepakati baseline §1/D01–D15 tetapi belum punya
@@ -411,7 +429,12 @@ const FORBIDDEN_HARD_REJECT_PHRASES: &[(&str, &[&str])] = &[(
     &["address-level reporting", "address level reporting"],
 )];
 
-fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
+fn check_domain(
+    domain: &Domain,
+    path: &str,
+    inventory: &BTreeMap<String, String>,
+    findings: &mut Vec<Finding>,
+) {
     let subject = format!("{} ({path})", domain.id);
 
     if domain.inventory_refs.is_empty() {
@@ -420,6 +443,41 @@ fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
             "domain_requires_inventory_ref",
             "domain tidak merujuk satu pun baris docs/data/dataset-inventory.md",
         ));
+    }
+
+    // Setiap ref harus benar-benar menamai baris di dokumen — bukan hanya
+    // "tidak kosong". Ini yang menangkap id palsu (mis. FAKE-999).
+    for id in &domain.inventory_refs {
+        match row_status(inventory, id) {
+            None => findings.push(Finding::error(
+                &subject,
+                "inventory_ref_must_exist_in_dataset_inventory",
+                format!(
+                    "'{id}' tidak ditemukan sebagai baris nyata di \
+                     docs/data/dataset-inventory.md"
+                ),
+            )),
+            Some(status) => {
+                let expected = match domain.status.as_deref() {
+                    Some("gap") => Some(GAP_ROW_STATUS),
+                    Some("deferred") => Some(DEFERRED_ROW_STATUS),
+                    _ => None,
+                };
+                if let Some(expected) = expected
+                    && status != expected
+                {
+                    findings.push(Finding::error(
+                        &subject,
+                        "domain_status_must_match_referenced_row_status",
+                        format!(
+                            "domain berstatus '{}' tetapi baris '{id}' berstatus '{status}' \
+                             di dataset-inventory.md (diharapkan '{expected}')",
+                            domain.status.as_deref().unwrap_or("?")
+                        ),
+                    ));
+                }
+            }
+        }
     }
 
     if MUST_BE_GAP_NOT_DEFERRED.contains(&domain.id.as_str())
@@ -433,11 +491,44 @@ fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
         ));
     }
 
+    // Setiap intent yang mengutip inventory_ref-nya sendiri diperiksa
+    // terhadap status baris yang SEBENARNYA (bukan diklaim) — inilah yang
+    // menangkap "supported intent untuk baris gap" dan "hard reject untuk
+    // baris gap" yang diminta reviewer, secara mekanis dan umum (tidak
+    // spesifik per domain seperti dua konstanta di bawah).
+    check_intent_refs(
+        &subject,
+        "supported_intents",
+        &domain.supported_intents,
+        inventory,
+        INHERITED_ROW_STATUS,
+        "supported_intent_ref_must_be_inherited",
+        findings,
+    );
+    check_intent_refs(
+        &subject,
+        "gap_intents",
+        &domain.gap_intents,
+        inventory,
+        GAP_ROW_STATUS,
+        "gap_intent_ref_must_be_gap",
+        findings,
+    );
+    check_intent_refs(
+        &subject,
+        "unsupported_intents",
+        &domain.unsupported_intents,
+        inventory,
+        EXCLUDED_ROW_STATUS,
+        "hard_reject_ref_must_be_excluded",
+        findings,
+    );
+
     let gap_or_supported: Vec<String> = domain
         .supported_intents
         .iter()
         .chain(domain.gap_intents.iter())
-        .map(|intent| intent.to_lowercase())
+        .map(|intent| intent.phrase().to_lowercase())
         .collect();
 
     if let Some((_, forbidden)) = FORBIDDEN_GAP_OR_SUPPORTED_PHRASES
@@ -466,7 +557,7 @@ fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
             if domain
                 .unsupported_intents
                 .iter()
-                .any(|intent| intent.to_lowercase().contains(phrase))
+                .any(|intent| intent.phrase().to_lowercase().contains(phrase))
             {
                 findings.push(Finding::error(
                     &subject,
@@ -482,7 +573,7 @@ fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
 
     if domain.id == "client"
         && !domain.gap_intents.iter().any(|intent| {
-            let lower = intent.to_lowercase();
+            let lower = intent.phrase().to_lowercase();
             lower.contains("loan") || lower.contains("share")
         })
     {
@@ -495,7 +586,53 @@ fn check_domain(domain: &Domain, path: &str, findings: &mut Vec<Finding>) {
     }
 }
 
-fn check_area(area: &DataScopeArea, path: &str, findings: &mut Vec<Finding>) {
+/// Bandingkan setiap entri yang mengutip `inventory_ref` terhadap status
+/// baris sungguhan; entri tanpa ref (`IntentRef::Plain`) dilewati — itu bukan
+/// pernyataan atas satu baris inventaris tertentu (mis. "create loan
+/// account").
+fn check_intent_refs(
+    subject: &str,
+    field: &str,
+    intents: &[IntentRef],
+    inventory: &BTreeMap<String, String>,
+    expected_status: &str,
+    check_id: &str,
+    findings: &mut Vec<Finding>,
+) {
+    for intent in intents {
+        let Some(id) = intent.inventory_ref() else {
+            continue;
+        };
+        match row_status(inventory, id) {
+            None => findings.push(Finding::error(
+                subject,
+                "inventory_ref_must_exist_in_dataset_inventory",
+                format!(
+                    "{field} '{}' mengutip '{id}', tidak ditemukan sebagai baris nyata di \
+                     docs/data/dataset-inventory.md",
+                    intent.phrase()
+                ),
+            )),
+            Some(status) if status != expected_status => findings.push(Finding::error(
+                subject,
+                check_id,
+                format!(
+                    "{field} '{}' mengutip '{id}' (status sebenarnya '{status}'), diharapkan \
+                     '{expected_status}'",
+                    intent.phrase()
+                ),
+            )),
+            Some(_) => {}
+        }
+    }
+}
+
+fn check_area(
+    area: &DataScopeArea,
+    path: &str,
+    inventory: &BTreeMap<String, String>,
+    findings: &mut Vec<Finding>,
+) {
     let subject = format!("{} ({path})", area.id);
 
     if area.inventory_refs.is_empty() {
@@ -504,6 +641,38 @@ fn check_area(area: &DataScopeArea, path: &str, findings: &mut Vec<Finding>) {
             "area_requires_inventory_ref",
             "area tidak merujuk satu pun baris docs/data/dataset-inventory.md",
         ));
+    }
+
+    for id in &area.inventory_refs {
+        match row_status(inventory, id) {
+            None => findings.push(Finding::error(
+                &subject,
+                "inventory_ref_must_exist_in_dataset_inventory",
+                format!(
+                    "'{id}' tidak ditemukan sebagai baris nyata di \
+                     docs/data/dataset-inventory.md"
+                ),
+            )),
+            Some(status) => {
+                let expected = match area.status.as_deref() {
+                    Some("rejected_group") => Some(EXCLUDED_ROW_STATUS),
+                    _ => None,
+                };
+                if let Some(expected) = expected
+                    && status != expected
+                {
+                    findings.push(Finding::error(
+                        &subject,
+                        "area_status_must_match_referenced_row_status",
+                        format!(
+                            "area berstatus '{}' tetapi baris '{id}' berstatus '{status}' di \
+                             dataset-inventory.md (diharapkan '{expected}')",
+                            area.status.as_deref().unwrap_or("?")
+                        ),
+                    ));
+                }
+            }
+        }
     }
 
     // D09: audit tindakan Fineract sendiri (`m_portfolio_command_source`)
@@ -1060,13 +1229,36 @@ mod tests {
         findings.iter().any(|finding| finding.check == check)
     }
 
+    /// Peta status tetap untuk unit test — dibuat sekali di sini, bukan
+    /// diklaim benar oleh domain/area yang diuji. Nilainya sengaja mencampur
+    /// kelima kategori kosakata `dataset-inventory.md` supaya setiap test
+    /// bisa memilih id yang statusnya SESUAI (kasus positif) atau SENGAJA
+    /// TIDAK sesuai (kasus negatif/reintroduksi kontradiksi), tanpa
+    /// tergantung pada dokumen sungguhan berubah.
+    fn test_inventory() -> BTreeMap<String, String> {
+        [
+            ("CLI-1", "inherited"),
+            ("CLI-4", "gap"),
+            ("CLI-5", "gap"),
+            ("CLI-6", "gap"),
+            ("D09", "gap"),
+            ("D10", "deferred-onboarding"),
+            ("D12", "gap"),
+            ("D13", "excluded"),
+            ("LOAN-1", "gap"),
+        ]
+        .into_iter()
+        .map(|(id, status)| (id.to_string(), status.to_string()))
+        .collect()
+    }
+
     // FIN-153 (L1C): domain/area tanpa rujukan inventaris tidak punya
     // otoritas cakupan — build-order.md §3 L1C "Done when" poin 1.
     #[test]
     fn domain_without_inventory_ref_is_rejected() {
         let domain = parsed_domain("id: loan\nstatus: gap\n");
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "domain_requires_inventory_ref"));
     }
 
@@ -1074,8 +1266,89 @@ mod tests {
     fn area_without_inventory_ref_is_rejected() {
         let area = parsed_area("id: tax\n");
         let mut findings = Vec::new();
-        check_area(&area, "path", &mut findings);
+        check_area(&area, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "area_requires_inventory_ref"));
+    }
+
+    // Reviewer (2026-09-27, "FIN-153 validator acceptance still unmet"): un
+    // id yang tidak menamai baris nyata (mis. FAKE-999) harus gagal — bukan
+    // hanya "tidak kosong".
+    #[test]
+    fn a_fake_inventory_ref_that_names_no_real_row_is_rejected() {
+        let domain = parsed_domain("id: loan\nstatus: gap\ninventory_refs: [FAKE-999]\n");
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "inventory_ref_must_exist_in_dataset_inventory"));
+
+        let area = parsed_area("id: tax\ninventory_refs: [FAKE-999]\n");
+        let mut findings = Vec::new();
+        check_area(&area, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "inventory_ref_must_exist_in_dataset_inventory"));
+    }
+
+    // A `gap` domain whose own inventory_refs actually resolve to `inherited`
+    // (or any other mismatched status) means the domain-level status claim
+    // itself contradicts the document, not just a missing citation.
+    #[test]
+    fn gap_domain_referencing_an_inherited_row_is_rejected() {
+        let domain = parsed_domain("id: loan\nstatus: gap\ninventory_refs: [CLI-1]\n");
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "domain_status_must_match_referenced_row_status"));
+    }
+
+    // Reviewer: "a supported intent for a gap-only row fails".
+    #[test]
+    fn supported_intent_citing_a_gap_row_is_rejected() {
+        let domain = parsed_domain(
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\nsupported_intents:\n  - { phrase: \"client address\", inventory_ref: CLI-6 }\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "supported_intent_ref_must_be_inherited"));
+    }
+
+    // Reviewer: "a hard reject for a gap row fails".
+    #[test]
+    fn hard_reject_citing_a_gap_row_is_rejected() {
+        let domain = parsed_domain(
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\ngap_intents:\n  - { phrase: \"client loan account roster\", inventory_ref: CLI-5 }\n  - { phrase: \"client share account roster\", inventory_ref: CLI-5 }\nunsupported_intents:\n  - { phrase: \"client address\", inventory_ref: CLI-6 }\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "hard_reject_ref_must_be_excluded"));
+    }
+
+    // A `gap_intent` citing a row this document does not mark `gap` (mis. it
+    // is actually `excluded`, D13-style) is the general form of the same bug.
+    #[test]
+    fn gap_intent_citing_an_excluded_row_is_rejected() {
+        let domain = parsed_domain(
+            "id: accounting\nstatus: gap\ninventory_refs: [D12]\ngap_intents:\n  - { phrase: \"stretchy report execution\", inventory_ref: D13 }\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "gap_intent_ref_must_be_gap"));
+    }
+
+    // D13 (Fineract's own stretchy reports) stays excluded regardless: an
+    // out-of-scope-style area citing D13 must pass cleanly when its status
+    // and citation actually agree.
+    #[test]
+    fn d13_excluded_area_remains_correctly_modeled() {
+        let area = parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D13]\n");
+        let mut findings = Vec::new();
+        check_area(&area, "path", &test_inventory(), &mut findings);
+        assert!(findings.is_empty());
+
+        // The inverse — an out-of-scope area citing a merely-`gap` row — is
+        // the same class of bug as the client-address contradiction, now
+        // caught mechanically instead of only via the two hardcoded phrase
+        // lists below.
+        let mislabeled = parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D12]\n");
+        let mut findings = Vec::new();
+        check_area(&mislabeled, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "area_status_must_match_referenced_row_status"));
     }
 
     // Kontradiksi #4: tax/loan/accounting/audit "deferred" (istilah MVP)
@@ -1085,10 +1358,10 @@ mod tests {
     fn loan_and_tax_mislabeled_deferred_are_rejected() {
         for id in ["loan", "tax", "accounting", "audit"] {
             let domain = parsed_domain(&format!(
-                "id: {id}\nstatus: deferred\ninventory_refs: [X-1]\n"
+                "id: {id}\nstatus: deferred\ninventory_refs: [D10]\n"
             ));
             let mut findings = Vec::new();
-            check_domain(&domain, "path", &mut findings);
+            check_domain(&domain, "path", &test_inventory(), &mut findings);
             assert!(
                 has_check(&findings, "gap_domain_not_mislabeled_deferred"),
                 "{id} seharusnya ditolak sebagai deferred"
@@ -1101,7 +1374,7 @@ mod tests {
             "id: custom_datatables\nstatus: deferred\ninventory_refs: [D10]\n",
         );
         let mut findings = Vec::new();
-        check_domain(&custom_datatables, "path", &mut findings);
+        check_domain(&custom_datatables, "path", &test_inventory(), &mut findings);
         assert!(!has_check(&findings, "gap_domain_not_mislabeled_deferred"));
     }
 
@@ -1113,7 +1386,7 @@ mod tests {
             "id: accounting\nstatus: gap\ninventory_refs: [D12]\nsupported_intents:\n  - trial balance\n",
         );
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
     }
 
@@ -1125,7 +1398,7 @@ mod tests {
             "id: group_center\nstatus: candidate\ninventory_refs: [CLI-4]\nsupported_intents:\n  - group-owned savings reporting\n",
         );
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
     }
 
@@ -1137,7 +1410,7 @@ mod tests {
             "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\ngap_intents:\n  - client loan account roster\nunsupported_intents:\n  - address-level reporting\n",
         );
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "gap_item_not_hard_rejected"));
     }
 
@@ -1147,7 +1420,7 @@ mod tests {
     fn client_missing_all_account_types_is_rejected() {
         let domain = parsed_domain("id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\n");
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "client_all_account_types_declared"));
     }
 
@@ -1159,7 +1432,7 @@ mod tests {
             "id: audit_users_operations\ninventory_refs: [D09]\nexcluded_tables:\n  - m_portfolio_command_source\n",
         );
         let mut findings = Vec::new();
-        check_area(&area, "path", &mut findings);
+        check_area(&area, "path", &test_inventory(), &mut findings);
         assert!(has_check(&findings, "audit_source_command_in_scope"));
     }
 
@@ -1167,17 +1440,17 @@ mod tests {
     #[test]
     fn aligned_domain_and_area_pass_clean() {
         let domain = parsed_domain(
-            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1, CLI-5, CLI-6]\ngap_intents:\n  - client loan account roster\n  - client share account roster\n",
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1, CLI-5, CLI-6]\ngap_intents:\n  - { phrase: \"client loan account roster\", inventory_ref: CLI-5 }\n  - { phrase: \"client share account roster\", inventory_ref: CLI-5 }\n  - { phrase: \"client address\", inventory_ref: CLI-6 }\nsupported_intents:\n  - { phrase: \"client identity resolve\", inventory_ref: CLI-1 }\n",
         );
         let mut findings = Vec::new();
-        check_domain(&domain, "path", &mut findings);
-        assert!(findings.is_empty());
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(findings.is_empty(), "{findings:?}");
 
         let area = parsed_area(
             "id: audit_users_operations\ninventory_refs: [D09]\nexcluded_tables:\n  - m_appuser\n",
         );
         let mut findings = Vec::new();
-        check_area(&area, "path", &mut findings);
+        check_area(&area, "path", &test_inventory(), &mut findings);
         assert!(findings.is_empty());
     }
 }

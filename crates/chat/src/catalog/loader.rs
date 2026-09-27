@@ -13,6 +13,7 @@ use std::{
 use sha2::{Digest, Sha256};
 
 use crate::catalog::{
+    inventory,
     model::{
         Capability, DataScopeArea, Dataset, DatasetShape, Domain, QueryManifest, SafetyPolicy,
         SensitivityClasses,
@@ -31,6 +32,11 @@ pub struct Catalog {
     pub domains: Vec<Loaded<Domain>>,
     /// `knowledge/data-scope/areas/*.yaml`, dengan path asalnya — sama alasan.
     pub areas: Vec<Loaded<DataScopeArea>>,
+    /// `id` baris → status ternormalisasi, diparse langsung dari
+    /// `docs/data/dataset-inventory.md` (`catalog::inventory`) — sumber
+    /// kebenaran yang dipakai validator untuk memeriksa `inventory_refs`,
+    /// bukan salinan/konstanta yang bisa menyimpang diam-diam (FIN-153).
+    pub inventory: BTreeMap<String, String>,
     pub safety_policy: SafetyPolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
@@ -168,12 +174,28 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     let deferred_domains =
         DeferredDomains::build(&domain_entries, capabilities.iter().map(|loaded| &loaded.entry));
 
+    // `knowledge_root` (mis. "knowledge") dan `docs/` bertetangga di root repo
+    // yang sama, di setiap checkout maupun worktree — tidak butuh parameter
+    // path terpisah.
+    let inventory_doc = knowledge_root
+        .parent()
+        .unwrap_or(Path::new(""))
+        .join("docs/data/dataset-inventory.md");
+    let inventory = match std::fs::read_to_string(&inventory_doc) {
+        Ok(text) => inventory::parse(&text),
+        Err(error) => {
+            unreadable.push((display_path(&inventory_doc), error.to_string()));
+            BTreeMap::new()
+        }
+    };
+
     Ok(Catalog {
         capabilities,
         queries,
         datasets,
         domains,
         areas,
+        inventory,
         safety_policy,
         sensitivity_classes,
         unapproved_surfaces,

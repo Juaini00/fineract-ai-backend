@@ -34,9 +34,9 @@ supported_intents:
   - savings deposit totals
   - largest savings deposits
 gap_intents:
-  - reproduce the published report
-  - consolidated total across currencies
-  - completeness analysis by category
+  - { phrase: "reproduce the published report", inventory_ref: D01 }
+  - { phrase: "consolidated total across currencies", inventory_ref: D03 }
+  - { phrase: "completeness analysis by category", inventory_ref: D11 }
 unsupported_intents:
   - create savings account
   - reverse transaction
