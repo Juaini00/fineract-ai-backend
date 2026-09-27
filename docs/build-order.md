@@ -176,11 +176,18 @@ bureau FIN-125):
    the four `knowledge/CARRY-OVER.md` rules, recorded two-numbers-side-by-side
    in `knowledge/VERIFICATION.md`.
 
-**Status**: ⬜ — 4 of ~20 domains have any capability (client, savings,
-organization, group); the catalog reads 13 Fineract tables out of ~220
-(D15 audit). Loan, products, FD/RD (except one maturity capability), share,
+**Status**: ⬜ — the formal inventory now exists
+([data/dataset-inventory.md](data/dataset-inventory.md), FIN-152, merged
+2026-09-27: 100 rows, every §1 domain line and D01–D15 covered, zero
+omissions), but domain capabilities remain unchanged and incomplete: 4 of
+~20 domains have any capability (client, savings, organization, group); the
+catalog reads 13 Fineract tables out of ~220 (D15 audit; the inventory's own
+local read found 300 public tables and flags the 220↔300 gap for the owner,
+unresolved). Loan, products, FD/RD (except one maturity capability), share,
 GL traceability, tax, teller, standing instructions, provisioning, source
-audit and scheduler have **none**. The formal inventory was never written.
+audit and scheduler have **none**. FIN-153 (`knowledge/` alignment against
+the inventory) is next; L1C itself does not move above ⬜ until point 2 and
+point 3 of "Done when" above are also met.
 **Order inside L1C** is the `blocks` relations on FIN-107's children: FIN-152
 inventory → FIN-153 knowledge alignment → FIN-109 products → loan / FD-RD /
 share / savings → client, linking resources, GL, provisioning, audit →
