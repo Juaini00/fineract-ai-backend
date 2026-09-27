@@ -25,8 +25,8 @@ gap_intents:
   - { phrase: "tax by component or group", inventory_ref: PROD-10 }
   - { phrase: "applied tax on an account", inventory_ref: SAV-9 }
 unsupported_intents:
-  - create tax component
-  - update tax rate
+  - { phrase: "create tax component", exempt: "write_action" }
+  - { phrase: "update tax rate", exempt: "write_action" }
 default_rules:
   - Applied tax is agreed baseline scope (§1 Savings/FD-RD; SAV-9/PROD-10 `gap`) with no approved capability yet; requests answer unsupported with a gap reason, not a permanent rejection.
 checks:

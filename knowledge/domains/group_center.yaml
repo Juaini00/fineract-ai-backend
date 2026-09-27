@@ -22,8 +22,7 @@ concepts:
   - id: center
     meaning: A higher-level grouping that contains multiple groups.
     synonyms: [center, centre, pusat]
-supported_intents:
-  - resolve a group entity by name within authorized office scope
+supported_intents: []
 gap_intents:
   - { phrase: "group savings summary", inventory_ref: CLI-4 }
   - { phrase: "group loan summary", inventory_ref: CLI-4 }
@@ -31,11 +30,12 @@ gap_intents:
   - { phrase: "center loan summary", inventory_ref: CLI-4 }
   - { phrase: "group meeting attendance", inventory_ref: D08 }
 unsupported_intents:
-  - create group
-  - assign client to group
+  - { phrase: "create group", exempt: "write_action" }
+  - { phrase: "assign client to group", exempt: "write_action" }
 default_rules:
   - Only enabled when the local Fineract deployment uses group_center_foundation; otherwise respond as unsupported with a conditional-not-enabled reason.
   - Group/center scope covers every account type a member may hold (CLI-4/CLI-5), not savings alone; group identity resolve is the only approved capability today — any group/center-scoped account summary answers unsupported with a gap reason rather than being misrouted to the office-wide savings capability.
+  - "`group_identity_resolve` is itself an approved_mvp capability, but CLI-4's own row stays `gap` — its Capability column says \"group only, not client→group linkage\" (dataset-inventory.md CLI-4): the capability resolves a group entity, it does not yet resolve which groups a given client belongs to. supported_intents therefore stays empty here rather than citing CLI-4 as `inherited`, which the row itself is not — the capability's own manifest (`knowledge/capabilities/group/group_identity_resolve.yaml`) is where its actual scope is declared."
   - Group/center meeting schedule and attendance (D08) is agreed baseline scope; whether Fineract's calendar/meeting tables even exist on a given deployment is unresolved (dataset-inventory.md D08, not queried) — a future capability must not assume a calendar entry proves a meeting happened or was attended.
 checks:
   - id: conditional_domain

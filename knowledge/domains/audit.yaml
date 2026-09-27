@@ -27,9 +27,9 @@ gap_intents:
   - { phrase: "siapa membebaskan biaya", inventory_ref: D09 }
   - { phrase: "alasan yang tercatat", inventory_ref: D09 }
 unsupported_intents:
-  - raw command payload
-  - jarvis execution audit log
-  - application user administration
+  - { phrase: "raw command payload", exempt: "out_of_inventory_scope" }
+  - { phrase: "jarvis execution audit log", exempt: "out_of_inventory_scope" }
+  - { phrase: "application user administration", exempt: "out_of_inventory_scope" }
 default_rules:
   - Fineract's own source audit (m_portfolio_command_source) is agreed baseline scope (D09, dataset-inventory.md D09 `gap`) with no approved capability yet; it answers unsupported with a gap reason.
   - This is distinct from user/role/permission administration (still excluded, D15 non-analytic) and from Jarvis's own execution audit (database-design.md I8) or raw command payload, neither of which ever becomes gap or supported scope.

@@ -37,7 +37,7 @@ gap_intents:
   - { phrase: "family member detail", inventory_ref: D15d }
   - { phrase: "historical office as of a past date", inventory_ref: D02 }
 unsupported_intents:
-  - identity document reporting
+  - { phrase: "identity document reporting", exempt: "excluded_by_design_gap_row_nuance" }
 default_rules:
   - Client identity output requires explicit capability approval.
   - All account types owned by a client are agreed baseline scope (CLI-5); only the savings roster has an approved capability today, so a request for a client's loan or share accounts answers unsupported with a gap reason instead of returning the savings-only count as if it were the whole roster.
@@ -45,6 +45,7 @@ default_rules:
   - Direct client charges (D04, `m_client_charge`/`m_client_charge_paid_by`, both empty on the reference fixture) are agreed baseline scope with no approved capability yet; a request for a client-level charge (as opposed to a loan/savings account charge, which are separate capabilities) answers unsupported with a gap reason.
   - Family member detail (D15d, `m_family_members`) is selective/not-default, same pattern as CLI-6/CLI-8; it answers unsupported with a gap reason, not a hard policy rejection.
   - Historical branch attribution (D02) is agreed scope only where a history table exists; none does today (verified negative, dataset-inventory.md D02) — every domain row above is current-office only. A request explicitly asking for the office as of a past date must answer unsupported with a gap reason, never silently answer with the current office as if it were historical.
+  - "Identity document reporting (CLI-7) is marked `exempt`, not cited against CLI-7 directly: the row's inventory category normalizes to `gap`, but its own acceptance text is stronger than that — \"excluded by default; row exists only to record the exclusion\", \"not to be closed by a capability without a new decision\" — a permanent, by-design hard exclusion, the same shape as D13, not a merely-uncontracted item like address (CLI-6). Citing CLI-7 as a `gap_intents`/`unsupported_intents` ref would force a category (`gap` or `excluded`) neither of which fully matches this row's own nuance; `exempt` states that honestly instead of picking the wrong one."
 checks:
   - id: data_area_exists
     rule: data_areas must reference client_foundation.

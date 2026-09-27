@@ -293,35 +293,46 @@ pub struct DomainConcept {
     pub synonyms: Vec<String>,
 }
 
-/// Satu entri `supported_intents`/`gap_intents`/`unsupported_intents` — teks
-/// polos (kompatibel dengan seluruh file lama), atau map `{phrase,
-/// inventory_ref}` bila entri itu ingin diperiksa terhadap status baris
-/// `docs/data/dataset-inventory.md` yang sebenarnya (FIN-153). `inventory_ref`
-/// tidak wajib: banyak entri (mis. "create loan account") bukan pernyataan
-/// atas satu baris inventaris tertentu.
+/// Satu entri `supported_intents`/`gap_intents`/`unsupported_intents`.
+/// Sengaja **tidak ada varian teks polos** (FIN-153, temuan reviewer "plain
+/// intents bypass row-status checks"): sebuah teks bebas yang lolos tanpa
+/// dicek sama sekali membuat klasifikasi jadi sukarela — penulis domain baru
+/// bisa diam-diam kembali ke string biasa dan lolos `app catalog` tanpa
+/// terdeteksi. Setiap entri **wajib** salah satu dari dua bentuk map
+/// terstruktur ini; berkas YAML yang masih memuat teks polos gagal parse
+/// (`unreadable`, error keras), bukan lolos diam-diam:
+///
+/// - `{ phrase, inventory_ref }` — klaim atas satu baris
+///   `docs/data/dataset-inventory.md`; diperiksa terhadap status baris itu
+///   yang sebenarnya.
+/// - `{ phrase, exempt }` — sengaja di luar cakupan inventaris (aksi tulis
+///   seperti "create loan account", atau konsep milik Jarvis sendiri seperti
+///   raw command payload) — `exempt` adalah label singkat alasannya, dibaca
+///   manusia, tidak diperiksa terhadap dokumen.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum IntentRef {
-    Plain(String),
-    Ref {
-        phrase: String,
-        inventory_ref: String,
-    },
+    Ref { phrase: String, inventory_ref: String },
+    Exempt { phrase: String, exempt: String },
 }
 
 impl IntentRef {
     pub fn phrase(&self) -> &str {
         match self {
-            Self::Plain(phrase) => phrase,
             Self::Ref { phrase, .. } => phrase,
+            Self::Exempt { phrase, .. } => phrase,
         }
     }
 
     pub fn inventory_ref(&self) -> Option<&str> {
         match self {
-            Self::Plain(_) => None,
             Self::Ref { inventory_ref, .. } => Some(inventory_ref),
+            Self::Exempt { .. } => None,
         }
+    }
+
+    pub fn is_exempt(&self) -> bool {
+        matches!(self, Self::Exempt { .. })
     }
 }
 

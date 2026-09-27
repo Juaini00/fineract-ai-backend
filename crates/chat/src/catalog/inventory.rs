@@ -35,6 +35,14 @@ pub fn category(raw: &str) -> Option<&'static str> {
     KNOWN_STATUSES.iter().find(|&&known| raw.starts_with(known)).copied()
 }
 
+/// Ambang jumlah baris minimal yang dianggap sehat. Dokumen sungguhan
+/// menghasilkan ratusan baris (lihat `parses_the_real_dataset_inventory_document`);
+/// bila header tabel berubah dan parser diam-diam gagal, hasilnya jauh di
+/// bawah ini — pemanggil (`loader::load`) memakai ini untuk gagal keras
+/// (`unreadable`), bukan lolos dengan peta kosong/sebagian (FIN-153,
+/// permintaan reviewer: "parser harus fail closed").
+pub const MIN_EXPECTED_ROWS: usize = 50;
+
 /// `id` baris (mis. `ORG-1`, `D12`, `D15a`) → kategori status ternormalisasi.
 pub fn parse(markdown: &str) -> BTreeMap<String, String> {
     let mut rows = BTreeMap::new();

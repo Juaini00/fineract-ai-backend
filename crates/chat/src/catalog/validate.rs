@@ -503,6 +503,7 @@ fn check_domain(
         inventory,
         INHERITED_ROW_STATUS,
         "supported_intent_ref_must_be_inherited",
+        false,
         findings,
     );
     check_intent_refs(
@@ -512,6 +513,7 @@ fn check_domain(
         inventory,
         GAP_ROW_STATUS,
         "gap_intent_ref_must_be_gap",
+        false,
         findings,
     );
     check_intent_refs(
@@ -521,6 +523,7 @@ fn check_domain(
         inventory,
         EXCLUDED_ROW_STATUS,
         "hard_reject_ref_must_be_excluded",
+        true,
         findings,
     );
 
@@ -586,10 +589,15 @@ fn check_domain(
     }
 }
 
-/// Bandingkan setiap entri yang mengutip `inventory_ref` terhadap status
-/// baris sungguhan; entri tanpa ref (`IntentRef::Plain`) dilewati — itu bukan
-/// pernyataan atas satu baris inventaris tertentu (mis. "create loan
-/// account").
+/// Bandingkan setiap entri terhadap status baris sungguhan. `IntentRef` tidak
+/// punya varian teks polos lagi (temuan reviewer "plain intents bypass
+/// row-status checks") — setiap entri wajib `Ref` (diperiksa terhadap
+/// `expected_status`) atau, hanya bila `allow_exempt`, `Exempt` (aksi tulis
+/// atau konsep di luar cakupan inventaris — mis. "create loan account" atau
+/// raw command payload; dilewati dari pengecekan status, bukan dari
+/// klasifikasi eksplisit). `allow_exempt = false` pada `supported_intents`
+/// dan `gap_intents`: kedua field itu SELALU pernyataan atas satu baris,
+/// tidak ada kasus "sengaja di luar cakupan" yang sah untuknya.
 fn check_intent_refs(
     subject: &str,
     field: &str,
@@ -597,9 +605,24 @@ fn check_intent_refs(
     inventory: &BTreeMap<String, String>,
     expected_status: &str,
     check_id: &str,
+    allow_exempt: bool,
     findings: &mut Vec<Finding>,
 ) {
     for intent in intents {
+        if intent.is_exempt() {
+            if !allow_exempt {
+                findings.push(Finding::error(
+                    subject,
+                    "exempt_not_allowed_here",
+                    format!(
+                        "{field} '{}' ditandai exempt, tetapi field ini selalu pernyataan atas \
+                         satu baris inventaris — exempt hanya sah di unsupported_intents",
+                        intent.phrase()
+                    ),
+                ));
+            }
+            continue;
+        }
         let Some(id) = intent.inventory_ref() else {
             continue;
         };
@@ -1383,7 +1406,7 @@ mod tests {
     #[test]
     fn accounting_trial_balance_reintroduced_is_rejected() {
         let domain = parsed_domain(
-            "id: accounting\nstatus: gap\ninventory_refs: [D12]\nsupported_intents:\n  - trial balance\n",
+            "id: accounting\nstatus: gap\ninventory_refs: [D12]\nsupported_intents:\n  - { phrase: \"trial balance\", inventory_ref: D12 }\n",
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
@@ -1395,7 +1418,7 @@ mod tests {
     #[test]
     fn group_center_savings_only_reintroduced_is_rejected() {
         let domain = parsed_domain(
-            "id: group_center\nstatus: candidate\ninventory_refs: [CLI-4]\nsupported_intents:\n  - group-owned savings reporting\n",
+            "id: group_center\nstatus: candidate\ninventory_refs: [CLI-4]\nsupported_intents:\n  - { phrase: \"group-owned savings reporting\", inventory_ref: CLI-4 }\n",
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
@@ -1407,7 +1430,7 @@ mod tests {
     #[test]
     fn client_address_hard_reject_reintroduced_is_rejected() {
         let domain = parsed_domain(
-            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\ngap_intents:\n  - client loan account roster\nunsupported_intents:\n  - address-level reporting\n",
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1, CLI-5]\ngap_intents:\n  - { phrase: \"client loan account roster\", inventory_ref: CLI-5 }\nunsupported_intents:\n  - { phrase: \"address-level reporting\", exempt: \"write_action\" }\n",
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
@@ -1452,5 +1475,89 @@ mod tests {
         let mut findings = Vec::new();
         check_area(&area, "path", &test_inventory(), &mut findings);
         assert!(findings.is_empty());
+    }
+
+    // Reviewer (2026-09-27, "FIN-153 validator bypass: plain intents"): a
+    // bare string used to be silently accepted (`IntentRef::Plain`) and skip
+    // every row-status check entirely — a domain author could revert to
+    // plain text and escape validation without anyone choosing to bypass it
+    // on purpose. `IntentRef` no longer has that variant, so these forms
+    // must fail to *parse*, not merely fail a semantic check — proving the
+    // bypass is closed at the schema, not by a runtime opt-in.
+    #[test]
+    fn a_bare_plain_supported_intent_fails_to_parse() {
+        let result: Result<Domain, _> = serde_yaml::from_str(
+            "id: products\nstatus: gap\ninventory_refs: [PROD-1]\nsupported_intents:\n  - loan product master list\n",
+        );
+        assert!(result.is_err(), "a plain string must not deserialize into IntentRef");
+    }
+
+    #[test]
+    fn a_bare_plain_gap_intent_fails_to_parse() {
+        let result: Result<Domain, _> = serde_yaml::from_str(
+            "id: products\nstatus: gap\ninventory_refs: [PROD-1]\ngap_intents:\n  - loan product master list\n",
+        );
+        assert!(result.is_err(), "a plain string must not deserialize into IntentRef");
+    }
+
+    #[test]
+    fn a_bare_plain_unsupported_intent_fails_to_parse() {
+        let result: Result<Domain, _> = serde_yaml::from_str(
+            "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\nunsupported_intents:\n  - client charge\n",
+        );
+        assert!(result.is_err(), "a plain string must not deserialize into IntentRef, even in unsupported_intents");
+    }
+
+    // A structured entry marked `exempt` is a deliberate, visible choice —
+    // the point is that skipping the row-status check now always leaves a
+    // trace in the file, never happens by merely typing a bare string.
+    #[test]
+    fn exempt_is_only_permitted_on_unsupported_intents() {
+        let domain = parsed_domain(
+            "id: products\nstatus: gap\ninventory_refs: [PROD-1]\ngap_intents:\n  - { phrase: \"loan product master list\", exempt: \"write_action\" }\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(has_check(&findings, "exempt_not_allowed_here"));
+    }
+
+    #[test]
+    fn an_exempt_unsupported_intent_is_not_checked_against_excluded_status() {
+        let domain = parsed_domain(
+            "id: loan\nstatus: gap\ninventory_refs: [LOAN-1]\nunsupported_intents:\n  - { phrase: \"create loan account\", exempt: \"write_action\" }\n",
+        );
+        let mut findings = Vec::new();
+        check_domain(&domain, "path", &test_inventory(), &mut findings);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    // Reviewer: "inventory parser should fail closed if zero/partial rows
+    // due a changed header". The check itself lives in `loader::load`
+    // (compares `inventory::parse`'s row count against
+    // `inventory::MIN_EXPECTED_ROWS`); this proves the threshold is
+    // meaningful against the real document's actual yield.
+    #[test]
+    fn the_real_document_comfortably_clears_the_fail_closed_threshold() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/data/dataset-inventory.md");
+        let markdown = std::fs::read_to_string(&path).expect("dataset-inventory.md terbaca");
+        let rows = crate::catalog::inventory::parse(&markdown);
+        assert!(
+            rows.len() >= crate::catalog::inventory::MIN_EXPECTED_ROWS,
+            "got {} rows, threshold is {}",
+            rows.len(),
+            crate::catalog::inventory::MIN_EXPECTED_ROWS
+        );
+
+        // A header that no longer ends "| Confidence | Status |" (mis. a
+        // rename) yields zero rows — exactly the failure `loader::load`
+        // must catch, not silently swallow.
+        let renamed_header = markdown.replace("| Confidence | Status |", "| Confidence | Disposition |");
+        let rows_after_rename = crate::catalog::inventory::parse(&renamed_header);
+        assert!(
+            rows_after_rename.len() < crate::catalog::inventory::MIN_EXPECTED_ROWS,
+            "a renamed header should drop well below the fail-closed threshold, got {} rows",
+            rows_after_rename.len()
+        );
     }
 }

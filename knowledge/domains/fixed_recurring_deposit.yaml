@@ -34,8 +34,8 @@ gap_intents:
   - { phrase: "recurring deposit contribution", inventory_ref: FDRD-8 }
   - { phrase: "recurring deposit shortfall", inventory_ref: FDRD-10 }
 unsupported_intents:
-  - create fixed deposit account
-  - create recurring deposit account
+  - { phrase: "create fixed deposit account", exempt: "write_action" }
+  - { phrase: "create recurring deposit account", exempt: "write_action" }
 default_rules:
   - FD/RD is agreed baseline scope with no approved capability yet for FDRD-1, FDRD-3, FDRD-5..8, FDRD-10 (dataset-inventory.md, `gap`); every such request answers unsupported with a gap reason.
   - "FDRD-2 (terms/maturity) is the one row an existing approved capability touches (`savings/deposit_maturity_by_client`) — its inventory status stays `gap` pending the four CARRY-OVER rules, not because no capability exists. `maturity`/`fixed deposit`/`recurring deposit` are therefore deliberately NOT this domain's own concept synonyms: they already belong to that capability's vocabulary, and adding them here would risk shadowing a working answer instead of only catching the genuinely uncovered rows above."

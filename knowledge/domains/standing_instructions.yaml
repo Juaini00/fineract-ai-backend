@@ -18,8 +18,8 @@ supported_intents: []
 gap_intents:
   - { phrase: "standing instruction execution history", inventory_ref: D05 }
 unsupported_intents:
-  - create standing instruction
-  - cancel standing instruction
+  - { phrase: "create standing instruction", exempt: "write_action" }
+  - { phrase: "cancel standing instruction", exempt: "write_action" }
 default_rules:
   - Standing instructions (D05) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
   - A future capability must trace a failure claim to a history row with a failure status — "no transfer found" is never itself proof of failure (D05's own rule).

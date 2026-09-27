@@ -20,7 +20,7 @@ supported_intents: []
 gap_intents:
   - { phrase: "provisioning result history", inventory_ref: D07 }
 unsupported_intents:
-  - create provisioning entry
+  - { phrase: "create provisioning entry", exempt: "write_action" }
 default_rules:
   - Actual provisioning results (D07) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
   - A future capability must read the recorded provisioning entry/history, never recompute one by multiplying today's criteria percentage by historical outstanding (D07's own rule).

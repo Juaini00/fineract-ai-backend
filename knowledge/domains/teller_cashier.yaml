@@ -23,8 +23,8 @@ gap_intents:
   - { phrase: "cashier assignment", inventory_ref: D06 }
   - { phrase: "inter-office cash transaction", inventory_ref: D15e }
 unsupported_intents:
-  - open teller shift
-  - close teller shift
+  - { phrase: "open teller shift", exempt: "write_action" }
+  - { phrase: "close teller shift", exempt: "write_action" }
 default_rules:
   - Cashier/teller assignment (D06) is agreed baseline scope with no approved capability yet; it answers unsupported with a gap reason.
   - Cash position/reconciliation has no candidate table in this schema (verified missing) — a future capability cannot promise it without a new decision; recorded cash is never asserted as physical cash.

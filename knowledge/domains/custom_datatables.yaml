@@ -21,8 +21,8 @@ concepts:
     synonyms: [custom datatable, registered table, tabel kustom]
 supported_intents: []
 unsupported_intents:
-  - create custom datatable
-  - add datatable column
+  - { phrase: "create custom datatable", exempt: "write_action" }
+  - { phrase: "add datatable column", exempt: "write_action" }
 default_rules:
   - Custom datatables (D10) are deferred to deployment onboarding, not merely uncontracted — the table/field set is unknown until a specific deployment's registry is inventoried and approved; it answers unsupported with a deferred reason, distinct from a gap domain's reason.
   - Nothing may be assumed about an unregistered/unmapped table; the user is never asked to guess a table name.

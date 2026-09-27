@@ -50,9 +50,9 @@ gap_intents:
   - { phrase: "largest outstanding loans", inventory_ref: LOAN-8 }
   - { phrase: "arrears summary", inventory_ref: LOAN-9 }
 unsupported_intents:
-  - create loan account
-  - disburse loan
-  - reverse loan transaction
+  - { phrase: "create loan account", exempt: "write_action" }
+  - { phrase: "disburse loan", exempt: "write_action" }
+  - { phrase: "reverse loan transaction", exempt: "write_action" }
 default_rules:
   - Loan is agreed baseline scope with no approved capability yet (dataset-inventory.md LOAN-1..12, every row `gap`); every loan-related request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
   - "D01/D03/D11 apply to loan balances the same way they apply to savings (see savings.yaml default_rules for the full rule text): no reproduce-published-report branch, no cross-currency consolidation, and completeness/unclassified breakdowns are distinct from a plain aggregate. Loan's own `gap` status already blocks any loan-scoped request on these subjects; the citation here is for inventory traceability, not a second guard."

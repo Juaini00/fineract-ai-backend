@@ -49,9 +49,9 @@ gap_intents:
   - { phrase: "savings product master list", inventory_ref: PROD-2 }
   - { phrase: "share product master list", inventory_ref: PROD-3 }
 unsupported_intents:
-  - create loan product
-  - create savings product
-  - update product configuration
+  - { phrase: "create loan product", exempt: "write_action" }
+  - { phrase: "create savings product", exempt: "write_action" }
+  - { phrase: "update product configuration", exempt: "write_action" }
 default_rules:
   - Product master data (PROD-1..11) is agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason, never routed to an unrelated approved capability.
   - Master listing must include unused products (§1 rule) once a capability exists — it must never be conflated with account-usage capabilities that already exist per-domain (mis. savings/products_by_client).

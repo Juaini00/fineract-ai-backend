@@ -36,8 +36,8 @@ gap_intents:
   - { phrase: "actual account transfer", inventory_ref: LINK-4 }
   - { phrase: "payment allocation breakdown", inventory_ref: LINK-5 }
 unsupported_intents:
-  - create account link
-  - execute account transfer
+  - { phrase: "create account link", exempt: "write_action" }
+  - { phrase: "execute account transfer", exempt: "write_action" }
 default_rules:
   - Linking resources are agreed baseline scope with no approved capability yet (dataset-inventory.md LINK-3..8, every row `gap`); every request answers unsupported with a gap reason.
   - A linked-account association is not proof a transfer happened (§1 rule 35 / XR-EVID) — a future capability must keep LINK-3 (link existence) and LINK-4 (evidenced transfer) distinct, never conflated.

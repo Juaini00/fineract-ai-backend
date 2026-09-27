@@ -182,7 +182,29 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         .unwrap_or(Path::new(""))
         .join("docs/data/dataset-inventory.md");
     let inventory = match std::fs::read_to_string(&inventory_doc) {
-        Ok(text) => inventory::parse(&text),
+        Ok(text) => {
+            let parsed = inventory::parse(&text);
+            // Fail closed (FIN-153, permintaan reviewer): header tabel yang
+            // berubah membuat parser diam-diam menghasilkan peta
+            // kosong/sebagian, dan setiap pengecekan status baris di
+            // validate.rs akan lolos dengan alasan yang salah ("ref tidak
+            // ditemukan" bukan "parser rusak"). Jumlah baris jauh di bawah
+            // ambang sehat dinyatakan sebagai berkas tidak terbaca — error
+            // keras yang jelas sebabnya, bukan ratusan error ref yang
+            // menyesatkan.
+            if parsed.len() < inventory::MIN_EXPECTED_ROWS {
+                unreadable.push((
+                    display_path(&inventory_doc),
+                    format!(
+                        "hanya {} baris terparse (ambang sehat {}) — header tabel mungkin \
+                         berubah; lihat catalog::inventory::parse",
+                        parsed.len(),
+                        inventory::MIN_EXPECTED_ROWS
+                    ),
+                ));
+            }
+            parsed
+        }
         Err(error) => {
             unreadable.push((display_path(&inventory_doc), error.to_string()));
             BTreeMap::new()

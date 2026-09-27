@@ -19,8 +19,8 @@ gap_intents:
   - { phrase: "job run history", inventory_ref: D14 }
   - { phrase: "batch job status", inventory_ref: D14 }
 unsupported_intents:
-  - trigger job
-  - rerun job
+  - { phrase: "trigger job", exempt: "write_action" }
+  - { phrase: "rerun job", exempt: "write_action" }
 default_rules:
   - Scheduler/batch job runs (D14) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
   - A future capability is read-only history, not real-time monitoring, and must never trigger or re-run a job.

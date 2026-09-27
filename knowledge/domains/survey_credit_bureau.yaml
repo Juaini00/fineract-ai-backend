@@ -23,8 +23,8 @@ concepts:
     synonyms: [credit bureau report, credit report]
 supported_intents: []
 unsupported_intents:
-  - create survey response
-  - request credit bureau integration config
+  - { phrase: "create survey response", exempt: "write_action" }
+  - { phrase: "request credit bureau integration config", exempt: "write_action" }
 default_rules:
   - Surveys/PPI (D15a) and credit bureau results (D15b) are deferred to deployment onboarding, not merely uncontracted; every request answers unsupported with a deferred reason, distinct from a gap domain's reason.
   - Credit bureau integration config (`m_creditbureau*`) stays excluded even once results are approved — the config and result tables must never be conflated.
