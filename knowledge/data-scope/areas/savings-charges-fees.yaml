@@ -1,6 +1,8 @@
 id: savings_charges_fees
 status: secondary
-source_doc: docs/reporting-data-scope.md#36-savings-charges-and-fees
+source_doc: docs/data/dataset-inventory.md#6-domain-e--savings
+inventory_refs:
+  - SAV-7
 detail_doc: docs/reporting-data/savings-charges-fees.md
 description: Savings charges, fees, penalties, paid amounts, waived amounts, and outstanding amounts.
 included_tables:

@@ -13,6 +13,7 @@ use std::{
 use sha2::{Digest, Sha256};
 
 use crate::catalog::{
+    inventory,
     model::{
         Capability, DataScopeArea, Dataset, DatasetShape, Domain, QueryManifest, SafetyPolicy,
         SensitivityClasses,
@@ -26,6 +27,16 @@ pub struct Catalog {
     pub capabilities: Vec<Loaded<Capability>>,
     pub queries: Vec<Loaded<QueryManifest>>,
     pub datasets: Vec<Loaded<Dataset>>,
+    /// `knowledge/domains/*.yaml`, dengan path asalnya — dipakai validator
+    /// katalog untuk memeriksa keselarasan cakupan (FIN-153 L1C).
+    pub domains: Vec<Loaded<Domain>>,
+    /// `knowledge/data-scope/areas/*.yaml`, dengan path asalnya — sama alasan.
+    pub areas: Vec<Loaded<DataScopeArea>>,
+    /// `id` baris → status ternormalisasi, diparse langsung dari
+    /// `docs/data/dataset-inventory.md` (`catalog::inventory`) — sumber
+    /// kebenaran yang dipakai validator untuk memeriksa `inventory_refs`,
+    /// bukan salinan/konstanta yang bisa menyimpang diam-diam (FIN-153).
+    pub inventory: BTreeMap<String, String>,
     pub safety_policy: SafetyPolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
@@ -65,8 +76,8 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     let mut sensitivity_classes = BTreeSet::new();
     let mut sql_files = BTreeMap::new();
     let mut secret_fields = Vec::new();
-    let mut areas: Vec<DataScopeArea> = Vec::new();
-    let mut domains: Vec<Domain> = Vec::new();
+    let mut areas: Vec<Loaded<DataScopeArea>> = Vec::new();
+    let mut domains: Vec<Loaded<Domain>> = Vec::new();
 
     // Diurutkan: hash tidak boleh bergantung pada urutan pembacaan direktori.
     let mut yaml_paths = collect(knowledge_root, &["yaml", "yml"])?;
@@ -123,12 +134,18 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
             }
         } else if relative.contains("/data-scope/areas/") {
             match serde_yaml::from_str::<DataScopeArea>(&text) {
-                Ok(area) => areas.push(area),
+                Ok(entry) => areas.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if under("domains") {
             match serde_yaml::from_str::<Domain>(&text) {
-                Ok(domain) => domains.push(domain),
+                Ok(entry) => domains.push(Loaded {
+                    path: relative,
+                    entry,
+                }),
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         }
@@ -144,19 +161,63 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         sql_files.insert(relative, text);
     }
 
+    let area_entries: Vec<DataScopeArea> =
+        areas.iter().map(|loaded| loaded.entry.clone()).collect();
+    let domain_entries: Vec<Domain> = domains.iter().map(|loaded| loaded.entry.clone()).collect();
+
     let unapproved_surfaces = Surfaces::build(
         &secret_fields,
-        &areas,
-        &domains,
+        &area_entries,
+        &domain_entries,
         capabilities.iter().map(|loaded| &loaded.entry),
     );
     let deferred_domains =
-        DeferredDomains::build(&domains, capabilities.iter().map(|loaded| &loaded.entry));
+        DeferredDomains::build(&domain_entries, capabilities.iter().map(|loaded| &loaded.entry));
+
+    // `knowledge_root` (mis. "knowledge") dan `docs/` bertetangga di root repo
+    // yang sama, di setiap checkout maupun worktree — tidak butuh parameter
+    // path terpisah.
+    let inventory_doc = knowledge_root
+        .parent()
+        .unwrap_or(Path::new(""))
+        .join("docs/data/dataset-inventory.md");
+    let inventory = match std::fs::read_to_string(&inventory_doc) {
+        Ok(text) => {
+            let parsed = inventory::parse(&text);
+            // Fail closed (FIN-153, permintaan reviewer): header tabel yang
+            // berubah membuat parser diam-diam menghasilkan peta
+            // kosong/sebagian, dan setiap pengecekan status baris di
+            // validate.rs akan lolos dengan alasan yang salah ("ref tidak
+            // ditemukan" bukan "parser rusak"). Jumlah baris jauh di bawah
+            // ambang sehat dinyatakan sebagai berkas tidak terbaca — error
+            // keras yang jelas sebabnya, bukan ratusan error ref yang
+            // menyesatkan.
+            if parsed.len() < inventory::MIN_EXPECTED_ROWS {
+                unreadable.push((
+                    display_path(&inventory_doc),
+                    format!(
+                        "hanya {} baris terparse (ambang sehat {}) — header tabel mungkin \
+                         berubah; lihat catalog::inventory::parse",
+                        parsed.len(),
+                        inventory::MIN_EXPECTED_ROWS
+                    ),
+                ));
+            }
+            parsed
+        }
+        Err(error) => {
+            unreadable.push((display_path(&inventory_doc), error.to_string()));
+            BTreeMap::new()
+        }
+    };
 
     Ok(Catalog {
         capabilities,
         queries,
         datasets,
+        domains,
+        areas,
+        inventory,
         safety_policy,
         sensitivity_classes,
         unapproved_surfaces,

@@ -1,0 +1,33 @@
+info:
+  name: "OVR-6.6 domain gap (historical office as of a past date, D02) — job"
+  type: http
+  seq: 38.9983
+  description: |
+    D02 (historical branch attribution — historis hanya bila tabel history ada;
+    tidak ada di schema ini, verified negative) — `gap_intents` di
+    `knowledge/domains/client.yaml`, FIN-153.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_d02_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the historical office as of a past date for this client.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_d02_key", "fin153-deferred-d02-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_d02_job", res.getBody().data.job_id);

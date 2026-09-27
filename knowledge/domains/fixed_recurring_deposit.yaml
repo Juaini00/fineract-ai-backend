@@ -1,0 +1,45 @@
+id: fixed_recurring_deposit
+status: gap
+display_name: Fixed and Recurring Deposit
+description: >-
+  FD/RD identity, terms, funding, interest, charges/tax, maturity/preclosure,
+  transactions, and RD contributions/schedule/shortfall — §2 "FD/RD"
+  (dataset-scope-decisions.md:28, :40-58) and dataset-inventory.md
+  FDRD-1..10. FD/RD share `m_savings_account` with the `savings` domain but
+  stay a separate domain here so a maturity/preclosure question is never
+  answered as if it were an ordinary savings account. Agreed baseline scope;
+  no approved Mode-1 capability exists yet (one existing savings capability,
+  `deposit_maturity_by_client`, touches FDRD-2 but has not cleared the
+  CARRY-OVER rules for this row).
+inventory_refs:
+  - FDRD-1
+  - FDRD-2
+  - FDRD-3
+  - FDRD-4
+  - FDRD-5
+  - FDRD-6
+  - FDRD-7
+  - FDRD-8
+  - FDRD-9
+  - FDRD-10
+data_areas: []
+concepts:
+  - id: preclosure
+    meaning: Closing a term deposit before its maturity date.
+    synonyms: [preclosure, pre-closure, pencairan dini]
+supported_intents: []
+gap_intents:
+  - { phrase: "fixed deposit funding", inventory_ref: FDRD-3 }
+  - { phrase: "fixed deposit preclosure", inventory_ref: FDRD-6 }
+  - { phrase: "recurring deposit contribution", inventory_ref: FDRD-8 }
+  - { phrase: "recurring deposit shortfall", inventory_ref: FDRD-10 }
+unsupported_intents:
+  - { phrase: "create fixed deposit account", exempt: "write_action" }
+  - { phrase: "create recurring deposit account", exempt: "write_action" }
+default_rules:
+  - FD/RD is agreed baseline scope with no approved capability yet for FDRD-1, FDRD-3, FDRD-5..8, FDRD-10 (dataset-inventory.md, `gap`); every such request answers unsupported with a gap reason.
+  - "FDRD-2 (terms/maturity) is the one row an existing approved capability touches (`savings/deposit_maturity_by_client`) — its inventory status stays `gap` pending the four CARRY-OVER rules, not because no capability exists. `maturity`/`fixed deposit`/`recurring deposit` are therefore deliberately NOT this domain's own concept synonyms: they already belong to that capability's vocabulary, and adding them here would risk shadowing a working answer instead of only catching the genuinely uncovered rows above."
+  - Maturity amount is a projection, not payout proof (§2 rule) — any future capability on the remaining rows must label it as such, never assert it as paid.
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to inherited.

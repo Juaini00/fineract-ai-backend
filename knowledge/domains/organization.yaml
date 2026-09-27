@@ -2,6 +2,9 @@ id: organization
 status: approved_mvp
 display_name: Organization
 description: Office and branch context used for office-scoped reporting.
+inventory_refs:
+  - ORG-1
+  - ORG-3
 data_areas:
   - organization_foundation
 concepts:
@@ -9,12 +12,12 @@ concepts:
     meaning: Organization unit used to scope reports.
     synonyms: [office, branch, location, organization unit]
 supported_intents:
-  - office scoped reporting
-  - office summary
-  - active staff count by authorized office scope
+  - { phrase: "office scoped reporting", inventory_ref: ORG-1 }
+  - { phrase: "office summary", inventory_ref: ORG-1 }
+  - { phrase: "active staff count by authorized office scope", inventory_ref: ORG-1 }
 unsupported_intents:
-  - create office
-  - update office
+  - { phrase: "create office", exempt: "write_action" }
+  - { phrase: "update office", exempt: "write_action" }
 default_rules:
   - Organization knowledge supports office-scoped reporting only; it does not grant write access.
 checks:

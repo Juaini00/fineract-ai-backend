@@ -1,0 +1,46 @@
+id: linking_resources
+status: gap
+display_name: Linking resources
+description: >-
+  Cross-cutting resources that connect accounts to each other and to
+  payments — linked accounts, actual account transfers, payment allocation,
+  charge settlement, reversal/correction, and payment type — per §1
+  "Resource penghubung" (dataset-scope-decisions.md:27) and
+  dataset-inventory.md LINK-3..8 (LINK-1/LINK-2 are cross-references to
+  CLI-5/PROD-1..3, not separate rows). Agreed baseline scope; no approved
+  Mode-1 capability exists yet.
+inventory_refs:
+  - LINK-3
+  - LINK-4
+  - LINK-5
+  - LINK-6
+  - LINK-7
+  - LINK-8
+data_areas: []
+concepts:
+  - id: linked_account
+    meaning: A declared association between two accounts (savings/loan), not itself proof of a transfer.
+    synonyms: [linked account, akun tertaut]
+  - id: account_transfer
+    meaning: An actual, evidenced movement of funds between accounts.
+    synonyms: [account transfer, transfer antar akun]
+  - id: payment_allocation
+    meaning: How one payment splits across principal/interest/fee/penalty components.
+    synonyms: [payment allocation, alokasi pembayaran]
+  - id: charge_settlement
+    meaning: Which transaction actually paid a given charge.
+    synonyms: [charge settlement, pelunasan biaya]
+supported_intents: []
+gap_intents:
+  - { phrase: "linked account association", inventory_ref: LINK-3 }
+  - { phrase: "actual account transfer", inventory_ref: LINK-4 }
+  - { phrase: "payment allocation breakdown", inventory_ref: LINK-5 }
+unsupported_intents:
+  - { phrase: "create account link", exempt: "write_action" }
+  - { phrase: "execute account transfer", exempt: "write_action" }
+default_rules:
+  - Linking resources are agreed baseline scope with no approved capability yet (dataset-inventory.md LINK-3..8, every row `gap`); every request answers unsupported with a gap reason.
+  - A linked-account association is not proof a transfer happened (§1 rule 35 / XR-EVID) — a future capability must keep LINK-3 (link existence) and LINK-4 (evidenced transfer) distinct, never conflated.
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to inherited.

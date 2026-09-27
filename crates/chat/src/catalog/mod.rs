@@ -5,6 +5,7 @@
 //! secara mekanis, dan yang memberi `catalog_version_id` + `content_hash` yang
 //! wajib dicatat plan (T3) dan node run (T4).
 
+pub mod inventory;
 pub mod loader;
 pub mod model;
 pub mod probe;

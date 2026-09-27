@@ -1,20 +1,30 @@
 id: audit_users_operations
-status: deferred
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: Application users, roles, permissions, and operational audit logs.
+status: rejected
+source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
+inventory_refs:
+  - D15
+description: >-
+  Application users, roles, and permissions administration — excluded,
+  non-analytic (D15's closing disposition list,
+  dataset-scope-decisions.md:192). Deliberately **not** linked to any domain
+  in `allowed_domains`/no domain lists this as a `data_area`: it must stay
+  enforced by the policy guard (`catalog::surface::Surfaces`,
+  `BlockedByPolicy`) unconditionally, never softened to `Unsupported` by an
+  uncontracted-domain skip. Fineract's own command/action audit
+  (`m_portfolio_command_source`, D09) is a **separate** area,
+  `source_audit.yaml` — it is agreed scope, not excluded, and must never be
+  merged back into this file's excluded_tables.
 included_tables: []
 conditional_tables: []
 excluded_tables:
   - m_appuser
   - m_role
   - m_permission
-  - m_portfolio_command_source
-  - request_audit_table
 allowed_domains: []
 default_rules:
-  - User and audit data is operational, not business reporting; deferred until a separate audit reporting capability set is approved.
+  - User/role/permission administration is operational, not business reporting, and stays excluded (D15 non-analytic) regardless of any domain's status.
 checks:
-  - id: deferred_not_runtime
-    rule: this area must not be referenced by approved_mvp capabilities or queries.
   - id: security_sensitive_by_default
-    rule: user, role, permission, and audit fields must be security_sensitive unless explicitly approved.
+    rule: user, role, and permission fields must be security_sensitive unless explicitly approved.
+  - id: source_audit_not_merged_here
+    rule: m_portfolio_command_source (D09, agreed scope) must never appear in this file's excluded_tables — it belongs to source_audit.yaml instead.

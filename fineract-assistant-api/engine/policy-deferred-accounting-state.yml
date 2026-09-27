@@ -18,6 +18,6 @@ runtime:
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
           expect(job.completeness).to.equal("Unknown");
-          expect(job.completeness_reason).to.equal("domain_deferred");
+          expect(job.completeness_reason).to.equal("domain_gap");
           expect(job.plan_version).to.equal(null);
         });

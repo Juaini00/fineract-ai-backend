@@ -1,7 +1,17 @@
 id: accounting
-status: deferred
+status: gap
 display_name: Accounting
-description: General ledger and journal entry reporting.
+description: >-
+  General ledger traceability per D12 (dataset-scope-decisions.md:156-164) —
+  journal entries per transaction/account and the balance/movement of one
+  named GL account (`acc_gl_journal_entry`, `acc_gl_account`). Full trial
+  balance, balance sheet, and profit-and-loss reports are explicitly and
+  permanently out of scope (D12's own boundary), never merely uncontracted —
+  they must not appear in supported_intents or gap_intents. Agreed baseline
+  scope for the single-account case; no approved Mode-1 capability exists yet
+  (dataset-inventory.md D12 is `gap`).
+inventory_refs:
+  - D12
 data_areas:
   - accounting_gl
 concepts:
@@ -14,18 +24,25 @@ concepts:
   - id: closure
     meaning: Period-end ledger closure for accounting periods.
     synonyms: [closure, period close, tutup buku]
-supported_intents:
-  - general ledger balance reports
-  - journal entries by period
-  - trial balance
-unsupported_intents:
-  - post journal entry
-  - create gl account
-  - close accounting period
+supported_intents: []
+gap_intents:
+  - { phrase: "general ledger balance for one named account", inventory_ref: D12 }
+  - { phrase: "journal entries for one account or transaction", inventory_ref: D12 }
 default_rules:
-  - Accounting reporting is deferred; respond as unsupported with a deferred reason.
+  - Single named GL account traceability is agreed baseline scope with no approved capability yet (D12, dataset-inventory.md D12 `gap`); it answers unsupported with a gap reason, never routed to an unrelated approved capability.
+  - Trial balance, balance sheet, and profit-and-loss reports are excluded by D12 itself, not merely uncontracted — never add them to gap_intents or supported_intents; they belong in unsupported_intents only.
+unsupported_intents:
+  - { phrase: "post journal entry", exempt: "write_action" }
+  - { phrase: "create gl account", exempt: "write_action" }
+  - { phrase: "close accounting period", exempt: "write_action" }
+  - { phrase: "trial balance", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "balance sheet", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "profit and loss report", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "full financial statements", exempt: "excluded_subclause_no_row_id" }
 checks:
-  - id: deferred_domain
-    rule: this domain must not have approved_mvp capabilities.
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D12's rows move to `inherited`.
   - id: gl_tables_not_runtime
     rule: accounting_gl data area must not be referenced by approved_mvp queries.
+  - id: full_statement_stays_excluded
+    rule: trial balance, balance sheet, and profit-and-loss must remain in unsupported_intents (D12 boundary) and never move to supported_intents or gap_intents.

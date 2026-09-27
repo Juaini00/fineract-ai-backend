@@ -1,6 +1,9 @@
 id: savings_transactions
 status: included_mvp_domain
-source_doc: docs/reporting-data-scope.md#35-savings-transactions
+source_doc: docs/data/dataset-inventory.md#6-domain-e--savings
+inventory_refs:
+  - SAV-5
+  - SAV-11
 detail_doc: docs/reporting-data/savings-transactions.md
 description: Savings transaction movement for deposits, withdrawals, interest, fees, and reversals.
 included_tables:

@@ -1,0 +1,29 @@
+id: scheduler
+status: gap
+display_name: Scheduler and batch job runs
+description: >-
+  Batch job definitions and run history — an operational surface plus a
+  data-completeness freshness signal, per D14
+  (dataset-scope-decisions.md:174-180) and dataset-inventory.md D14. Not
+  real-time monitoring; never triggers or re-runs a job (write forbidden).
+  Agreed baseline scope; no approved Mode-1 capability exists yet.
+inventory_refs:
+  - D14
+data_areas: []
+concepts:
+  - id: job_run
+    meaning: A recorded execution of a scheduled batch job, with its status and trigger type.
+    synonyms: [job run history, batch job status, riwayat job]
+supported_intents: []
+gap_intents:
+  - { phrase: "job run history", inventory_ref: D14 }
+  - { phrase: "batch job status", inventory_ref: D14 }
+unsupported_intents:
+  - { phrase: "trigger job", exempt: "write_action" }
+  - { phrase: "rerun job", exempt: "write_action" }
+default_rules:
+  - Scheduler/batch job runs (D14) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
+  - A future capability is read-only history, not real-time monitoring, and must never trigger or re-run a job.
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D14's row moves to inherited.

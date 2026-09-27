@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 domain gap (products, PROD-1) — job"
+  type: http
+  seq: 38.997
+  description: |
+    Domain `products` (`knowledge/domains/products.yaml`, gap, FIN-153) — PROD-1..11
+    master data cakupannya disepakati tanpa capability disetujui.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_products_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the loan product master list.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_products_key", "fin153-deferred-products-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_products_job", res.getBody().data.job_id);

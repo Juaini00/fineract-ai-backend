@@ -1,24 +1,57 @@
 id: client
 status: approved_mvp
 display_name: Client
-description: Client ownership context for savings reporting and PII-aware output.
-data_areas:
-  - client_foundation
+description: >-
+  Client ownership context across every account type the client holds, per §1
+  baseline ("Client/kepemilikan ... dan seluruh jenis account") and
+  dataset-inventory.md CLI-1..8. Identity, lifecycle, and office/staff
+  assignment (CLI-1..3) are approved Mode-1 capabilities. The client's full
+  account roster spans loan, savings, and share (CLI-5); only the savings
+  side has an approved capability today (`clients_with_account_counts`) — the
+  loan and share sides answer unsupported with a gap reason rather than a
+  savings-only count presented as the whole roster. Contact/address (CLI-6)
+  is selectively agreed, not default-on, and not yet an approved capability.
+inventory_refs:
+  - CLI-1
+  - CLI-2
+  - CLI-3
+  - CLI-5
+  - CLI-6
+  - CLI-7
+  - D02
+  - D04
+  - D15d
 concepts:
   - id: client
     meaning: Customer or member in Fineract.
     synonyms: [client, customer, member, account holder]
 supported_intents:
-  - client-owned savings reporting
-  - client lifecycle summary
-  - active pending and closed client counts by authorized office scope
+  - { phrase: "client identity resolve and name lookup", inventory_ref: CLI-1 }
+  - { phrase: "client lifecycle summary", inventory_ref: CLI-2 }
+  - { phrase: "active pending and closed client counts by authorized office scope", inventory_ref: CLI-3 }
+gap_intents:
+  - { phrase: "client loan account roster", inventory_ref: CLI-5 }
+  - { phrase: "client share account roster", inventory_ref: CLI-5 }
+  - { phrase: "client address", inventory_ref: CLI-6 }
+  - { phrase: "client charge", inventory_ref: D04 }
+  - { phrase: "family member detail", inventory_ref: D15d }
+  - { phrase: "historical office as of a past date", inventory_ref: D02 }
 unsupported_intents:
-  - identity document reporting
-  - address-level reporting
+  - { phrase: "identity document reporting", exempt: "excluded_by_design_gap_row_nuance" }
 default_rules:
   - Client identity output requires explicit capability approval.
+  - All account types owned by a client are agreed baseline scope (CLI-5); only the savings roster has an approved capability today, so a request for a client's loan or share accounts answers unsupported with a gap reason instead of returning the savings-only count as if it were the whole roster.
+  - Client address/contact is selectively agreed (§1), not default-on, and not yet an approved capability (CLI-6); it answers unsupported with a gap reason, never a hard policy rejection — address is not the same as a secret field or an out-of-scope table.
+  - Direct client charges (D04, `m_client_charge`/`m_client_charge_paid_by`, both empty on the reference fixture) are agreed baseline scope with no approved capability yet; a request for a client-level charge (as opposed to a loan/savings account charge, which are separate capabilities) answers unsupported with a gap reason.
+  - Family member detail (D15d, `m_family_members`) is selective/not-default, same pattern as CLI-6/CLI-8; it answers unsupported with a gap reason, not a hard policy rejection.
+  - Historical branch attribution (D02) is agreed scope only where a history table exists; none does today (verified negative, dataset-inventory.md D02) — every domain row above is current-office only. A request explicitly asking for the office as of a past date must answer unsupported with a gap reason, never silently answer with the current office as if it were historical.
+  - "Identity document reporting (CLI-7) is marked `exempt`, not cited against CLI-7 directly: the row's inventory category normalizes to `gap`, but its own acceptance text is stronger than that — \"excluded by default; row exists only to record the exclusion\", \"not to be closed by a capability without a new decision\" — a permanent, by-design hard exclusion, the same shape as D13, not a merely-uncontracted item like address (CLI-6). Citing CLI-7 as a `gap_intents`/`unsupported_intents` ref would force a category (`gap` or `excluded`) neither of which fully matches this row's own nuance; `exempt` states that honestly instead of picking the wrong one."
 checks:
   - id: data_area_exists
     rule: data_areas must reference client_foundation.
   - id: pii_safe_default
     rule: client identity concepts must not become output fields unless a capability explicitly allows them.
+  - id: address_not_hard_rejected
+    rule: unsupported_intents must not contain 'address-level reporting' — address is selective/gap (CLI-6), not policy-forbidden.
+  - id: all_account_types_declared
+    rule: gap_intents must acknowledge the loan and share sides of CLI-5, not only the approved savings side.

@@ -1,0 +1,33 @@
+info:
+  name: "OVR-6.6 domain conditional (group meeting attendance, D08) — job"
+  type: http
+  seq: 38.9997
+  description: |
+    Domain `group_center` (`knowledge/domains/group_center.yaml`, candidate, FIN-153)
+    — D08 (jadwal/kehadiran pertemuan group) cakupannya disepakati tanpa capability
+    disetujui.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_group_meeting_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the group meeting attendance for this center.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_group_meeting_key", "fin153-deferred-group-meeting-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_group_meeting_job", res.getBody().data.job_id);

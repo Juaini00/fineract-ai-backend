@@ -1,0 +1,35 @@
+info:
+  name: "OVR-6.6 domain gap (audit, D09) — job"
+  type: http
+  seq: 38.97
+  description: |
+    Domain `audit` berstatus `gap` (`knowledge/domains/audit.yaml`, FIN-153) — D09
+    (audit tindakan Fineract sendiri, `m_portfolio_command_source`) cakupannya disepakati
+    tetapi belum punya capability disetujui. Sebelum FIN-153 tidak ada domain `audit`,
+    sehingga pertanyaan ini bisa jatuh ke retrieval biasa (out_of_scope/retrieval_miss),
+    bukan alasan gap yang eksplisit.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_audit_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Who performed this action on the account?", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_audit_key", "fin153-deferred-audit-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_audit_job", res.getBody().data.job_id);

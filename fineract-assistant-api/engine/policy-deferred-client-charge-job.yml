@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 domain gap (client charge, D04) — job"
+  type: http
+  seq: 38.9971
+  description: |
+    Client charge (D04, `gap_intents` di `knowledge/domains/client.yaml`, FIN-153) —
+    cakupannya disepakati tanpa capability disetujui.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_client_charge_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the client charge for this account.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_client_charge_key", "fin153-deferred-client-charge-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_client_charge_job", res.getBody().data.job_id);

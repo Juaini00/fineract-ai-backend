@@ -235,7 +235,14 @@ pub struct SensitivityClass {
 pub struct DataScopeArea {
     pub id: String,
     #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
     pub excluded_tables: Vec<String>,
+    /// Rujukan baris `docs/data/dataset-inventory.md` (mis. `D09`, `SAV-9`)
+    /// yang menjadi dasar area ini — FIN-153 L1C. Wajib tidak kosong: sebuah
+    /// area tanpa rujukan inventaris tidak punya otoritas cakupan.
+    #[serde(default)]
+    pub inventory_refs: Vec<String>,
 }
 
 /// `knowledge/domains/*.yaml` — hanya yang dibaca guard permukaan.
@@ -246,18 +253,87 @@ pub struct Domain {
     pub status: Option<String>,
     #[serde(default)]
     pub data_areas: Vec<String>,
+    /// Intent yang sudah punya capability disetujui — dulu hanya prosa,
+    /// sekarang dibaca validator (FIN-153) supaya sebuah intent yang justru
+    /// dikecualikan dokumen (mis. "trial balance", D12) tidak dapat menyelip
+    /// ke sini tanpa terdeteksi. Entri boleh mengutip `inventory_ref`-nya
+    /// sendiri (map `{phrase, inventory_ref}`) — validator lalu memeriksa
+    /// baris itu benar-benar berstatus `inherited` di
+    /// `docs/data/dataset-inventory.md`, bukan sekadar prosa yang mengklaim.
     #[serde(default)]
-    pub unsupported_intents: Vec<String>,
+    pub supported_intents: Vec<IntentRef>,
+    /// Intent yang disepakati cakupannya (baseline §1 / D01–D15) tetapi belum
+    /// punya capability disetujui — FIN-153. Beda dari `unsupported_intents`:
+    /// istilah di sini dijawab `Unsupported` beralasan gap
+    /// ([`crate::catalog::surface::DeferredDomains`]), bukan penolakan
+    /// kebijakan (`BlockedByPolicy`). Setiap entri wajib mengutip
+    /// `inventory_ref`-nya — validator memeriksa baris itu benar-benar
+    /// berstatus `gap` (bukan `inherited`/`excluded`/palsu).
+    #[serde(default)]
+    pub gap_intents: Vec<IntentRef>,
+    /// Intent yang ditolak sebagai kebijakan (`BlockedByPolicy`). Entri yang
+    /// mengutip `inventory_ref` diperiksa baris itu benar-benar `excluded` —
+    /// menolak keras baris `gap` (agreed-tapi-uncontracted) adalah kontradiksi
+    /// yang sama bentuknya dengan kasus alamat client (#3).
+    #[serde(default)]
+    pub unsupported_intents: Vec<IntentRef>,
     /// Kosakata subjek domain — dipakai guard domain deferred (FIN-140) untuk
     /// mengenali subjeknya lintas bahasa, tanpa menanam istilah di Rust.
     #[serde(default)]
     pub concepts: Vec<DomainConcept>,
+    /// Rujukan baris `docs/data/dataset-inventory.md` (mis. `LOAN-1`, `D12`)
+    /// yang menjadi dasar status domain ini — FIN-153 L1C. Wajib tidak kosong.
+    #[serde(default)]
+    pub inventory_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct DomainConcept {
     #[serde(default)]
     pub synonyms: Vec<String>,
+}
+
+/// Satu entri `supported_intents`/`gap_intents`/`unsupported_intents`.
+/// Sengaja **tidak ada varian teks polos** (FIN-153, temuan reviewer "plain
+/// intents bypass row-status checks"): sebuah teks bebas yang lolos tanpa
+/// dicek sama sekali membuat klasifikasi jadi sukarela — penulis domain baru
+/// bisa diam-diam kembali ke string biasa dan lolos `app catalog` tanpa
+/// terdeteksi. Setiap entri **wajib** salah satu dari dua bentuk map
+/// terstruktur ini; berkas YAML yang masih memuat teks polos gagal parse
+/// (`unreadable`, error keras), bukan lolos diam-diam:
+///
+/// - `{ phrase, inventory_ref }` — klaim atas satu baris
+///   `docs/data/dataset-inventory.md`; diperiksa terhadap status baris itu
+///   yang sebenarnya.
+/// - `{ phrase, exempt }` — sengaja di luar cakupan inventaris (aksi tulis
+///   seperti "create loan account", atau konsep milik Jarvis sendiri seperti
+///   raw command payload) — `exempt` adalah label singkat alasannya, dibaca
+///   manusia, tidak diperiksa terhadap dokumen.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum IntentRef {
+    Ref { phrase: String, inventory_ref: String },
+    Exempt { phrase: String, exempt: String },
+}
+
+impl IntentRef {
+    pub fn phrase(&self) -> &str {
+        match self {
+            Self::Ref { phrase, .. } => phrase,
+            Self::Exempt { phrase, .. } => phrase,
+        }
+    }
+
+    pub fn inventory_ref(&self) -> Option<&str> {
+        match self {
+            Self::Ref { inventory_ref, .. } => Some(inventory_ref),
+            Self::Exempt { .. } => None,
+        }
+    }
+
+    pub fn is_exempt(&self) -> bool {
+        matches!(self, Self::Exempt { .. })
+    }
 }
 
 /// `knowledge/policies/query_safety.yaml`.

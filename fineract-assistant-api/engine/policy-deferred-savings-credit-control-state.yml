@@ -13,9 +13,10 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6 (kontrol): 'credit' pada subjek savings TIDAK ditolak sebagai domain deferred", function () {
+        test("OVR-6.6 (kontrol): 'credit' pada subjek savings TIDAK ditolak sebagai domain gap/deferred", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Answered");
           expect(job.completeness_reason).to.not.equal("domain_deferred");
+          expect(job.completeness_reason).to.not.equal("domain_gap");
         });

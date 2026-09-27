@@ -1,7 +1,15 @@
 id: tax
-status: deferred
+status: gap
 display_name: Tax
-description: Tax components, groups, and transaction-level tax computation reporting.
+description: >-
+  Tax components/groups configuration and applied tax on an account, per §1
+  baseline (Savings: "applied tax"; FD/RD: "charges/tax") and
+  dataset-inventory.md SAV-9 / FDRD-5 / PROD-10. Agreed baseline scope; no
+  approved Mode-1 capability exists yet.
+inventory_refs:
+  - SAV-9
+  - FDRD-5
+  - PROD-10
 data_areas:
   - tax
 concepts:
@@ -11,16 +19,18 @@ concepts:
   - id: tax_group
     meaning: A collection of tax components applied together.
     synonyms: [tax group, group pajak]
-supported_intents:
-  - tax collected by period
-  - tax by component or group
+supported_intents: []
+gap_intents:
+  - { phrase: "tax collected by period", inventory_ref: PROD-10 }
+  - { phrase: "tax by component or group", inventory_ref: PROD-10 }
+  - { phrase: "applied tax on an account", inventory_ref: SAV-9 }
 unsupported_intents:
-  - create tax component
-  - update tax rate
+  - { phrase: "create tax component", exempt: "write_action" }
+  - { phrase: "update tax rate", exempt: "write_action" }
 default_rules:
-  - Tax reporting is deferred; respond as unsupported with a deferred reason.
+  - Applied tax is agreed baseline scope (§1 Savings/FD-RD; SAV-9/PROD-10 `gap`) with no approved capability yet; requests answer unsupported with a gap reason, not a permanent rejection.
 checks:
-  - id: deferred_domain
-    rule: this domain must not have approved_mvp capabilities.
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to `inherited`.
   - id: tax_tables_not_runtime
     rule: tax data area must not be referenced by approved_mvp queries.

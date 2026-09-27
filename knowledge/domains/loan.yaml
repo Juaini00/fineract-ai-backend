@@ -1,7 +1,30 @@
 id: loan
-status: deferred
+status: gap
 display_name: Loan
-description: Loan portfolio reporting — disbursements, repayments, arrears, write-offs.
+description: >-
+  Loan portfolio per §1 baseline (dataset-scope-decisions.md:26) and
+  dataset-inventory.md LOAN-1..12 — identity/relations, lifecycle, effective
+  terms, staged disbursement, schedule vs paid/outstanding, transactions and
+  allocations, charges, balances, arrears/delinquency, collateral/guarantor,
+  reschedule/write-off/recovery, and D15's capitalized-income/buy-down-fee
+  balances. Agreed baseline scope; no approved Mode-1 capability exists yet
+  (dataset-inventory.md: every LOAN-* row is `gap`).
+inventory_refs:
+  - LOAN-1
+  - LOAN-2
+  - LOAN-3
+  - LOAN-4
+  - LOAN-5
+  - LOAN-6
+  - LOAN-7
+  - LOAN-8
+  - LOAN-9
+  - LOAN-10
+  - LOAN-11
+  - LOAN-12
+  - D01
+  - D03
+  - D11
 data_areas:
   - loans
 concepts:
@@ -20,19 +43,21 @@ concepts:
   - id: write_off
     meaning: Charge-off of uncollectible loan balance.
     synonyms: [write off, write-off, charge off]
-supported_intents:
-  - loan disbursement totals
-  - loan repayment totals
-  - largest outstanding loans
-  - arrears summary
+supported_intents: []
+gap_intents:
+  - { phrase: "loan disbursement totals", inventory_ref: LOAN-4 }
+  - { phrase: "loan repayment totals", inventory_ref: LOAN-6 }
+  - { phrase: "largest outstanding loans", inventory_ref: LOAN-8 }
+  - { phrase: "arrears summary", inventory_ref: LOAN-9 }
 unsupported_intents:
-  - create loan account
-  - disburse loan
-  - reverse loan transaction
+  - { phrase: "create loan account", exempt: "write_action" }
+  - { phrase: "disburse loan", exempt: "write_action" }
+  - { phrase: "reverse loan transaction", exempt: "write_action" }
 default_rules:
-  - Loan reporting is deferred; all loan-related requests must respond as unsupported with a deferred reason.
+  - Loan is agreed baseline scope with no approved capability yet (dataset-inventory.md LOAN-1..12, every row `gap`); every loan-related request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
+  - "D01/D03/D11 apply to loan balances the same way they apply to savings (see savings.yaml default_rules for the full rule text): no reproduce-published-report branch, no cross-currency consolidation, and completeness/unclassified breakdowns are distinct from a plain aggregate. Loan's own `gap` status already blocks any loan-scoped request on these subjects; the citation here is for inventory traceability, not a second guard."
 checks:
-  - id: deferred_domain
-    rule: this domain must not have approved_mvp capabilities.
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and the inventory rows it covers move to `inherited`.
   - id: loan_tables_not_runtime
     rule: loan data areas must not be referenced by approved_mvp queries.

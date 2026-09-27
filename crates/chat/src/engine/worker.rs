@@ -267,16 +267,18 @@ async fn run_job(
         .await;
     }
 
-    // OVR-6.6 — subjek domain berstatus deferred (loans, tax, accounting_gl)
-    // dijawab Unsupported sebelum retrieval, bukan jatuh ke capability baca
-    // terdekat (mis. savings) yang menjawab data subjek yang salah. Berbeda
-    // dari guard di atas: ini bukan penolakan kebijakan (FIN-140).
+    // OVR-6.6 — subjek domain berstatus deferred (onboarding-dependent, D10)
+    // atau gap (cakupan disepakati tanpa capability, mis. loan, tax,
+    // accounting, audit — FIN-153) dijawab Unsupported sebelum retrieval,
+    // bukan jatuh ke capability baca terdekat (mis. savings) yang menjawab
+    // data subjek yang salah. Berbeda dari guard di atas: ini bukan
+    // penolakan kebijakan (FIN-140).
     if let Some(term) = catalog.deferred_domains.find(&job.request_text) {
-        warn!(job_id = %job.id, source = term.source, term = %term.name, "subjek domain deferred diminta; dijawab unsupported");
+        warn!(job_id = %job.id, source = term.source, term = %term.name, "subjek domain uncontracted diminta; dijawab unsupported");
         return settle_unsupported(
             foundation,
             job,
-            DOMAIN_DEFERRED,
+            term.source,
             "This subject is not yet supported by Jarvis, so no query was run.",
         )
         .await;
@@ -1043,8 +1045,16 @@ const OFFICE_SCOPE_NOT_AUTHORIZED: &str = "office_scope_not_authorized";
 const WRITE_NOT_SUPPORTED: &str = "write_not_supported";
 /// Alasan penolakan permukaan yang tidak disetujui (OVR-6.6, FIN-139).
 const SURFACE_NOT_APPROVED: &str = "surface_not_approved";
-/// Alasan subjek domain deferred (OVR-6.6, FIN-140).
-const DOMAIN_DEFERRED: &str = "domain_deferred";
+// Alasan subjek domain tanpa capability disetujui (OVR-6.6, FIN-140/FIN-153).
+// Tiga varian, bukan satu — supaya "belum dikontrak" tidak bercampur makna
+// dengan "menunggu deployment": nilainya dipilih per domain di
+// `catalog::surface::DeferredDomains::build` (`Term::source`), dibaca lewat
+// `term.source` di `run_job`, bukan konstanta tunggal di sini.
+// - `domain_gap` — cakupan disepakati (§1/D01–D15), belum ada capability
+//   disetujui (mis. loan, tax, accounting, audit, products, FD/RD).
+// - `domain_deferred` — deferred ke onboarding deployment (D10, D15a/b).
+// - `domain_conditional_not_enabled` — deployment belum memverifikasi area
+//   yang mendasarinya (mis. group/center).
 /// Plan versi aktif yang diverifikasi ulang saat recovery tidak lagi identik
 /// dengan yang tersimpan (D4); re-plan belum ada, jadi job tidak dijawab.
 const PLAN_CHANGED_ON_RECOVERY: &str = "plan_changed_on_recovery";

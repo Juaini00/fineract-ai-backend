@@ -1,0 +1,38 @@
+id: share
+status: gap
+display_name: Share accounts
+description: >-
+  Share account identity/lifecycle, effective terms, ownership by status,
+  purchase/redemption, charges, dividends, evidenced settlement, and
+  history/corrections — §2 "Share" (dataset-scope-decisions.md:29) and
+  dataset-inventory.md SHARE-1..8. This is one of the three account types
+  covered by client baseline scope CLI-5 (loan, savings, share); it stays a
+  separate domain so a share question is never misrouted to the generic
+  savings capability. Agreed baseline scope; no approved Mode-1 capability
+  exists yet.
+inventory_refs:
+  - SHARE-1
+  - SHARE-2
+  - SHARE-3
+  - SHARE-4
+  - SHARE-5
+  - SHARE-6
+  - SHARE-7
+  - SHARE-8
+data_areas: []
+concepts:
+  - id: share_account
+    meaning: Client or group ownership of shares in a share product.
+    synonyms: [share account, share, saham]
+  - id: dividend
+    meaning: Distribution paid to share account holders.
+    synonyms: [dividend, dividen]
+supported_intents: []
+gap_intents:
+  - { phrase: "share purchase and redemption", inventory_ref: SHARE-4 }
+  - { phrase: "share account balance", inventory_ref: SHARE-3 }
+default_rules:
+  - Share accounts are agreed baseline scope with no approved capability yet (dataset-inventory.md SHARE-1..8, every row `gap`); every share request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to `inherited`.

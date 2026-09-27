@@ -2,6 +2,16 @@ id: savings
 status: approved_mvp
 display_name: Savings
 description: Savings account and transaction reporting.
+inventory_refs:
+  - SAV-1
+  - SAV-3
+  - SAV-4
+  - SAV-5
+  - SAV-7
+  - SAV-11
+  - D01
+  - D03
+  - D11
 data_areas:
   - organization_foundation
   - client_foundation
@@ -21,13 +31,20 @@ concepts:
     meaning: Customer or group savings account.
     synonyms: [savings, savings account, deposit account]
 supported_intents:
-  - savings deposit totals
-  - largest savings deposits
+  - { phrase: "savings deposit totals", inventory_ref: SAV-5 }
+  - { phrase: "largest savings deposits", inventory_ref: SAV-5 }
+gap_intents:
+  - { phrase: "reproduce the published report", inventory_ref: D01 }
+  - { phrase: "consolidated total across currencies", inventory_ref: D03 }
+  - { phrase: "completeness analysis by category", inventory_ref: D11 }
 unsupported_intents:
-  - create savings account
-  - reverse transaction
+  - { phrase: "create savings account", exempt: "write_action" }
+  - { phrase: "reverse transaction", exempt: "write_action" }
 default_rules:
   - Exclude reversed transactions unless explicitly requested by an approved capability.
+  - "D01: reproducing a previously published report exactly as it was is out of scope by owner decision (dataset-scope-decisions.md:16) — only current, recomputed-as-of-today balances are approved. A request explicitly asking to reproduce a published report must answer unsupported with a gap reason, never silently recomputed and presented as the published figure."
+  - "D03: no exchange-rate table exists (verified negative, dataset-inventory.md D03) — a request for a currency-consolidated total must answer unsupported with a gap reason, never silently summed across currencies."
+  - "D11: a completeness/unclassified-record breakdown is a distinct request from a plain aggregate; until a capability declares that grouping explicitly, it answers unsupported with a gap reason rather than an aggregate that silently drops the unclassified rows."
 checks:
   - id: data_areas_exist
     rule: all savings data_areas must exist under knowledge/data-scope/areas.

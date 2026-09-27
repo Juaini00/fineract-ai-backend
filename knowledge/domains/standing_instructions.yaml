@@ -1,0 +1,28 @@
+id: standing_instructions
+status: gap
+display_name: Standing instructions
+description: >-
+  Recurring account-transfer instructions and their execution history — D05
+  (dataset-scope-decisions.md:96-102) and dataset-inventory.md D05. Absence of
+  a transfer never proves failure on its own — a failure claim must trace to a
+  history row with a failure status. Agreed baseline scope; no approved
+  Mode-1 capability exists yet.
+inventory_refs:
+  - D05
+data_areas: []
+concepts:
+  - id: standing_instruction
+    meaning: A recurring instruction to transfer funds between two accounts.
+    synonyms: [standing instruction, instruksi transfer berkala]
+supported_intents: []
+gap_intents:
+  - { phrase: "standing instruction execution history", inventory_ref: D05 }
+unsupported_intents:
+  - { phrase: "create standing instruction", exempt: "write_action" }
+  - { phrase: "cancel standing instruction", exempt: "write_action" }
+default_rules:
+  - Standing instructions (D05) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
+  - A future capability must trace a failure claim to a history row with a failure status — "no transfer found" is never itself proof of failure (D05's own rule).
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D05's row moves to inherited.

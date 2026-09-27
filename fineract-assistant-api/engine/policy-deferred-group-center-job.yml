@@ -1,0 +1,37 @@
+info:
+  name: "OVR-6.6 domain gap (group/center account, di luar savings, CLI-4) — job"
+  type: http
+  seq: 38.995
+  description: |
+    Group/center (`knowledge/domains/group_center.yaml`, status `candidate`, FIN-153)
+    mencakup seluruh jenis account per baseline (CLI-4/CLI-5), bukan savings saja.
+    Sebelum FIN-153 supported_intents-nya justru mengklaim "group-owned savings
+    reporting"/"center-level savings summaries" padahal satu-satunya capability yang
+    ada hanya group_identity_resolve (kontradiksi #6) — pertanyaan seperti ini bisa
+    salah dijawab lewat capability savings umum. Sekarang dijawab unsupported
+    beralasan gap.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_group_center_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the group savings summary for this branch.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_group_center_key", "fin153-deferred-group-center-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_group_center_job", res.getBody().data.job_id);

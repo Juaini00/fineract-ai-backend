@@ -1,16 +1,30 @@
-id: deferred_areas
-status: deferred_group
-source_doc: docs/reporting-data-scope.md#4-deferred-data-areas
-description: Group wrapper for individually-defined deferred data areas.
+id: uncontracted_areas
+status: mixed_group
+source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
+inventory_refs:
+  - LOAN-1
+  - D12
+  - SAV-9
+  - D09
+  - D10
+description: >-
+  Group wrapper over areas with no approved capability. Two different
+  dispositions, not one — the old MVP "deferred" label conflated them:
+  `custom_datatables` is deferred to deployment onboarding (D10, per-tenant
+  schema); `loans`, `accounting_gl`, `tax`, and `source_audit` are agreed
+  baseline scope with no approved Mode-1 capability yet (`gap` —
+  dataset-inventory.md LOAN-1..12, D12, SAV-9/PROD-10, D09).
+  `audit_users_operations` (user/role/permission administration) is neither —
+  it is excluded (D15) and intentionally not a member here.
 members:
   - loans
   - accounting_gl
   - tax
   - custom_datatables
-  - audit_users_operations
-rule: Deferred areas must not be referenced by approved MVP capabilities or queries. Each member has its own area file with the full table list.
+  - source_audit
+rule: No member may be referenced by an approved MVP capability or query until its own gate clears — a Mode-1 capability for the `gap` members, a deployment-verified schema for `custom_datatables`.
 checks:
   - id: members_have_area_files
     rule: every member must have a matching knowledge/data-scope/areas file.
   - id: members_not_approved_mvp
-    rule: deferred members must not be referenced by approved_mvp capabilities or queries.
+    rule: no member may be referenced by approved_mvp capabilities or queries.

@@ -1,6 +1,10 @@
 id: savings_core
 status: included_mvp_domain
-source_doc: docs/reporting-data-scope.md#34-savings-core
+source_doc: docs/data/dataset-inventory.md#6-domain-e--savings
+inventory_refs:
+  - SAV-1
+  - SAV-3
+  - SAV-4
 detail_doc: docs/reporting-data/savings-core.md
 description: Savings accounts, products, balances, and lifecycle context.
 included_tables:
