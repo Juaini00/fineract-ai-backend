@@ -178,7 +178,7 @@ bureau FIN-125):
 
 **Status**: ⬜ — the formal inventory now exists
 ([data/dataset-inventory.md](data/dataset-inventory.md), FIN-152, merged
-2026-09-27: 100 rows, every §1 domain line and D01–D15 covered, zero
+2026-09-27: 99 rows, every §1 domain line and D01–D15 covered, zero
 omissions), but domain capabilities remain unchanged and incomplete: 4 of
 ~20 domains have any capability (client, savings, organization, group); the
 catalog reads 13 Fineract tables out of ~220 (D15 audit; the inventory's own

@@ -56,8 +56,11 @@ it."
 | Status | Meaning |
 | --- | --- |
 | `inherited` | Requirement is met by an **existing, approved** Mode-1 capability today. |
-| `gap` | Requirement is agreed scope, source table(s) identified (known or candidate), **no** capability exists yet. |
+| `gap` | Requirement is agreed scope but lacks an approved capability; source mapping may be known, candidate, or unresolved. |
 | `deferred-onboarding` | Requirement's existence/shape depends on a specific deployment (D10 custom datatables, D15 surveys/PPI/credit-bureau) — cannot be closed generically; see §7. |
+| `excluded` | Decision explicitly forbids this execution surface (D13); it is not a missing capability. |
+| `cross-reference` | Requirement is inventoried under another row; this row does not create a second capability obligation. |
+| `summary` | Decision heading groups sub-rows; its status is determined by those sub-rows. |
 
 **Mapping confidence** (own column per row, per the brief):
 
@@ -231,8 +234,8 @@ as `unresolved` on every row below rather than assumed from naming convention.
 
 | ID | Requirement | Source table(s) & grain | Field / measure | Relationship (cardinality) | Office-scope path | Time / as-of / currency | Evidence rule | Acceptance | Capability | Confidence | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LINK-1 | Account ownership | covered by CLI-5 (loan/savings/share → client/group) | — | — | — | — | — | — | — | — | see CLI-5 |
-| LINK-2 | Account-product | covered per-domain (PROD-1/2/3 `1:N` to their accounts) | — | — | — | — | — | — | — | — | see PROD-1..3 |
+| LINK-1 | Account ownership | covered by CLI-5 (loan/savings/share → client/group) | — | — | — | — | — | — | — | — | cross-reference (CLI-5) |
+| LINK-2 | Account-product | covered per-domain (PROD-1/2/3 `1:N` to their accounts) | — | — | — | — | — | — | — | cross-reference (PROD-1..3) |
 | LINK-3 | Linked accounts | `m_portfolio_account_associations` (90 rows, grain: association) | `association_type_enum, is_active`, both sides (`loan_account_id`/`savings_account_id`/`linked_*`) | `1:N` or self-`N:M` depending on type (SAV-10 duplicate — cross-referenced, not re-counted) | via either side's office path | n/a | link existing ≠ transfer proof (§1 rule 35) | linkage resolvable, kept distinct from LINK-4 transfer evidence | none | known (§4) | gap |
 | LINK-4 | Actual transfer | `m_account_transfer_details` (498 rows, header) + `m_account_transfer_transaction` (728 rows, the evidenced movement) | from/to office, client, account; transfer amount/date on the transaction row | `1:1` details ↔ N transactions over time (recurring transfers reuse the same detail row) | `from_office_id`/`to_office_id` on the detail row | `transaction_date` on the transaction row | this is the evidence row LINK-3's link alone cannot provide | actual money movement only asserted from the transaction row, never from the link header alone | none | known (§4) | gap |
 | LINK-5 | Payment allocation | `m_loan_transaction.principal_portion_derived/interest_portion_derived/fee_charges_portion_derived/penalty_charges_portion_derived` (loan side, LOAN-6); savings has no equivalent multi-component allocation (a savings transaction is single-purpose) | allocation of one payment across components | n/a (denormalized on the transaction row) | via transaction | n/a | components must sum to the transaction amount (anti-double-count, §1 rule 36) | allocation resolvable and internally consistent | none | known (§4) | gap |
@@ -263,12 +266,12 @@ and states the disposition already fixed by the 2026-09-20 owner decision
 | D10 | Custom datatables (`:136-144`) — **deferred to deployment onboarding** | `x_registered_table` (16 rows on this local instance, §4) | registry → dynamically-named physical table per row | per-registration, not generic | per-registration | per-registration | per-registration; nothing may be assumed about an unregistered/unmapped table | **Confirms** the decision's own caveat: the ai_report reference example (`extra_client_details`, `extra_family_details`, `extra_loan_details`, `:142`) is **absent** on this local instance (verified missing, §4); the 16 tables actually registered here (`EmploymentDetails`, `AddressDetails`, `KYCFields`, `SourceOfFunds`, …) are a **different set**. This is exactly why D10 is per-deployment, not a static schema. | none | known (registry checked; physical table names not individually resolved this session) | deferred-onboarding |
 | D11 | Completeness analysis (`:146-154`) | cross-cutting requirement over every domain table above, not a table of its own | n/a | n/a | n/a | empty/unclassified must be grouped and counted explicitly, never dropped or coerced to zero (`I4`) | applies to every domain row above wherever a grouping field can be null/unclassified (e.g. ORG classification codes, CLI client_type) | none | n/a (cross-cutting rule, not a table) | gap |
 | D12 | Accounting/GL traceability (`:156-164`) | `acc_gl_journal_entry` (37,077 rows), `acc_gl_account` (362 rows), `acc_gl_closure` (1 row, closure boundary) | `N:1` journal entry → GL account; entry references `loan_transaction_id`/`savings_transaction_id`/`client_transaction_id`/`share_transaction_id` back to the source transaction | `acc_gl_journal_entry.office_id` direct (GL account itself is org-wide, per decision text) | `entry_date`; closure interacts with D01 | reversal (`reversed`/`reversal_id`) must be honored and manual vs system entries labeled (`type_enum`/`manual_entry`); no re-derivation of accounting — read recorded values and aggregate deterministically only | single named GL account balance/journal traceability in scope; full trial balance/P&L explicitly out of scope (`:162`) | none | known (§4) | gap |
-| D13 | Existing Fineract reports — **out of execution scope entirely** (`:166-172`) | `stretchy_report` (Fineract's own report definitions — not queried, and per D13 must never be executed) | n/a | n/a | n/a | executing an admin-authored report bypasses office-scope/PII/SELECT-only/allowlist guards (`analytical-contracts.md` §4.4) | Jarvis never surfaces or runs `stretchy_report`; a valuable report is ported to a validated analytical-contract instead, never run raw | none | n/a (explicitly excluded) | gap (excluded by design — row exists to record the exclusion, not to be closed) |
+| D13 | Existing Fineract reports — **out of execution scope entirely** (`:166-172`) | `stretchy_report` (Fineract's own report definitions — not queried, and per D13 must never be executed) | n/a | n/a | n/a | executing an admin-authored report bypasses office-scope/PII/SELECT-only/allowlist guards (`analytical-contracts.md` §4.4) | Jarvis never surfaces or runs `stretchy_report`; a valuable report is ported to a validated analytical-contract instead, never run raw | none | n/a (explicitly excluded) | excluded |
 | D14 | Scheduler/batch job runs (`:174-180`) | `job` (44 rows), `job_run_history` (308,960 rows) | `1:N` job → run history | n/a (operational, not office-scoped) | `start_time/end_time`, `status`, `trigger_type` | `XR-ASOF` — this is the freshness signal every as-of claim above (D01, D07, D09, D11, LOAN-9, FDRD-10) should be able to cite | job/run status resolvable; not real-time monitoring, no trigger/re-run capability (write forbidden) | none | known (§4) | gap |
-| D15 | Gap-review closure — dispositions (`:182-194`) | see sub-rows below | — | — | — | — | closure of the systematic 220-table review; **local count differs from the ticket figure — see §4 note** | — | — | deferred-onboarding (surveys/credit-bureau) / gap (others) |
+| D15 | Gap-review closure — dispositions (`:182-194`) | see sub-rows below | — | — | — | — | closure of the systematic 220-table review; **local count differs from the ticket figure — see §4 note** | — | — | summary (D15a..D15e) |
 | D15a | Surveys / PPI poverty scoring — **deferred to deployment onboarding** | `m_surveys` (0 rows), `m_survey_responses` (0 rows), `m_survey_scorecards` (0 rows), `ppi_scores` (**20 rows**), `ppi_likelihoods` (0 rows) | `1:N` survey → responses/scorecards; ppi tables reference client/survey | via client | n/a | **anomaly found and recorded, not resolved:** `ppi_scores` has 20 rows while `m_surveys` has 0 — PPI scoring data exists without a parent survey definition row on this fixture. Do not assume the survey/PPI pipeline is unused; flag for owner review before building a capability. | condition-dependent per D10 pattern, per decision text | none | known (§4) | deferred-onboarding |
 | D15b | Credit bureau results | `m_creditreport` (0 rows, "MASUK" per decision) vs `m_creditbureau` (1 row, integration config — explicitly excluded by the decision, `:187`) | `N:1` report → client/loan | via client/loan | n/a | only the **result** table is in scope; the **config** table is excluded — the two must not be conflated | resolvable once `m_creditreport` is populated; currently empty on this fixture | none | known (§4) | deferred-onboarding |
-| D15c | Loan capitalized-income/buy-down-fee balances | duplicate of LOAN-12 (cross-referenced, not re-counted) | — | — | — | — | — | — | — | see LOAN-12 |
+| D15c | Loan capitalized-income/buy-down-fee balances | duplicate of LOAN-12 (cross-referenced, not re-counted) | — | — | — | — | — | — | — | cross-reference (LOAN-12) |
 | D15d | `m_family_members` — selective, not default | `m_family_members` (1 row) | `1:N` client → family member | via client | n/a | same "selective/not-default" pattern as CLI-6/CLI-8 | excluded by default; row exists to record the exclusion | none | known (§4) | gap |
 | D15e | `m_office_transaction` (inter-office cash) — under D06/accounting, explicitly labeled | `m_office_transaction` (0 rows) | `N:1` from/to office | both `from_office_id`/`to_office_id` | n/a | must be labeled as inter-office cash movement, not conflated with client-facing transactions | resolvable once populated; empty on this fixture | none | known (§4) | gap |
 
@@ -366,7 +369,7 @@ total (see D15 table-count note, §10).
 
 | §1 heading / decision | Inventory IDs | Row count | Statuses present |
 | --- | --- | --- | --- |
-| Organization (`:23`) | ORG-1..ORG-11 | 11 | 2 inherited, 9 gap |
+| Organization (`:23`) | ORG-1..ORG-11 | 11 | 1 inherited, 10 gap |
 | Products (`:24`) | PROD-1..PROD-11 | 11 | 0 inherited, 11 gap |
 | Client/kepemilikan (`:25`) | CLI-1..CLI-8 | 8 | 3 inherited, 5 gap |
 | Loan (`:26`) | LOAN-1..LOAN-12 | 12 | 0 inherited, 12 gap |
@@ -386,19 +389,18 @@ total (see D15 table-count note, §10).
 | D10 | D10 | 1 | **deferred-onboarding** |
 | D11 | D11 | 1 | gap |
 | D12 | D12 | 1 | gap |
-| D13 | D13 | 1 | gap (excluded by design) |
+| D13 | D13 | 1 | excluded by design |
 | D14 | D14 | 1 | gap |
-| D15 | D15, D15a..D15e | 6 | 2 **deferred-onboarding** (D15a, D15b), 1 cross-ref (D15c→LOAN-12), 3 gap |
+| D15 | D15, D15a..D15e | 6 | 1 summary, 2 **deferred-onboarding** (D15a, D15b), 1 cross-reference (D15c→LOAN-12), 2 gap |
 
-**Totals:** 79 baseline-domain rows + 21 decision rows (D01–D14 = 14, D15 header
-+ 5 sub-rows = 6, D03 already counted) = **100 inventory rows**, covering all 8
-§1 headings and all 15 decisions (D01–D15) with **zero omissions**. 11 rows are
-`inherited` (an approved Mode-1 capability exists today — all 11 sit in
-Organization, Client, and Savings, matching build-order.md's own count of "4 of
-~20 domains have any capability" at the *domain* level). 2 decision rows
-(D10, D15a/b) are `deferred-onboarding` as required. Every other row is `gap`:
-agreed scope, source identified, no capability yet — exactly the state L1C's
-own status line (`build-order.md:179-183`) already describes, now itemized.
+**Totals:** 79 baseline-domain rows + 20 decision rows (D01–D14 = 14;
+D15 heading + five sub-rows = 6) = **99 inventory rows**, covering all 8
+§1 headings and all 15 decisions (D01–D15) with **zero omissions**. Ten
+rows are `inherited` (an approved Mode-1 capability exists today); three
+(D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
+`summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
+81 rows are `gap`: agreed scope lacking a capability, including unresolved
+source mappings. Coverage counts requirements, not executable capabilities.
 
 ---
 
