@@ -1,0 +1,29 @@
+id: provisioning
+status: gap
+display_name: Loan loss provisioning results
+description: >-
+  Actual provisioning results (criteria applied to real outstanding loans),
+  distinct from the provisioning-criteria config already read as a supporting
+  reference under `organization` (ORG-7) — D07
+  (dataset-scope-decisions.md:112-118) and dataset-inventory.md D07. A future
+  capability must not multiply current criteria percentages by historical
+  outstanding as a substitute for a real result (D07's own rule). Agreed
+  baseline scope; no approved Mode-1 capability exists yet.
+inventory_refs:
+  - D07
+data_areas: []
+concepts:
+  - id: provisioning_result
+    meaning: A recorded provisioning entry/history row for a loan, using the criteria and version actually applied.
+    synonyms: [provisioning result, provisioning history, hasil provisi]
+supported_intents: []
+gap_intents:
+  - provisioning result history
+unsupported_intents:
+  - create provisioning entry
+default_rules:
+  - Actual provisioning results (D07) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
+  - A future capability must read the recorded provisioning entry/history, never recompute one by multiplying today's criteria percentage by historical outstanding (D07's own rule).
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D07's row moves to inherited.

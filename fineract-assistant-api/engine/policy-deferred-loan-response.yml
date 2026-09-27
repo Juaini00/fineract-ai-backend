@@ -18,6 +18,6 @@ runtime:
           expect(document.kind).to.equal("limitation");
           expect(document.outcome).to.equal("Unsupported");
           expect(document.completeness).to.equal("Unknown");
-          expect(document.blocks_json[0].block_id).to.equal("domain_deferred");
+          expect(document.blocks_json[0].block_id).to.equal("domain_gap");
           expect(document.evidence_json.lineage === undefined || document.evidence_json.lineage.length === 0).to.equal(true);
         });

@@ -1,0 +1,60 @@
+id: products
+status: gap
+display_name: Products
+description: >-
+  Product master data — Loan/Savings/Share Products, Collateral Management,
+  Delinquency Buckets, Products Mix, Fixed/Recurring Deposit Products,
+  Floating Rates — per §1 baseline (dataset-scope-decisions.md:24) and
+  dataset-inventory.md PROD-1..11. Master listed independent of account usage,
+  including unused products (§1 rule). Charges master (PROD-4) is partially
+  inherited via savings-scoped capabilities (`charge_type_identity_resolve`);
+  tax configuration (PROD-10) is a separate domain (`tax`). Agreed baseline
+  scope for the rest; no approved Mode-1 capability exists yet.
+inventory_refs:
+  - PROD-1
+  - PROD-2
+  - PROD-3
+  - PROD-5
+  - PROD-6
+  - PROD-7
+  - PROD-8
+  - PROD-9
+  - PROD-11
+data_areas: []
+concepts:
+  - id: loan_product
+    meaning: Master loan product configuration, independent of accounts using it.
+    synonyms: [loan product, produk pinjaman]
+  - id: savings_product
+    meaning: Master savings product configuration, independent of accounts using it.
+    synonyms: [savings product, produk tabungan]
+  - id: share_product
+    meaning: Master share product configuration, independent of accounts using it.
+    synonyms: [share product, produk saham]
+  - id: collateral_management
+    meaning: Collateral type master and pledged-collateral valuation rules.
+    synonyms: [collateral management, manajemen agunan]
+  - id: delinquency_bucket
+    meaning: Configured arrears-aging bucket and range definitions.
+    synonyms: [delinquency bucket, bucket tunggakan]
+  - id: products_mix
+    meaning: Allowed/restricted product-to-product pairing rules.
+    synonyms: [products mix, product mix]
+  - id: floating_rate
+    meaning: Floating interest rate base and differential configuration.
+    synonyms: [floating rate, suku bunga mengambang]
+supported_intents: []
+gap_intents:
+  - loan product master list
+  - savings product master list
+  - share product master list
+unsupported_intents:
+  - create loan product
+  - create savings product
+  - update product configuration
+default_rules:
+  - Product master data (PROD-1..11) is agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason, never routed to an unrelated approved capability.
+  - Master listing must include unused products (§1 rule) once a capability exists — it must never be conflated with account-usage capabilities that already exist per-domain (mis. savings/products_by_client).
+checks:
+  - id: gap_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to inherited.

@@ -20,7 +20,7 @@ runtime:
           expect(job.completeness).to.equal("Unknown");
           // Alasan gap harus beda dari out_of_scope, retrieval_miss, dan
           // surface_not_approved (forbidden surface) — FIN-153 acceptance.
-          expect(job.completeness_reason).to.equal("domain_deferred");
+          expect(job.completeness_reason).to.equal("domain_gap");
           expect(job.completeness_reason).to.not.equal("out_of_scope");
           expect(job.completeness_reason).to.not.equal("retrieval_miss");
           expect(job.completeness_reason).to.not.equal("surface_not_approved");

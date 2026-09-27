@@ -1,10 +1,10 @@
 info:
-  name: "OVR-6.6 domain gap (group/center account, di luar savings, CLI-4) — job state"
+  name: "OVR-6.6 domain conditional (group meeting attendance, D08) — job state"
   type: http
-  seq: 38.996
+  seq: 38.9998
 http:
   method: get
-  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_group_center_job}}"
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_group_meeting_job}}"
   headers:
     - name: authorization
       value: "Bearer {{engineToken}}"
@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (gap, group/center CLI-4): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-153 (conditional, group meeting D08): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");

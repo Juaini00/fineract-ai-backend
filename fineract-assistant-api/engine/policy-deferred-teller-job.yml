@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 domain gap (teller/cashier, D06) — job"
+  type: http
+  seq: 38.9989
+  description: |
+    Domain `teller_cashier` (`knowledge/domains/teller_cashier.yaml`, gap, FIN-153) —
+    D06 cakupannya disepakati tanpa capability disetujui.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_teller_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the teller assignment for this branch.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_teller_key", "fin153-deferred-teller-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_teller_job", res.getBody().data.job_id);

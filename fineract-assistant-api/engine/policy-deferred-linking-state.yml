@@ -1,10 +1,10 @@
 info:
-  name: "OVR-6.6 domain deferred (tax, ID) — job state"
+  name: "OVR-6.6 domain gap (linking resources, LINK-4) — job state"
   type: http
-  seq: 38.941
+  seq: 38.9988
 http:
   method: get
-  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_tax_id_job}}"
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_linking_job}}"
   headers:
     - name: authorization
       value: "Bearer {{engineToken}}"
@@ -13,11 +13,14 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6 (deferred, tax ID): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-153 (gap, linking LINK-4): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
           expect(job.completeness).to.equal("Unknown");
           expect(job.completeness_reason).to.equal("domain_gap");
+          expect(job.completeness_reason).to.not.equal("surface_not_approved");
+          expect(job.completeness_reason).to.not.equal("out_of_scope");
+          expect(job.completeness_reason).to.not.equal("retrieval_miss");
           expect(job.plan_version).to.equal(null);
         });

@@ -18,7 +18,7 @@ runtime:
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
           expect(job.completeness).to.equal("Unknown");
-          expect(job.completeness_reason).to.equal("domain_deferred");
+          expect(job.completeness_reason).to.equal("domain_gap");
           expect(job.completeness_reason).to.not.equal("surface_not_approved");
           expect(job.completeness_reason).to.not.equal("out_of_scope");
           expect(job.completeness_reason).to.not.equal("retrieval_miss");

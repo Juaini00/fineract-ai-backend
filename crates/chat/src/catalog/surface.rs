@@ -177,17 +177,21 @@ impl DeferredDomains {
         let mut terms: Vec<Term> = domains
             .iter()
             .filter(|domain| is_uncontracted(domain))
-            .flat_map(|domain| domain.concepts.iter())
-            .flat_map(|concept| concept.synonyms.iter())
-            .map(|synonym| Term::phrase(DOMAIN_DEFERRED_SOURCE, synonym))
+            .flat_map(|domain| domain.concepts.iter().map(move |concept| (domain, concept)))
+            .flat_map(|(domain, concept)| {
+                concept
+                    .synonyms
+                    .iter()
+                    .map(move |synonym| Term::phrase(reason_for(domain), synonym))
+            })
             .collect();
 
-        terms.extend(
-            domains
+        terms.extend(domains.iter().flat_map(|domain| {
+            domain
+                .gap_intents
                 .iter()
-                .flat_map(|domain| domain.gap_intents.iter())
-                .map(|intent| Term::phrase(DOMAIN_DEFERRED_SOURCE, intent)),
-        );
+                .map(move |intent| Term::phrase(reason_for(domain), intent))
+        }));
 
         terms.retain(|term| !excluded.iter().any(|text| term.occurs_in(text)));
         terms.sort_by(|left, right| left.name.cmp(&right.name));
@@ -216,9 +220,21 @@ fn is_uncontracted(domain: &Domain) -> bool {
     )
 }
 
-/// Asal istilah [`DeferredDomains`] — untuk log, sama seperti `Term::source`
-/// yang lain.
-const DOMAIN_DEFERRED_SOURCE: &str = "domain_deferred";
+/// `completeness_reason` untuk [`DeferredDomains`] — tiga varian, bukan satu
+/// (FIN-153): "belum dikontrak" (`gap`) tidak sama dengan "menunggu
+/// deployment" (`deferred`, D10/D15a/b) atau "area belum diverifikasi
+/// deployment" (`candidate`, mis. group/center). `gap_intents` sebuah domain
+/// yang statusnya sendiri bukan salah satu dari ini (mis. `approved_mvp`,
+/// misal alamat client) jatuh ke lengan default `domain_gap` — intent itu
+/// sendiri tetap agreed-tapi-uncontracted meski domain induknya sebagian
+/// sudah disetujui.
+fn reason_for(domain: &Domain) -> &'static str {
+    match domain.status.as_deref() {
+        Some("deferred") => "domain_deferred",
+        Some("candidate") => "domain_conditional_not_enabled",
+        _ => "domain_gap",
+    }
+}
 
 impl Term {
     /// Istilah frasa polos: majemuk bila satu kata, phrase bila lebih.
@@ -416,6 +432,17 @@ mod tests {
             "Show the center savings summary for this branch.",
             // FIN-153 — D09 source audit Fineract sendiri (gap, bukan raw payload).
             "Who performed this action on the account?",
+            // FIN-153 — cakupan tambahan yang koordinator minta dipetakan:
+            // products, FD/RD, linking resources, teller/cashier, standing
+            // instructions, provisioning, scheduler, group meeting (D08).
+            "Show the loan product master list.",
+            "Show the recurring deposit contribution for this account.",
+            "Show the actual account transfer between these two accounts.",
+            "Show the teller assignment for this branch.",
+            "Show the standing instruction execution history for this account.",
+            "Show the provisioning result history for this loan.",
+            "Show the batch job status for interest posting last night.",
+            "Show the group meeting attendance for this center.",
             "Tampilkan saldo akun buku besar.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
@@ -511,6 +538,31 @@ mod tests {
             }
         }
         assert!(seen > 0, "tidak ada request_text yang terbaca");
+    }
+
+    /// FIN-153 — "belum dikontrak" (gap) tidak sama dengan "menunggu
+    /// deployment" (deferred) atau "area belum diverifikasi" (candidate);
+    /// masing-masing menghasilkan `completeness_reason` sendiri, dibaca dari
+    /// `term.source` di worker (bukan satu konstanta tunggal seperti
+    /// sebelumnya).
+    #[test]
+    fn reason_distinguishes_gap_deferred_and_conditional() {
+        let deferred = deferred_domains();
+
+        let gap = deferred.find("Show loan transactions.").expect("loan cocok");
+        assert_eq!(gap.source, "domain_gap");
+
+        let conditional = deferred
+            .find("Show the group savings summary for this branch.")
+            .expect("group cocok");
+        assert_eq!(conditional.source, "domain_conditional_not_enabled");
+
+        // Intent gap di dalam domain approved_mvp (alamat client) tetap
+        // `domain_gap`, bukan reason domain induknya.
+        let client_gap = deferred
+            .find("Show every client address in Head Office.")
+            .expect("alamat client cocok");
+        assert_eq!(client_gap.source, "domain_gap");
     }
 
     fn collect_yml(directory: &Path, found: &mut Vec<PathBuf>) {

@@ -50,3 +50,32 @@ bertentangan dengan dokumen scope (trial balance vs D12, penolakan audit
 pengguna vs D09, penolakan address vs §1 Client, tax `deferred` vs §1).
 Bila bertentangan, dokumen scope yang menang. Penyelarasan = FIN-153; gerbang
 cakupan = L1C di [build-order.md](../docs/build-order.md) §3.
+
+## Penyelarasan FIN-153 (2026-09-27): satu domain per baris/keputusan inventaris
+
+Setiap domain/keputusan `dataset-inventory.md` yang punya subjek bahasa alami
+sendiri sekarang punya `knowledge/domains/*.yaml` (`gap`, `inventory_refs`
+mengutip baris inventaris): `organization`, `products`, `client`, `loan`,
+`savings`, `fixed_recurring_deposit`, `share`, `linking_resources`,
+`accounting` (D12), `tax` (SAV-9/PROD-10), `audit` (D09),
+`teller_cashier` (D06), `standing_instructions` (D05), `provisioning` (D07),
+`scheduler` (D14), `group_center` (CLI-4, `candidate`, plus D08).
+
+**Keputusan yang disengaja: D01 (period-close, recomputed-only), D02
+(historical branch attribution), D03 (currency/consolidation), dan D11
+(completeness analysis) TIDAK punya domain file sendiri.** Keempatnya adalah
+aturan lintas-domain yang mengubah *bagaimana* sebuah capability yang sudah
+ada harus menjawab (as-of yang direkomputasi, bukan snapshot; label
+current-office vs historical; total per-currency, tanpa konversi; grouping
+eksplisit atas null), bukan subjek baru yang bisa ditanyakan berdiri sendiri
+— tidak ada frasa bahasa alami "tunjukkan period-close saya" yang berbeda dari
+pertanyaan atas domain yang sudah ada. Membuat domain file untuknya berarti
+mengarang kosakata guard yang tidak mewakili apa pun yang benar-benar diminta
+pengguna (Rule 4, `AGENTS.md`) — dan gagal mekanis segera setelah domain
+konkret pertama (loan/savings/dst.) mengimplementasikan D01/D02/D03/D11
+sebagai bagian dari kontraknya sendiri, bukan sebagai domain terpisah. Rujukan
+`XR-CUR` (D03), `XR-ASOF`/D01, dan D02/D11 di `dataset-inventory.md` §1 tetap
+otoritas yang mengikat setiap capability baru; validator masa depan yang
+memeriksa kepatuhan sebuah capability terhadap D01–D03/D11 adalah pekerjaan
+saat capability itu ditulis (FIN-109 dst.), bukan pekerjaan katalog-alignment
+FIN-153 ini.

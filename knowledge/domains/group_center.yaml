@@ -12,6 +12,7 @@ description: >-
   product remain agreed baseline scope without an approved capability.
 inventory_refs:
   - CLI-4
+  - D08
 data_areas:
   - group_center_foundation
 concepts:
@@ -28,12 +29,14 @@ gap_intents:
   - group loan summary
   - center savings summary
   - center loan summary
+  - group meeting attendance
 unsupported_intents:
   - create group
   - assign client to group
 default_rules:
   - Only enabled when the local Fineract deployment uses group_center_foundation; otherwise respond as unsupported with a conditional-not-enabled reason.
   - Group/center scope covers every account type a member may hold (CLI-4/CLI-5), not savings alone; group identity resolve is the only approved capability today — any group/center-scoped account summary answers unsupported with a gap reason rather than being misrouted to the office-wide savings capability.
+  - Group/center meeting schedule and attendance (D08) is agreed baseline scope; whether Fineract's calendar/meeting tables even exist on a given deployment is unresolved (dataset-inventory.md D08, not queried) — a future capability must not assume a calendar entry proves a meeting happened or was attended.
 checks:
   - id: conditional_domain
     rule: this domain must remain candidate unless group_center_foundation is explicitly enabled.
