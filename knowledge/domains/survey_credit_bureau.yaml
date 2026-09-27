@@ -1,0 +1,33 @@
+id: survey_credit_bureau
+status: deferred
+display_name: Surveys, PPI scoring, and credit bureau results
+description: >-
+  Surveys/PPI poverty scoring (D15a) and credit bureau report results (D15b)
+  — dataset-scope-decisions.md:182-194 and dataset-inventory.md D15a/D15b.
+  Both are deferred to deployment onboarding, same pattern as D10: usage is
+  conditional on the deployment. D15a's own inventory row flags an anomaly
+  (`ppi_scores` has rows while `m_surveys` has none on the reference fixture)
+  that a future capability must not paper over. Credit bureau **config**
+  (`m_creditbureau*`) stays excluded — only the **result** table
+  (`m_creditreport`) is in scope, and the two must never be conflated.
+inventory_refs:
+  - D15a
+  - D15b
+data_areas: []
+concepts:
+  - id: survey_ppi
+    meaning: A poverty-scoring survey response/scorecard for a client.
+    synonyms: [survey response, ppi score, poverty scoring]
+  - id: credit_bureau_report
+    meaning: A credit bureau result record for a client or loan.
+    synonyms: [credit bureau report, credit report]
+supported_intents: []
+unsupported_intents:
+  - create survey response
+  - request credit bureau integration config
+default_rules:
+  - Surveys/PPI (D15a) and credit bureau results (D15b) are deferred to deployment onboarding, not merely uncontracted; every request answers unsupported with a deferred reason, distinct from a gap domain's reason.
+  - Credit bureau integration config (`m_creditbureau*`) stays excluded even once results are approved — the config and result tables must never be conflated.
+checks:
+  - id: deferred_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until deployment usage of surveys/PPI or credit bureau is verified and approved.

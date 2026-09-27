@@ -1,0 +1,33 @@
+info:
+  name: "OVR-6.6 domain gap (completeness analysis by category, D11) — job"
+  type: http
+  seq: 38.9987
+  description: |
+    D11 (completeness analysis — empty/unclassified must be grouped and counted
+    explicitly, never dropped) — `gap_intents` di `knowledge/domains/savings.yaml`,
+    FIN-153.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_d11_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the completeness analysis by category for this portfolio.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_d11_key", "fin153-deferred-d11-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_d11_job", res.getBody().data.job_id);

@@ -11,6 +11,7 @@ description: >-
   for assignment; no approved Mode-1 capability exists yet.
 inventory_refs:
   - D06
+  - D15e
 data_areas: []
 concepts:
   - id: teller
@@ -20,12 +21,14 @@ supported_intents: []
 gap_intents:
   - teller assignment
   - cashier assignment
+  - inter-office cash transaction
 unsupported_intents:
   - open teller shift
   - close teller shift
 default_rules:
   - Cashier/teller assignment (D06) is agreed baseline scope with no approved capability yet; it answers unsupported with a gap reason.
   - Cash position/reconciliation has no candidate table in this schema (verified missing) — a future capability cannot promise it without a new decision; recorded cash is never asserted as physical cash.
+  - Inter-office cash movement (D15e, `m_office_transaction`) sits under this domain per the decision's own disposition ("di bawah D06/accounting, ditandai eksplisit"); it is agreed baseline scope, empty on the reference fixture, and must never be conflated with client-facing transactions.
 checks:
   - id: gap_domain_no_approved_capability
     rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D06's row moves to inherited.

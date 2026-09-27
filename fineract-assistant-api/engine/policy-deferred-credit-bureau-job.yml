@@ -1,0 +1,32 @@
+info:
+  name: "OVR-6.6 domain deferred (credit bureau report, D15b) — job"
+  type: http
+  seq: 38.9975
+  description: |
+    Domain `survey_credit_bureau` (`knowledge/domains/survey_credit_bureau.yaml`,
+    deferred, FIN-153) — D15b dependen deployment.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_credit_bureau_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the credit bureau report for this client.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_credit_bureau_key", "fin153-deferred-credit-bureau-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_credit_bureau_job", res.getBody().data.job_id);

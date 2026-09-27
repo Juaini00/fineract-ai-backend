@@ -443,6 +443,18 @@ mod tests {
             "Show the provisioning result history for this loan.",
             "Show the batch job status for interest posting last night.",
             "Show the group meeting attendance for this center.",
+            // FIN-153 (second review pass) — D04 client charge, D10 custom
+            // datatable, D15a/b survey/credit bureau, D15d family member,
+            // D15e inter-office cash, and D01/D02/D03/D11 narrow phrases.
+            "Show the client charge for this account.",
+            "Show the custom datatable EmploymentDetails for this client.",
+            "Show the credit bureau report for this client.",
+            "Show the family member detail for this client.",
+            "Show the inter-office cash transaction between these branches.",
+            "Reproduce the published report for last month.",
+            "Show the historical office as of a past date for this client.",
+            "Show the consolidated total across currencies for this branch.",
+            "Show the completeness analysis by category for this portfolio.",
             "Tampilkan saldo akun buku besar.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");

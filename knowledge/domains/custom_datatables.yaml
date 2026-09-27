@@ -1,0 +1,31 @@
+id: custom_datatables
+status: deferred
+display_name: Custom datatables
+description: >-
+  User-defined Fineract data tables and dynamic column extensions — D10
+  (dataset-scope-decisions.md:136-144) and dataset-inventory.md D10.
+  Deferred to deployment onboarding: only field/relationship mappings that
+  have been inventoried and approved for a specific deployment may be
+  analyzed. The reference fixture's registered tables (`EmploymentDetails`,
+  `AddressDetails`, `KYCFields`, `SourceOfFunds`, …) are a different set than
+  the `ai_report` reference example (`extra_client_details` etc.) — proof
+  this is genuinely per-deployment, not a static schema this repo can commit
+  to ahead of time.
+inventory_refs:
+  - D10
+data_areas:
+  - custom_datatables
+concepts:
+  - id: custom_datatable
+    meaning: A tenant-registered Fineract datatable (via x_registered_table) with fields not known ahead of time.
+    synonyms: [custom datatable, registered table, tabel kustom]
+supported_intents: []
+unsupported_intents:
+  - create custom datatable
+  - add datatable column
+default_rules:
+  - Custom datatables (D10) are deferred to deployment onboarding, not merely uncontracted — the table/field set is unknown until a specific deployment's registry is inventoried and approved; it answers unsupported with a deferred reason, distinct from a gap domain's reason.
+  - Nothing may be assumed about an unregistered/unmapped table; the user is never asked to guess a table name.
+checks:
+  - id: deferred_domain_no_approved_capability
+    rule: this domain must not have approved_mvp capabilities until a specific deployment's datatable registry is inventoried and approved.

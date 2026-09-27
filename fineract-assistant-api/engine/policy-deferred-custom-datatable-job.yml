@@ -1,0 +1,33 @@
+info:
+  name: "OVR-6.6 domain deferred (custom datatable, D10) — job"
+  type: http
+  seq: 38.9973
+  description: |
+    Domain `custom_datatables` (`knowledge/domains/custom_datatables.yaml`, deferred,
+    FIN-153) — D10 dependen deployment; belum ada domain sebelumnya sehingga guard
+    `domain_deferred` sebelumnya tidak pernah teruji hidup.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_custom_datatable_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the custom datatable EmploymentDetails for this client.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_custom_datatable_key", "fin153-deferred-custom-datatable-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_custom_datatable_job", res.getBody().data.job_id);
