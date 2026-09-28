@@ -1,0 +1,24 @@
+info:
+  name: FIN-117 D08 scheduled-meeting session
+  type: http
+  seq: 50.91
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-117 D08 meeting schedules" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-117 D08: meeting session created", function () {
+          expect(res.getStatus()).to.equal(201);
+        });
+        bru.setVar("fin117MeetingSession", res.getBody().data.id);

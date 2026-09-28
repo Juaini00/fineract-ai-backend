@@ -1,11 +1,14 @@
 info:
-  name: "OVR-6.6 domain conditional (group meeting attendance, D08) — job"
+  name: "OVR-6.6 domain gap (group meeting attendance, D08) — job"
   type: http
   seq: 38.9997
   description: |
-    Domain `group_center` (`knowledge/domains/group_center.yaml`, candidate, FIN-153)
-    — D08 (jadwal/kehadiran pertemuan group) cakupannya disepakati tanpa capability
-    disetujui.
+    Domain `group_center` (`knowledge/domains/group_center.yaml`) — FIN-117
+    membangun capability D08 untuk jadwal pertemuan
+    (`group_center_meeting_schedule`), tetapi realisasi/kehadiran tetap tanpa
+    capability: `m_meeting`/`m_client_attendance` diverifikasi 0 baris pada
+    deployment ini (knowledge/VERIFICATION.md). Sebuah entri kalender tidak
+    pernah dilaporkan sebagai bukti pertemuan terjadi atau dihadiri.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"

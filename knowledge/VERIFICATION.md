@@ -896,3 +896,84 @@ ada sebelum pekerjaan ini), 48 capability, status katalog: validated**.
 - Angka di sini diukur pada **satu** basis data lokal berukuran kecil. Kelas
   cacat yang hanya muncul pada volume produksi — terutama timeout — tetap
   belum terbukti ke arah mana pun.
+
+## 10. FIN-117 / D08 — group/center meeting schedules
+
+This is a deployment-specific Mode-1 approval, not a claim that calendars
+prove attendance. On `fineract_default` (2026-09-28), `m_group` has two rows:
+group 1 (level `Group`, office 3, no assigned staff, direct members 4/5/9)
+and center 2 (level `Center`, office 2, staff 1, no direct members).
+`m_calendar` and `m_calendar_instance` have 35 rows each; exactly two instances
+belong to these groups: `(entity_type_enum, entity_id, calendar_id)` is
+`(2,1,4)` and `(4,2,3)`. Both calendar rows have `calendar_type_enum=1`,
+`repeating=true`, `recurrence='FREQ=DAILY'`, start dates 2025-12-05 and
+2025-12-04 respectively, no end date or meeting time. Other instance enums
+3/5/6 are not group/center evidence. `m_meeting` and
+`m_client_attendance` each contain **zero** rows; actual meeting occurrence and
+attendance are not provable here.
+
+The four CARRY-OVER checks for `group_center_meeting_schedule`:
+
+1. **End-to-end numbers.** For the inclusive Monday–Sunday window
+   2026-09-28…2026-10-04, bound office 3 and direct SQL independently agree
+   on the first two decisive measurements:
+
+   | Measurement | Capability SQL | Independent direct SQL |
+   | --- | ---: | ---: |
+   | Scheduled group/member rows, office 3 | 21 | 21 |
+   | Distinct scheduled dates, office 3 | 7 | 7 |
+   | Distinct directly linked members, office 3 | 3 (IDs 4, 5, 9) | 3 (IDs 4, 5, 9) |
+   | Scheduled center rows, office 2 | 7 (staff 1, member NULL) | 7 (staff 1, no direct member) |
+
+   The independent count starts from `m_group`, joins the calendar-instance
+   enum and meeting-type rows, expands seven dates from the requested week,
+   and counts actual `m_group_client` links; it does not count meetings or
+   attendance. The independently written single-day row oracle is
+   `tests/answers/group_center_meeting_schedule.sql`, consumed by the
+   `answers/group/fin117-*` job chain (columns, rows and bound parameters
+   compared with direct SQL). The office-narrowed live HTTP week proof is
+   in `engine/fin117-meeting-*` and `engine/fin117-center-*`.
+2. **Prose equals SQL.** The query returns a date **of a scheduled
+   occurrence**, not `m_calendar.start_date` mislabeled as this week's
+   meeting. It joins `entity_type_enum=2` only to groups with direct clients
+   and `=4` only to centers, requires meeting calendar type 1, and admits the
+   two recurrence forms this deployment has verified: nonrepeating start
+   dates and `FREQ=DAILY`. No fabricated center descendant roster or staff
+   assignment: both unassigned fields are NULL on the relevant row.
+3. **PII and identifiers.** `knowledge/schema/fineract/group_center.yaml:20-21`
+   classifies `m_group.display_name` as `pii`; it is **not selected**.
+   Neither staff/client display names nor group account/external IDs are
+   fetched. Group, staff, and client surrogate IDs are
+   `public_business`; when a name is required, the missing PII authorization
+   is not silently replaced with a name.
+4. **Time and evidence.** The SQL binds `from_date`/`to_date` (maximum
+   seven-day window) and reports both occurrence date and calendar
+   start/end/repeating/recurrence. `this week` for a **schedule** includes
+   Monday–Sunday, whereas transactional historical periods still end today.
+   No as-of history is claimed: staff assignment and direct membership are
+   current snapshots, not membership or attendance at a past event.
+
+Activation on another deployment requires verifying group/center use,
+calendar entity/meeting enums, recurrence forms, and PII classifications
+first. Without that evidence, leave the area conditional and domain and
+capability candidate; the conditional guard returns
+`Completed+Unsupported` / `domain_conditional_not_enabled`. Even with
+activation, requests for realized meetings or attendance stay
+`Completed+Unsupported` / `domain_gap` until source records and a separate
+approved capability establish them.
+
+Live HTTP proofs (locked runner, port 3317): activated `engine` folder,
+165 requests/202 tests, checked both offices against the independent counts
+above and the attendance negative path. An isolated deployment-candidate
+catalog (all other knowledge and the database unchanged, only the area,
+domain, and schedule capability statuses switched back to
+conditional/candidate) passed `params` with 22 requests/29 tests; the
+scheduled-group request completed `Unsupported`, `Unknown`,
+`domain_conditional_not_enabled`, no plan. The temporary catalog and Bruno
+requests were removed; the normal `.env` catalog path was restored before
+the full run.
+
+The locked `answers` stage passed 220 requests/272 tests, including
+`FIN-52 group_center_meeting_schedule: jawaban job = SQL langsung` and
+the `FIN-117 D08` completeness check (54 independently computed
+answer-oracle files).

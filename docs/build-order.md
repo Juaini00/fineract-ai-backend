@@ -1627,6 +1627,56 @@ Update after FIN-126 (D13 — existing Fineract reports guard bug):
 - **Coverage remains unchanged.** D13 has no numbered scenario in §5.1;
   L1C stays ⬜ pending each domain's Mode-1 verification.
 
+Update after FIN-117 (L1C D08 group/center meeting schedule):
+
+- The local deployment's conditional group/center gate is activated only
+  against verified `dataset-inventory.md` CLI-4/D08 evidence: two groups at
+  different levels, two matching meeting-calendar instances (entity enums
+  2/4, calendar type 1), both with `FREQ=DAILY`. Other deployments must
+  verify group use, enum/recurrence semantics and PII before activating the
+  area, domain and capability; without that evidence all stay conditional/
+  candidate and schedule requests remain `Completed+Unsupported` with
+  `domain_conditional_not_enabled`.
+- `group_center_meeting_schedule` is a Mode-1 curated query. It binds an
+  inclusive seven-day maximum window and authorized office IDs inside
+  Fineract SQL, expands verified daily recurrences to **scheduled** dates,
+  and returns group/center IDs, assigned staff ID and directly linked
+  member IDs. No name is fetched: `m_group.display_name` is PII
+  (`knowledge/schema/fineract/group_center.yaml:20-21`). A missing staff
+  assignment or center direct membership stays NULL, never inferred.
+  `m_meeting` and `m_client_attendance` each have zero rows here, so actual
+  occurrence and attendance remain `domain_gap`, not schedule evidence.
+- Direct SQL for office 3, 2026-09-28…2026-10-04 gives 21 scheduled
+  group/member rows, seven occurrence dates and three distinct direct
+  member IDs (4/5/9); the capability query gives the same 21/7/3.
+  Office 2's center yields seven schedule rows, staff ID 1 and no direct
+  member. The FIN-117 engine request chain verifies retrieval, completed
+  `Answered+Complete` with lineage and the office-scoped source rows; the
+  existing FIN-153 attendance/account-gap chains continue to assert
+  `Completed+Unsupported`. The live `answers/group/fin117-*` chain checks
+  the same capability's single-day columns, rows and bound parameters
+  against independent Fineract SQL (`tests/answers/group_center_meeting_schedule.sql`);
+  the locked answers stage passed 220 requests/272 tests. Source evidence
+  and all four `CARRY-OVER.md` checks are recorded in
+  `knowledge/VERIFICATION.md` §10.
+- The locked HTTP engine stage passed 165 requests/202 tests, including both
+  office-scoped schedules. A temporary unverified-deployment catalog (area
+  conditional, domain/capability candidate) passed 22 requests/29 tests and
+  returned `Completed+Unsupported` /
+  `domain_conditional_not_enabled` without a plan for the same schedule
+  request. The temporary catalog was removed and normal configuration
+  restored before the full suite.
+- Final post-rebase full locked run (including merged FIN-126 D13 coverage)
+  passed all stages: 652 HTTP requests and 768 Bruno tests, with catalog
+  validation at 0 errors/2 pre-existing resolver warnings.
+  The first full attempt had exposed an unrelated timing race in the
+  FIN-153 D02 historical-office state request (`Running` at its fixed
+  1.5-second read); it was not changed here, and the subsequent complete
+  run passed. Track that race separately rather than weakening D08 proof.
+- L1C remains ⬜: D08 is one domain's Mode-1 slice, not all full-release
+  domains. §5.1 remains **36/59** because FIN-117 has a domain gate but no
+  numbered acceptance scenario.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

@@ -625,9 +625,14 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
 | `write_not_supported` | Perintah mengubah data Fineract (hapus/ubah/tambah, SQL tulis/DDL). Jarvis read-only: ditolak sebelum retrieval dan query sumber. Job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null` (OVR-6.6) | `request_echo` |
 | `surface_not_approved` | Permintaan menyebut permukaan yang tidak disetujui: field rahasia (`secret_never_expose`), tabel di luar cakupan (`excluded_tables` area data-scope), frasa tindakan atas permukaan yang dikecualikan (`excluded_phrases`, mis. menjalankan report bawaan Fineract — D13), atau intent yang dinyatakan tidak didukung domain (`unsupported_intents`) — kosakatanya dari `knowledge/`, termasuk padanan Indonesia (`sensitivity.yaml` `synonyms`, FIN-140). Ditolak sebelum retrieval dan query sumber, bukan dipetakan ke capability baca terdekat; job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null`. Teks penjelasannya tidak menyebut istilah yang cocok (tidak membocorkan schema yang dibatasi) (OVR-6.6) | `request_echo` |
-| `domain_gap` | Subjek permintaan adalah domain berstatus `gap` (cakupan disepakati §1/D01–D15, belum punya capability disetujui, mis. `loan`, `tax`, `accounting`, `audit`, `share`, `products`, `fixed_recurring_deposit`, `linking_resources`, `teller_cashier`, `standing_instructions`, `provisioning`, `scheduler` — `knowledge/domains/*.yaml`, FIN-153), atau intent spesifik yang disepakati-tapi-belum-dikontrak di domain lain yang statusnya bukan `deferred`/`candidate` (`gap_intents`, mis. alamat client CLI-6 atau roster akun loan/share milik client). Dikenali lintas bahasa dari `concepts[].synonyms`/`gap_intents`. | `request_echo` |
+| `domain_gap` | Subjek permintaan adalah domain berstatus `gap` (cakupan disepakati §1/D01–D15, belum punya capability disetujui, mis. `loan`, `tax`, `accounting`, `audit`, `share`, `products`, `fixed_recurring_deposit`, `linking_resources`, `teller_cashier`, `standing_instructions`, `provisioning`, `scheduler` — `knowledge/domains/*.yaml`, FIN-153), atau intent spesifik yang disepakati-tapi-belum-dikontrak di domain lain yang statusnya bukan `deferred`/`candidate` (`gap_intents`, mis. alamat client CLI-6, roster akun loan/share milik client, atau realisasi/kehadiran pertemuan group/center D08). Dikenali lintas bahasa dari `concepts[].synonyms`/`gap_intents`. | `request_echo` |
 | `domain_deferred` | Subjek permintaan adalah domain berstatus `deferred` — deferred ke onboarding deployment karena skema/keberadaannya bergantung tenant (D10 `custom_datatables`, D15a/b survei/credit-bureau), bukan sekadar belum dikontrak. | `request_echo` |
-| `domain_conditional_not_enabled` | Subjek permintaan adalah domain berstatus `candidate` (mis. `group_center`) — hanya aktif bila deployment memverifikasi area yang mendasarinya; default-nya `Unsupported` sampai diverifikasi. | `request_echo` |
+| `domain_conditional_not_enabled` | Subjek permintaan adalah domain berstatus `candidate` — mis. `group_center` di deployment **lain** yang belum memverifikasi penggunaan group/center dan semantik kalender; default-nya `Unsupported` sampai area dan capability diaktifkan berdasarkan bukti. Deployment lokal FIN-117 sudah memverifikasi dan mengaktifkan jadwal pertemuan, bukan realisasi/kehadiran. | `request_echo` |
+| `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
+| `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
+| `node_attempt_cap_reached` | Setiap attempt query sumber yang diizinkan (`NODE_ATTEMPT_CAP`, default 3) terputus sesudah query dikirim dan sebelum hasilnya durable. Hasilnya **tidak diketahui** — bukan gagal, bukan nol — dan tidak diulang lagi. Job `Failed` + `OperationalFailure` + `Unknown`, `failure_code` sama (OVR-6.4) | — |
+| `plan_changed_on_recovery` | Job diklaim ulang sesudah lease hilang, tetapi plan yang diverifikasi ulang tidak identik dengan plan versi aktif yang tersimpan (graph atau katalog berubah). Node tidak dijalankan di bawah plan yang bukan miliknya, dan re-plan belum ada. Job `Failed` + `OperationalFailure` + `Unknown` | — |
+| `completed_node_not_rerun` | Lease worker hilang **sesudah** node selesai dan sebelum response commit. Output node yang `Completed` tidak dijalankan ulang, dan menyusun jawaban dari output tersimpan belum didukung — job ditutup, tidak dikembalikan ke antrean tanpa ujung. Job `Failed` + `OperationalFailure` + `Unknown` | — |
 
 Ketiga alasan di atas dijawab sebelum retrieval dan query sumber, bukan
 dipetakan ke capability baca terdekat (mis. savings) yang akan menjawab data
@@ -637,11 +642,20 @@ kebijakan — job `Completed` + outcome **`Unsupported`** + `completeness`
 sengaja dipisah, bukan satu `domain_deferred` generik: "belum dikontrak" (gap)
 bukan hal yang sama dengan "menunggu deployment" (deferred) atau "area belum
 diverifikasi" (candidate).
-| `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
-| `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
-| `node_attempt_cap_reached` | Setiap attempt query sumber yang diizinkan (`NODE_ATTEMPT_CAP`, default 3) terputus sesudah query dikirim dan sebelum hasilnya durable. Hasilnya **tidak diketahui** — bukan gagal, bukan nol — dan tidak diulang lagi. Job `Failed` + `OperationalFailure` + `Unknown`, `failure_code` sama (OVR-6.4) | — |
-| `plan_changed_on_recovery` | Job diklaim ulang sesudah lease hilang, tetapi plan yang diverifikasi ulang tidak identik dengan plan versi aktif yang tersimpan (graph atau katalog berubah). Node tidak dijalankan di bawah plan yang bukan miliknya, dan re-plan belum ada. Job `Failed` + `OperationalFailure` + `Unknown` | — |
-| `completed_node_not_rerun` | Lease worker hilang **sesudah** node selesai dan sebelum response commit. Output node yang `Completed` tidak dijalankan ulang, dan menyusun jawaban dari output tersimpan belum didukung — job ditutup, tidak dikembalikan ke antrean tanpa ujung. Job `Failed` + `OperationalFailure` + `Unknown` | — |
+
+FIN-117 D08: capability `group_center_meeting_schedule` mengembalikan tabel
+jadwal pertemuan dengan kolom `group_id`, `group_level_name`, `office_id`,
+`staff_id`, `calendar_id`, `scheduled_date`, `meeting_start_date`,
+`meeting_end_date`, `meeting_repeating`, `meeting_recurrence`, `meeting_time`,
+dan `member_client_id`. `from_date`/`to_date` dibatasi tujuh hari; "this week"
+untuk jadwal berarti Senin–Minggu, bukan Senin–hari ini seperti transaksi
+historis. `office_ids` tetap berasal dari scope otorisasi dan hanya dapat
+dipersempit. Anggota merupakan relasi langsung `m_group_client` saat ini;
+`NULL` pada center bukan daftar anggota turunannya, dan `staff_id=NULL`
+berarti tidak ada penugasan yang tercatat. `m_group.display_name` tergolong
+PII; nama group, petugas, dan anggota tidak dibaca oleh capability ini.
+Jadwal tidak membuktikan pertemuan terjadi ataupun kehadiran; permintaan
+realisasi/kehadiran tetap `Completed` + `Unsupported`/`domain_gap`.
 
 #### `evidence_json` — lineage
 

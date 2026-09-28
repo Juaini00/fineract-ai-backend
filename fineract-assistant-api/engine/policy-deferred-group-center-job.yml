@@ -3,13 +3,21 @@ info:
   type: http
   seq: 38.995
   description: |
-    Group/center (`knowledge/domains/group_center.yaml`, status `candidate`, FIN-153)
-    mencakup seluruh jenis account per baseline (CLI-4/CLI-5), bukan savings saja.
-    Sebelum FIN-153 supported_intents-nya justru mengklaim "group-owned savings
-    reporting"/"center-level savings summaries" padahal satu-satunya capability yang
-    ada hanya group_identity_resolve (kontradiksi #6) — pertanyaan seperti ini bisa
+    Group/center (`knowledge/domains/group_center.yaml`) mencakup seluruh jenis
+    account per baseline (CLI-4/CLI-5), bukan savings saja. Sebelum FIN-153
+    supported_intents-nya justru mengklaim "group-owned savings reporting"/
+    "center-level savings summaries" padahal satu-satunya capability yang ada
+    hanya group_identity_resolve (kontradiksi #6) — pertanyaan seperti ini bisa
     salah dijawab lewat capability savings umum. Sekarang dijawab unsupported
     beralasan gap.
+
+    FIN-117: domain status naik dari `candidate` ke `approved_mvp` (bukti
+    deployment CLI-4 sudah terverifikasi; capability D08 meeting schedule
+    diaktifkan). CLI-4 account summary di luar savings tetap tidak punya
+    capability, jadi `completeness_reason`-nya berubah dari
+    `domain_conditional_not_enabled` ("area belum diverifikasi") menjadi
+    `domain_gap` ("cakupan disepakati, belum dikontrak") — bukan perilaku baru,
+    hanya alasan yang sekarang akurat untuk domain yang aktif.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"

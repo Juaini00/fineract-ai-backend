@@ -2,14 +2,12 @@ id: group_identity_resolve
 status: candidate
 domain: group_center
 display_name: Group Identity Resolve
-# Wires group.groups/group_candidates (013 §6.5) so the dataset shape is not
-# stale, without activating the domain: status stays `candidate` (matches
-# group_center's own status) rather than `approved_mvp`, so this capability
-# is never selected by planning/data paths, which filter on approved_mvp
-# (spec §7 — group's gate rests on the capability set, not a domain-status
-# reject, since lqr.rs does not reject `candidate`). Promote to approved_mvp
-# only alongside the group-center-foundation area flip and a recorded
-# pii_signoff.
+# This resolver remains `candidate` even though FIN-117 activated the
+# group_center domain and its independently evidenced meeting-schedule
+# capability. CLI-4 still lacks proof of a client→group identity resolver
+# and this candidate would expose m_group.display_name, classified as PII
+# in knowledge/schema/fineract/group_center.yaml; promotion requires an
+# explicit PII-approved output contract and its own source/HTTP proof.
 kind: resolver
 continuation: true
 description: Resolve candidate groups by name within the caller's authorized office scope, returning group id and safe label fields for entity selection.

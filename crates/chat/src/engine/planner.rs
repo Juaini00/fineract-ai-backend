@@ -663,7 +663,16 @@ fn bind_parameters(
     let mut deterministic: Vec<DeterministicBind> = Vec::new();
     let mut unapplied: Vec<UnappliedParam> = Vec::new();
 
-    let parsed_period = param_parse::parse_period(request_text, today);
+    let parsed_period = if capability
+        .guards
+        .get("schedule_period")
+        .and_then(serde_yaml::Value::as_bool)
+        == Some(true)
+    {
+        param_parse::parse_schedule_period(request_text, today)
+    } else {
+        param_parse::parse_period(request_text, today)
+    };
     let parsed_limit = param_parse::parse_limit(request_text);
     let parsed_currency = param_parse::parse_currency(request_text);
     let mut period_disclosed = false;

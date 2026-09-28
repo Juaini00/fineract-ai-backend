@@ -1,0 +1,29 @@
+info:
+  name: FIN-117 D08 group meeting week office 3
+  type: http
+  seq: 50.92
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{fin117MeetingKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin117MeetingSession}}", "request_text": "Which groups are scheduled to meet this week, with their responsible staff ID and direct member IDs?", "office_ids": [3] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin117MeetingKey", "fin117-d08-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-117 D08: scoped scheduled-meeting job accepted", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("fin117MeetingJob", res.getBody().data.job_id);

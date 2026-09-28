@@ -1,0 +1,20 @@
+info:
+  name: FIN-117 group schedule answer login
+  type: http
+  seq: 0
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      { "username": "{{username}}", "password": "{{password}}" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(200);
+        bru.setVar("fin117AnswerToken", res.getBody().data.access_token);

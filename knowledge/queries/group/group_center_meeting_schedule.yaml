@@ -1,0 +1,64 @@
+id: group.group_center_meeting_schedule
+database: fineract
+sql_file: queries/group/group_center_meeting_schedule.sql
+data_areas: [group_center_foundation, organization_foundation]
+tables: [m_group, m_group_level, m_calendar_instance, m_calendar, m_group_client]
+metrics: []
+parameters:
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+output_fields:
+  - { name: group_id, type: bigint, sensitivity: public_business }
+  - { name: group_level_name, type: string, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: staff_id, type: bigint, sensitivity: public_business }
+  - { name: calendar_id, type: bigint, sensitivity: public_business }
+  - { name: scheduled_date, type: date, sensitivity: public_business }
+  - { name: meeting_start_date, type: date, sensitivity: public_business }
+  - { name: meeting_end_date, type: date, sensitivity: public_business }
+  - { name: meeting_repeating, type: boolean, sensitivity: public_business }
+  - { name: meeting_recurrence, type: string, sensitivity: public_business }
+  - { name: meeting_time, type: string, sensitivity: public_business }
+  - { name: member_client_id, type: bigint, sensitivity: public_business }
+grain: [scheduled_date, group_id, calendar_id, member_client_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: sql_file_exists
+    rule: sql_file must exist under queries/.
+  - id: sql_is_select_only
+    rule: SQL must be one SELECT statement and contain no unsafe command.
+  - id: office_filter_is_bound
+    rule: SQL must constrain g.office_id with ANY($3::bigint[]).
+  - id: date_filter_is_bound
+    rule: SQL must generate scheduled dates between $1::date and $2::date.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.
+  - id: entity_type_scoped_to_group_and_center
+    rule: >-
+      Match group rows only to CalendarEntityType.GROUPS(2) and center rows
+      only to CENTERS(4), validated against m_group_level.can_have_clients.
+      Require calendar_type_enum=1 (meeting), never other calendar kinds.
+  - id: recurrence_verified
+    rule: >-
+      Nonrepeating dates and FREQ=DAILY are expanded within the bound window.
+      This deployment's group/center calendar rows are both FREQ=DAILY;
+      other recurrence patterns require separate verification before enabling
+      this capability on another deployment.
+  - id: schedule_not_realization
+    rule: >-
+      This query reads only m_calendar/m_calendar_instance (the schedule). It
+      never joins m_meeting or m_client_attendance (the realization/attendance
+      evidence), so a scheduled recurrence can never be reported as a meeting
+      that happened or was attended (dataset-scope-decisions.md D08:126).
+  - id: member_roster_is_left_join
+    rule: >-
+      member_client_id is a LEFT JOIN on m_group_client only where
+      m_group_level.can_have_clients; a center or group with no direct members
+      returns NULL, never an inferred descendant roster.
+  - id: pii_group_label_excluded
+    rule: >-
+      m_group.display_name is pii (knowledge/schema/fineract/group_center.yaml)
+      and is not selected; staff/client IDs are surrogate keys, not names.
+      m_group.account_no and external_id are excluded.

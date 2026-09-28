@@ -1,0 +1,27 @@
+info:
+  name: FIN-117 group schedule answer job
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin117AnswerToken}}"
+    - name: Idempotency-Key
+      value: "{{fin117AnswerKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin117AnswerSession}}", "request_text": "Show today's group and center meeting schedule for authorized offices, including staff and member IDs." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin117AnswerKey", "fin117-d08-answer-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin117AnswerJob", res.getBody().data.job_id);

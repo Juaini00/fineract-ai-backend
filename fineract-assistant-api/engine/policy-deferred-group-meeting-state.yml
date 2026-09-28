@@ -1,5 +1,5 @@
 info:
-  name: "OVR-6.6 domain conditional (group meeting attendance, D08) — job state"
+  name: "OVR-6.6 domain gap (group meeting attendance, D08) — job state"
   type: http
   seq: 38.9998
 http:
@@ -13,12 +13,13 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (conditional, group meeting D08): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-117 (gap, group meeting attendance D08): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
           expect(job.completeness).to.equal("Unknown");
-          expect(job.completeness_reason).to.equal("domain_conditional_not_enabled");
+          expect(job.completeness_reason).to.equal("domain_gap");
+          expect(job.completeness_reason).to.not.equal("domain_conditional_not_enabled");
           expect(job.completeness_reason).to.not.equal("surface_not_approved");
           expect(job.completeness_reason).to.not.equal("out_of_scope");
           expect(job.completeness_reason).to.not.equal("retrieval_miss");
