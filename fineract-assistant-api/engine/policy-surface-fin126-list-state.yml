@@ -1,0 +1,23 @@
+info:
+  name: "FIN-126 D13 — list Fineract report definitions — state"
+  type: http
+  seq: 51.9
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin126_list_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("FIN-126 (D13, list): BlockedByPolicy tanpa plan maupun sumber", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("BlockedByPolicy");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("surface_not_approved");
+          expect(job.plan_version).to.equal(null);
+        });

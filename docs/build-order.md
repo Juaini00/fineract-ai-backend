@@ -1593,6 +1593,40 @@ Update after FIN-153 (`knowledge/` alignment against the inventory):
   recorded in `knowledge/VERIFICATION.md`) is also met — that is FIN-109
   onward.
 
+Update after FIN-126 (D13 — existing Fineract reports guard bug):
+
+- **The D13 policy area now guards report requests, not just the table name.**
+  `knowledge/data-scope/areas/out-of-scope.yaml` already listed
+  `stretchy_report_execution`, but the runtime matcher only read
+  `excluded_tables`, which was empty there. Its new `stretchy_report` entry
+  rejects explicit table/feature requests. `excluded_phrases` in that same
+  rejected area covers natural-language actions naming built-in Fineract
+  reports (EN/ID) without broadly blocking the ordinary word "report";
+  `knowledge/policies/unsupported_requests.yaml` also declares the D13
+  hard-reject category.
+  `catalog::surface::Surfaces` reads these phrases only from a
+  `rejected_group` area; the guard in `engine::worker::run_job` runs before
+  scope derivation, retrieval, planning and source SQL. D13 is permanently
+  excluded (`dataset-scope-decisions.md:166-172`,
+  `dataset-inventory.md:269`); this must not be treated as FIN-153's
+  `domain_gap` or FIN-117's agreed meeting-domain requests.
+- **Live HTTP proof:** `policy-surface-fin126-stretchy-report-{job,state,response}.yml`
+  (EN: "Run Fineract report X") and the `-id-` trio (ID: "Jalankan
+  report Fineract X") assert `Completed` + `BlockedByPolicy` +
+  `Unknown` + `surface_not_approved`, `plan_version = null`, and a
+  sanitized limitation without source lineage or report definition.
+  `policy-surface-fin126-{list,show}-*` also reject listing and surfacing
+  named built-in reports without a plan. `fin126-stretchy-report-control-*`
+  asserts ordinary savings analysis mentioning "report" remains `Answered`;
+  no report execution endpoint, capability, SQL, or schema read is added.
+  The `catalog::surface` unit tests cover explicit `stretchy_report`
+  vocabulary, action phrasing, metadata mention and approved controls.
+  An app-database ledger check of these exact request texts found zero
+  `job_plans` and zero `job_node_runs` for each rejected job; the
+  `Answered` savings control had both a plan and a node.
+- **Coverage remains unchanged.** D13 has no numbered scenario in §5.1;
+  L1C stays ⬜ pending each domain's Mode-1 verification.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

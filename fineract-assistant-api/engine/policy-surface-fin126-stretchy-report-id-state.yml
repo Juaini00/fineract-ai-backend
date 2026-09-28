@@ -1,0 +1,23 @@
+info:
+  name: "FIN-126 D13 stretchy report (padanan Indonesia) — job state"
+  type: http
+  seq: 51.4
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_surface_fin126_id_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("FIN-126 (D13, ID): Completed + BlockedByPolicy + Unknown, tanpa plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("BlockedByPolicy");
+          expect(job.completeness).to.equal("Unknown");
+          expect(job.completeness_reason).to.equal("surface_not_approved");
+          expect(job.plan_version).to.equal(null);
+        });

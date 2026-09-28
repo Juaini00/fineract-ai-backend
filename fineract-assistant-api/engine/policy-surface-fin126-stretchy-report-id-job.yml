@@ -1,0 +1,32 @@
+info:
+  name: "FIN-126 D13 built-in report (padanan Indonesia) — job"
+  type: http
+  seq: 51.3
+  description: |
+    Padanan Indonesia D13: permintaan menjalankan report bawaan bernama ditolak
+    oleh frasa excluded_phrases tanpa memakai SQL atau definisi report.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_surface_fin126_id_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Jalankan report Fineract X untuk Cabang A.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_surface_fin126_id_key", "fin126-surface-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_surface_fin126_id_job", res.getBody().data.job_id);

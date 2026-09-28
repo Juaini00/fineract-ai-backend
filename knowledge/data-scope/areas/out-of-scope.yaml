@@ -19,6 +19,25 @@ areas:
   - application_user_administration
   - fineract_write_actions
   - stretchy_report_execution
+# FIN-126 (D13): `stretchy_report_execution` had no excluded_tables entry, so
+# `catalog::surface::Surfaces` never picked it up — a request naming a
+# Fineract stretchy report fell through to ordinary retrieval instead of the
+# policy guard. `stretchy_report` is Fineract's own table name and the
+# Mifos/Fineract admin UI's own term for this feature (dataset-inventory.md
+# D13), so "stretchy report" as a two-token phrase is real vocabulary, not an
+# invented one.
+excluded_tables:
+  - stretchy_report
+excluded_phrases:
+  - run Fineract report
+  - run the Fineract report
+  - execute Fineract report
+  - execute the Fineract report
+  - run report Fineract
+  - jalankan report Fineract
+  - list Fineract reports
+  - show Fineract report
+  - tampilkan report Fineract
 rule: Out-of-scope areas must produce hard validation failures if referenced by runtime catalog files.
 checks:
   - id: rejected_not_runtime
