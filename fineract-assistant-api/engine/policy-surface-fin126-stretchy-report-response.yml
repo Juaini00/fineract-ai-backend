@@ -1,0 +1,29 @@
+info:
+  name: "FIN-126 D13 stretchy report (EN) — response"
+  type: http
+  seq: 51.2
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{policy_surface_fin126_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const shape = require("./lib/response_shape.js");
+        const document = res.getBody().data;
+
+        shape.assertBlockShape(test, expect, document);
+
+        test("FIN-126 (D13, EN): penolakan dinyatakan sebagai limitation, tanpa lineage/plan/definisi report", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(document.kind).to.equal("limitation");
+          expect(document.outcome).to.equal("BlockedByPolicy");
+          expect(document.completeness).to.equal("Unknown");
+          expect(document.blocks_json).to.have.lengthOf(1);
+          expect(document.blocks_json[0].block_id).to.equal("surface_not_approved");
+          expect(document.blocks_json[0].type).to.equal("limitation");
+          expect(document.evidence_json.lineage === undefined || document.evidence_json.lineage.length === 0).to.equal(true);
+        });

@@ -1,0 +1,32 @@
+info:
+  name: "FIN-126 D13 — kontrol: kata 'report' biasa tetap dijawab"
+  type: http
+  seq: 51.6
+  description: |
+    D13's excluded phrases require an action targeting a built-in Fineract report;
+    the bare word "report" in an ordinary savings analysis stays approved.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{fin126_control_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show a report of savings withdrawals this month.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin126_control_key", "fin126-control-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("fin126_control_job", res.getBody().data.job_id);

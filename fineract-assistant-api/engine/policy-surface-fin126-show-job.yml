@@ -1,0 +1,29 @@
+info:
+  name: "FIN-126 D13 — surface Fineract report X — job"
+  type: http
+  seq: 51.91
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{fin126_show_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show Fineract report X for Branch A.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin126_show_key", "fin126-show-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-126 (D13, surface): job diterima", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("fin126_show_job", res.getBody().data.job_id);

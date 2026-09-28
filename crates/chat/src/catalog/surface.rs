@@ -17,6 +17,8 @@
 //!   domain berstatus `deferred` (loans, accounting_gl, tax) dilewati: domain
 //!   itu sendiri menetapkan jawabannya `Unsupported` dengan alasan deferred
 //!   (`domains/loan.yaml` `default_rules`), bukan penolakan kebijakan.
+//! - **Frasa permintaan permukaan terlarang** — `excluded_phrases` dari area
+//!   dikecualikan (D13: "run report Fineract", bukan kata umum "report").
 //! - **Intent yang tidak didukung** — `unsupported_intents` setiap
 //!   `domains/*.yaml`.
 //!
@@ -91,6 +93,13 @@ impl Surfaces {
                 .filter(|area| !deferred_areas.contains(area.id.as_str()))
                 .flat_map(|area| area.excluded_tables.iter())
                 .map(|table| Term::excluded_table(table)),
+        );
+        terms.extend(
+            areas
+                .iter()
+                .filter(|area| area.status.as_deref() == Some("rejected_group"))
+                .flat_map(|area| area.excluded_phrases.iter())
+                .map(|phrase| Term::phrase("excluded_phrases", phrase)),
         );
 
         terms.extend(
@@ -381,6 +390,14 @@ mod tests {
             "Show rows of m_role.",
             "Reverse transaction 5512.",
             "Disburse loan 42 today.",
+            // FIN-126 (D13) — `stretchy_report` execution/surfacing is
+            // permanently excluded (dataset-scope-decisions.md `:166-172`).
+            "Run the stretchy report for Branch A in Fineract.",
+            "Jalankan stretchy report Fineract untuk Cabang A.",
+            "Jalankan report Fineract X.",
+            "Run Fineract report X.",
+            "List Fineract reports for Branch A.",
+            "Tampilkan report Fineract X.",
         ] {
             assert!(surfaces.find(text).is_some(), "{text}");
         }
@@ -404,6 +421,12 @@ mod tests {
             "Daftar produk tabungan milik nasabah Jasmin Dao.",
             "Total setoran bulan ini.",
             "Tampilkan alamat kantor pusat.",
+            // FIN-126 (D13) — kata "report" pada analisis biasa dan pertanyaan
+            // metadata tidak sama dengan permintaan menjalankan report bawaan.
+            "Show a report of savings balances per office.",
+            "Show credit bureau report for this client.",
+            "Show the group meeting attendance report for Branch A.",
+            "Does Fineract have report metadata? Do not run the report.",
         ] {
             assert!(surfaces.find(text).is_none(), "{text}");
         }
@@ -561,7 +584,9 @@ mod tests {
     fn reason_distinguishes_gap_deferred_and_conditional() {
         let deferred = deferred_domains();
 
-        let gap = deferred.find("Show loan transactions.").expect("loan cocok");
+        let gap = deferred
+            .find("Show loan transactions.")
+            .expect("loan cocok");
         assert_eq!(gap.source, "domain_gap");
 
         let conditional = deferred

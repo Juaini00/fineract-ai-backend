@@ -1,0 +1,33 @@
+info:
+  name: "FIN-126 D13 built-in report (EN) — job"
+  type: http
+  seq: 51
+  description: |
+    D13 (dataset-scope-decisions.md `:166-172`): an admin-authored Fineract report,
+    identified by name rather than a table identifier, must be refused before planning.
+    The excluded phrase comes from the rejected D13 area, not an executable capability.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_surface_fin126_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Run Fineract report X for Branch A.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_surface_fin126_key", "fin126-surface-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_surface_fin126_job", res.getBody().data.job_id);

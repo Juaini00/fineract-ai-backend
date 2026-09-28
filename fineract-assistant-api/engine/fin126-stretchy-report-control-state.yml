@@ -1,0 +1,21 @@
+info:
+  name: "FIN-126 D13 — kontrol: kata 'report' biasa — job state"
+  type: http
+  seq: 51.7
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin126_control_job}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const job = res.getBody().data;
+        test("FIN-126 (kontrol): 'report' pada permintaan biasa TIDAK ditolak sebagai D13", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(job.lifecycle).to.equal("Completed");
+          expect(job.outcome).to.equal("Answered");
+          expect(job.completeness_reason).to.not.equal("surface_not_approved");
+        });

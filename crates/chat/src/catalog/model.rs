@@ -238,6 +238,10 @@ pub struct DataScopeArea {
     pub status: Option<String>,
     #[serde(default)]
     pub excluded_tables: Vec<String>,
+    /// Frasa permukaan terlarang yang bukan nama tabel (mis. laporan bawaan
+    /// Fineract). Dicocokkan sebagai token utuh oleh guard sebelum retrieval.
+    #[serde(default)]
+    pub excluded_phrases: Vec<String>,
     /// Rujukan baris `docs/data/dataset-inventory.md` (mis. `D09`, `SAV-9`)
     /// yang menjadi dasar area ini — FIN-153 L1C. Wajib tidak kosong: sebuah
     /// area tanpa rujukan inventaris tidak punya otoritas cakupan.

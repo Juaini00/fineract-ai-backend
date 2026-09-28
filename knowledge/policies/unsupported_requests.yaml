@@ -7,6 +7,7 @@ hard_reject:
   - request secret fields
   - request raw account numbers, external ids, payment references, or command JSON
   - request out-of-scope tables
+  - request to run, surface, or list a built-in Fineract report
   - request deferred domains in MVP
   - request office scope outside API key allowed_office_ids
 clarify:
