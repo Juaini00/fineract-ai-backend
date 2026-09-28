@@ -1,0 +1,52 @@
+id: group_center_meeting_schedule
+status: approved_mvp
+domain: group_center
+display_name: Group/Center Meeting Schedule
+# FIN-117 (D08). group_center_foundation's own default_rule ("enable only
+# when the deployment uses groups or centers") is the evidenced deployment
+# check this capability activates against: dataset-inventory.md CLI-4 already
+# recorded this deployment's group/center use as verified (2 groups, one at
+# each level), and this capability adds nothing beyond what that evidence
+# supports — schedule, staff, and membership, never realization/attendance.
+description: >-
+  List scheduled meeting occurrences within the requested date window for
+  authorized groups/centers. Return group ID and level, the responsible staff
+  ID when assigned, and direct member client IDs where the group permits them.
+  No names are fetched: m_group.display_name is PII and staff/client names
+  require separate approval. A center's descendants are not inferred members;
+  neither a schedule nor membership proves realization or attendance.
+data_areas: [group_center_foundation, organization_foundation]
+required_api_capability: group_center_meeting_schedule
+query_id: group.group_center_meeting_schedule
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: group, grouping: none, output: list, pii: none }
+examples:
+  - Which groups and centers are scheduled to meet this week, and what are the staff and member IDs?
+  - Show today's group and center meeting schedule for this branch.
+  - Tampilkan jadwal pertemuan kelompok minggu ini dan ID petugas serta anggotanya.
+supported_intents:
+  - scheduled group/center meeting occurrences and direct membership within authorized office scope
+unsupported_intents:
+  - whether a scheduled meeting actually occurred
+  - member attendance at a meeting
+guards:
+  require_office_scope: true
+  max_date_range_days: 7
+  schedule_period: true
+  pii: { returns_pii: false, never_return: [account_no, external_id, group_display_name] }
+parameters:
+  from_date: { type: date, required: false, default: business_today, fill_when_missing: true }
+  to_date: { type: date, required: false, default: business_today, fill_when_missing: true }
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: schedule_not_attendance
+    rule: >-
+      Dates derive only from meeting calendars; source realization and
+      attendance are absent here and remain domain_gap. Group/client/staff
+      display names are never queried because group display_name is PII and
+      this capability returns only surrogate IDs.

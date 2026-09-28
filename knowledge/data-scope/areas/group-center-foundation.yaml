@@ -1,8 +1,14 @@
 id: group_center_foundation
-status: conditional
+status: enabled
+# FIN-117: flipped from `conditional` — the default_rule below ("enable only
+# when the deployment uses groups or centers") is evidenced for this
+# deployment by dataset-inventory.md CLI-4 (2 groups, one at each level,
+# verified) and by knowledge/VERIFICATION.md's group_center_meeting_schedule
+# row. A deployment without that evidence keeps this area `conditional`.
 source_doc: docs/data/dataset-inventory.md#4-domain-c--client--ownership
 inventory_refs:
   - CLI-4
+  - D08
 description: >-
   Group and center context for deployments that use group-based organization
   — CLI-4. Covers every account type a member may hold (loan, savings,
@@ -12,9 +18,22 @@ included_tables:
   - m_group
   - m_group_client
   - m_group_level
+  # FIN-117 (D08): calendar/meeting schedule tables, joined to m_group via
+  # m_calendar_instance.entity_id where entity_type_enum IN (2, 4) — Fineract's
+  # CalendarEntityType.GROUPS/CENTERS — never the whole calendar table
+  # unscoped.
+  - m_calendar
+  - m_calendar_instance
 conditional_tables:
   - m_group_roles
   - m_staff_assignment_history
+  # FIN-117 (D08): realization/attendance evidence. Structurally present on
+  # this deployment but 0 rows (verified, VERIFICATION.md) — conditional on a
+  # future deployment actually having recorded meetings, not on enabling this
+  # area. No approved_mvp query reads these; a meeting_schedule row is never
+  # reported as proof a meeting happened or was attended.
+  - m_meeting
+  - m_client_attendance
 excluded_tables: []
 allowed_domains:
   - group_center
@@ -22,11 +41,11 @@ allowed_domains:
   - loan
   - share
 default_rules:
-  - Enable only when the local Fineract deployment uses groups or centers.
+  - Enable only when the deployment verifies group/center use, group/center calendar entity and meeting type, supported recurrence forms, and group display-name PII classification. Otherwise keep this area conditional, the domain and its meeting capability candidate, and answer Unsupported with domain_conditional_not_enabled.
 checks:
   - id: conditional_not_executable_by_default
     rule: conditional group/center tables must not be used by approved_mvp queries unless explicitly enabled.
   - id: group_office_scope_declared
     rule: group-owned savings account paths must resolve to m_group.office_id.
   - id: group_identifiers_excluded
-    rule: m_group.account_no and m_group.external_id must not appear in MVP output contracts.
+    rule: m_group.account_no and m_group.external_id must not appear in approved output contracts; m_group.display_name is pii and requires explicit approval, never public_business.

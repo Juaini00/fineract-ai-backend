@@ -90,6 +90,21 @@ pub fn parse_period(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
         .or_else(|| parse_relative_phrase(text, today))
 }
 
+/// A scheduled event is allowed later in the current week; transaction
+/// periods intentionally stop at today. Keep those meanings separate.
+pub fn parse_schedule_period(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
+    let joined = format!(" {} ", words(text).join(" ").to_lowercase());
+    if joined.contains(" this week ") || joined.contains(" minggu ini ") {
+        let from = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+        return Some(ParsedPeriod {
+            from,
+            to: from + chrono::Duration::days(6),
+            detail: "this week (scheduled, Monday through Sunday)".to_string(),
+        });
+    }
+    parse_period(text, today)
+}
+
 const RANGE_CONNECTORS: [&str; 5] = ["to", "through", "until", "sampai", "hingga"];
 
 fn parse_month_range(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
@@ -419,6 +434,18 @@ mod tests {
                 to: today(),
                 detail: "this month".into()
             })
+        );
+    }
+
+    #[test]
+    fn scheduled_week_includes_future_days_without_changing_transaction_week() {
+        let monday = NaiveDate::from_ymd_opt(2026, 9, 28).unwrap();
+        let schedule = parse_schedule_period("Meetings this week", monday).unwrap();
+        assert_eq!(schedule.from, monday);
+        assert_eq!(schedule.to, NaiveDate::from_ymd_opt(2026, 10, 4).unwrap());
+        assert_eq!(
+            parse_period("Deposits this week", monday).unwrap().to,
+            monday
         );
     }
 

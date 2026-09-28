@@ -1,0 +1,29 @@
+info:
+  name: FIN-117 D08 center meeting week office 2
+  type: http
+  seq: 50.94
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{fin117CenterKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin117MeetingSession}}", "request_text": "Which centers are scheduled to meet this week, with the responsible staff ID and direct member IDs?", "office_ids": [2] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin117CenterKey", "fin117-d08-center-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-117 D08: center schedule scoped to office 2 accepted", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("fin117CenterJob", res.getBody().data.job_id);

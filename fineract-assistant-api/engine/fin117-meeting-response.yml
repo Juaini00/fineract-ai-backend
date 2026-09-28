@@ -1,0 +1,47 @@
+info:
+  name: FIN-117 D08 scheduled group meetings and members
+  type: http
+  seq: 50.93
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin117MeetingJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const doc = res.getBody().data;
+          const table = doc.blocks_json.find((block) => block.type === "table");
+          test("FIN-117 D08: scheduled-meeting retrieval completes with evidence", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(doc.outcome).to.equal("Answered");
+            expect(doc.completeness).to.equal("Complete");
+            expect(doc.validation_status).to.equal("passed");
+            expect(doc.evidence_json.lineage[0].capability_id).to.equal("group_center_meeting_schedule");
+            expect(doc.evidence_json.lineage[0].query_id).to.equal("group.group_center_meeting_schedule");
+          });
+          test("FIN-117 D08: office 3 schedule matches independent 21 rows, seven dates and three direct members", function () {
+            expect(table).to.be.an("object");
+            expect(table.rows).to.have.lengthOf(21);
+            const at = (name) => table.columns.indexOf(name);
+            const monday = new Date();
+            monday.setUTCHours(0, 0, 0, 0);
+            monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+            const week = Array.from({ length: 7 }, (_, i) => {
+              const d = new Date(monday);
+              d.setUTCDate(d.getUTCDate() + i);
+              return d.toISOString().slice(0, 10);
+            });
+            expect([...new Set(table.rows.map((r) => r[at("scheduled_date")]))]).to.deep.equal(week);
+            expect([...new Set(table.rows.map((r) => r[at("member_client_id")]))].sort((a,b) => a-b)).to.deep.equal([4, 5, 9]);
+            expect(table.rows.every((r) => r[at("group_id")] === 1 && r[at("office_id")] === 3 && r[at("calendar_id")] === 4 && r[at("staff_id")] === null && r[at("meeting_recurrence")] === "FREQ=DAILY")).to.equal(true);
+            expect(table.columns).to.not.include("group_display_name");
+            expect(table.columns).to.not.include("client_display_name");
+            expect(table.columns).to.not.include("staff_display_name");
+            expect(table.columns).to.not.include("attendance");
+          });
+        }

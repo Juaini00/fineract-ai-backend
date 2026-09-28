@@ -1,0 +1,22 @@
+info:
+  name: FIN-117 group schedule answer session
+  type: http
+  seq: 1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin117AnswerToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-117 group schedule independent answer" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin117AnswerSession", res.getBody().data.id);

@@ -1,15 +1,28 @@
 id: group_center
-status: candidate
+status: approved_mvp
 display_name: Group and Center
+# FIN-117: flipped from `candidate` — dataset-inventory.md CLI-4 already
+# recorded this deployment's evidenced use of group/center (2 groups, one at
+# each level, verified). That evidence is the "deployment verifies the
+# underlying area" default_rules asked for, so group_center_foundation's own
+# status moves conditional -> enabled alongside this flip
+# (knowledge/data-scope/areas/group-center-foundation.yaml), and the D08
+# meeting-schedule capability (`group_center_meeting_schedule`) is the first
+# capability this evidence actually activates (query_id
+# group.group_center_meeting_schedule). Everything this domain does not yet
+# have a capability for (CLI-4 account summaries beyond savings, D08
+# realization/attendance) stays in `gap_intents` below and now resolves to
+# `domain_gap` rather than `domain_conditional_not_enabled` — the accurate
+# reason once the domain itself is active: agreed-but-uncontracted, not
+# unverified.
 description: >-
   Group-based and center-based organizational context per §1 baseline
   ("group/center jika digunakan") and dataset-inventory.md CLI-4 — a client's
-  group/center membership, and group/center-scoped versions of any account
-  type a member holds (loan, savings, share), not savings alone. Only enabled
-  when the local Fineract deployment uses group_center_foundation. Today only
-  group identity resolution is an approved capability
-  (`group_identity_resolve`); account-level group/center summaries across any
-  product remain agreed baseline scope without an approved capability.
+  group/center membership and all account types (loan, savings, share), not
+  savings alone. The approved D08 capability returns dated meeting schedules,
+  responsible staff IDs and direct member IDs. Group identity resolution
+  remains candidate; account summaries and meeting realization/attendance
+  remain agreed scope without approved capabilities.
 inventory_refs:
   - CLI-4
   - D08
@@ -33,13 +46,13 @@ unsupported_intents:
   - { phrase: "create group", exempt: "write_action" }
   - { phrase: "assign client to group", exempt: "write_action" }
 default_rules:
-  - Only enabled when the local Fineract deployment uses group_center_foundation; otherwise respond as unsupported with a conditional-not-enabled reason.
-  - Group/center scope covers every account type a member may hold (CLI-4/CLI-5), not savings alone; group identity resolve is the only approved capability today — any group/center-scoped account summary answers unsupported with a gap reason rather than being misrouted to the office-wide savings capability.
-  - "`group_identity_resolve` is itself an approved_mvp capability, but CLI-4's own row stays `gap` — its Capability column says \"group only, not client→group linkage\" (dataset-inventory.md CLI-4): the capability resolves a group entity, it does not yet resolve which groups a given client belongs to. supported_intents therefore stays empty here rather than citing CLI-4 as `inherited`, which the row itself is not — the capability's own manifest (`knowledge/capabilities/group/group_identity_resolve.yaml`) is where its actual scope is declared."
-  - Group/center meeting schedule and attendance (D08) is agreed baseline scope; whether Fineract's calendar/meeting tables even exist on a given deployment is unresolved (dataset-inventory.md D08, not queried) — a future capability must not assume a calendar entry proves a meeting happened or was attended.
+  - FIN-117 evidenced this local deployment uses group_center_foundation (dataset-inventory.md CLI-4: 2 groups, one at each level) so the domain moved out of `candidate`; a deployment without that evidence must keep this domain `candidate` and answer unsupported with a conditional-not-enabled reason instead.
+  - Group/center scope covers every account type a member may hold (CLI-4/CLI-5), not savings alone; the D08 meeting schedule is the only approved group capability today — any group/center-scoped account summary answers unsupported with a gap reason rather than being misrouted to office-wide savings.
+  - "`group_identity_resolve` remains candidate: CLI-4's Capability column says \"group only, not client→group linkage\" (dataset-inventory.md CLI-4), so supported_intents stays empty rather than claiming client membership resolution."
+  - Group/center meeting schedule (D08) is an approved capability, `group_center_meeting_schedule` (FIN-117); both group/center calendars are verified meeting type with FREQ=DAILY and are expanded to scheduled dates in the requested week. `m_group.display_name` is pii and is not returned. Realization/attendance has zero source rows (`m_meeting` and `m_client_attendance`) and stays a gap_intent — a schedule is not evidence of occurrence.
 checks:
   - id: conditional_domain
-    rule: this domain must remain candidate unless group_center_foundation is explicitly enabled.
+    rule: a deployment that has not evidenced group/center use (no verified dataset-inventory.md row) must keep this domain candidate; this deployment's status flip is that evidence, recorded above and in knowledge/VERIFICATION.md.
   - id: no_mvp_capability_by_default
     rule: approved_mvp capabilities must not require group_center unless explicitly enabled.
   - id: not_savings_only

@@ -163,6 +163,17 @@ impl DeferredDomains {
         capabilities: impl Iterator<Item = &'a Capability>,
     ) -> Self {
         let mut excluded: Vec<Vec<String>> = capabilities
+            // A deployment without verified group/center support keeps its
+            // domain and capability candidate. Candidate wording must not
+            // suppress the conditional guard's own group/center terms.
+            .filter(|capability| {
+                capability.status.as_deref() == Some("approved_mvp")
+                    && capability.domain.as_ref().is_none_or(|id| {
+                        domains.iter().any(|domain| {
+                            domain.id == *id && domain.status.as_deref() == Some("approved_mvp")
+                        })
+                    })
+            })
             .flat_map(|capability| {
                 capability
                     .display_name
@@ -173,7 +184,6 @@ impl DeferredDomains {
             })
             .map(|text| tokens(text))
             .collect();
-
         excluded.extend(
             domains
                 .iter()
@@ -589,10 +599,10 @@ mod tests {
             .expect("loan cocok");
         assert_eq!(gap.source, "domain_gap");
 
-        let conditional = deferred
+        let group_gap = deferred
             .find("Show the group savings summary for this branch.")
-            .expect("group cocok");
-        assert_eq!(conditional.source, "domain_conditional_not_enabled");
+            .expect("group account summary is still a gap");
+        assert_eq!(group_gap.source, "domain_gap");
 
         // Intent gap di dalam domain approved_mvp (alamat client) tetap
         // `domain_gap`, bukan reason domain induknya.
@@ -600,6 +610,39 @@ mod tests {
             .find("Show every client address in Head Office.")
             .expect("alamat client cocok");
         assert_eq!(client_gap.source, "domain_gap");
+    }
+
+    #[test]
+    fn unverified_group_deployment_keeps_schedule_unsupported() {
+        let root = repo();
+        let mut catalog =
+            loader::load(&root.join("knowledge"), &root.join("queries")).expect("katalog dimuat");
+        let group = catalog
+            .domains
+            .iter_mut()
+            .find(|entry| entry.entry.id == "group_center")
+            .expect("group domain");
+        group.entry.status = Some("candidate".into());
+        let schedule = catalog
+            .capabilities
+            .iter_mut()
+            .find(|entry| entry.entry.id == "group_center_meeting_schedule")
+            .expect("schedule capability");
+        schedule.entry.status = Some("candidate".into());
+
+        let domains: Vec<_> = catalog
+            .domains
+            .iter()
+            .map(|loaded| loaded.entry.clone())
+            .collect();
+        let guard = DeferredDomains::build(
+            &domains,
+            catalog.capabilities.iter().map(|loaded| &loaded.entry),
+        );
+        let term = guard
+            .find("Which groups are scheduled to meet this week?")
+            .expect("unverified schedule must be guarded");
+        assert_eq!(term.source, "domain_conditional_not_enabled");
     }
 
     fn collect_yml(directory: &Path, found: &mut Vec<PathBuf>) {

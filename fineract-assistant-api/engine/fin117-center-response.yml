@@ -1,0 +1,31 @@
+info:
+  name: FIN-117 D08 center staff and no inferred attendance
+  type: http
+  seq: 50.95
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin117CenterJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, () => true)) {
+          const doc = res.getBody().data;
+          const table = doc.blocks_json.find((block) => block.type === "table");
+          test("FIN-117 D08: center calendar maps to staff 1 without fabricated direct members", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(doc.outcome).to.equal("Answered");
+            expect(doc.completeness).to.equal("Complete");
+            expect(doc.validation_status).to.equal("passed");
+            expect(doc.evidence_json.lineage[0].capability_id).to.equal("group_center_meeting_schedule");
+            expect(table.rows).to.have.lengthOf(7);
+            const at = (column) => table.columns.indexOf(column);
+            expect(table.rows.every((row) => row[at("group_id")] === 2 && row[at("group_level_name")] === "Center" && row[at("office_id")] === 2 && row[at("staff_id")] === 1 && row[at("calendar_id")] === 3 && row[at("member_client_id")] === null)).to.equal(true);
+            expect(table.columns).to.not.include("attendance");
+            expect(table.columns).to.not.include("group_display_name");
+          });
+        }
