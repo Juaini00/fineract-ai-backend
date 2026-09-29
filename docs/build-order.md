@@ -1677,6 +1677,21 @@ Update after FIN-117 (L1C D08 group/center meeting schedule):
   domains. §5.1 remains **36/59** because FIN-117 has a domain gate but no
   numbered acceptance scenario.
 
+Update after FIN-156 (D02 historical-office Bruno polling race):
+
+- The FIN-153 D02 job-state check previously read once after a fixed 1.5-second
+  delay; a full FIN-117 run observed `Running` before the job settled, while
+  subsequent runs passed without an application change. It now uses the existing
+  bounded `lib/poll.js` terminal-job wait before asserting the unchanged
+  `Completed` + `Unsupported` + `Unknown` + `domain_gap` result and null plan.
+  A terminal failure still reaches the assertion and fails; a job that never
+  settles fails at the polling deadline instead of passing silently.
+- The locked `engine` stage passed 177 requests / 218 tests, including
+  `OVR-6.6/FIN-153 (gap, D02 historical office): Completed + Unsupported +
+  Unknown, tanpa plan`. The full locked run passed all 14 stages: 651 requests /
+  768 tests. This changes test synchronization, not the catalog or the D02
+  contract; L1C stays ⬜ and §5.1 coverage stays 36/59.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
