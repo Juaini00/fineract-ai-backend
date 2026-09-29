@@ -85,7 +85,7 @@ cites it by tag (`[XR-n]`) instead of repeating the rule.
 | `XR-GRAIN` | Every measure declares its grain (client / account / transaction). Aggregating child rows before a `1:N` join is mandatory; a join that would duplicate a parent-side measure without stating the resulting grain is rejected (§2.2). | analytical-contracts.md §2.2, §5 |
 | `XR-PAGE` | Result pagination is keyset (`sort_key_json`), not offset. | database-design.md §3 (L3, `dataset_lifecycle.md`) |
 | `XR-PII` | Field sensitivity classes (`public_business` / `sensitive_business_identifier` / `pii` / `security_sensitive` / `secret_never_expose` / `free_text_sensitive`) gate output; `pii` needs `can_view_pii` **and** capability approval; `secret_never_expose` never appears anywhere. Column-to-class mapping is a separate, unfinished audit (#15). | analytical-contracts.md §2.1 |
-| `XR-SCOPE` | `office_ids` comes from `authorized_scope`, never widened by the user; every contract/query on Fineract declares `office_scope_path` and `require_office_filter = true`, enforced **inside** SQL via bound parameter, never a Rust-side filter. | analytical-contracts.md §6 |
+| `XR-SCOPE` | `office_ids` comes from `authorized_scope`, never widened by the user. Every office-bound Fineract fact query declares an `office_scope_path` and `require_office_filter = true`, enforced inside SQL with a bound parameter, never a Rust-side filter. Verified organization-wide reference/configuration masters may instead declare `org_wide_reference` and be read tenant-wide by an authenticated admin, without an office predicate on the master row; this is a narrow exception, not a way to expose office-bound facts. A join to account/client/transaction facts still filters their authorized offices in SQL, and a global master alone cannot prove office-specific product usage or availability. | analytical-contracts.md §6 |
 | `XR-ASOF` | `as_of` / freshness is declared per contract; if a required batch (COB, interest posting, provisioning) has not run, the affected analysis is marked `Partial`, not silently wrong (ties to D01/D07/D11/D14). | database-design.md I4; dataset-scope-decisions.md D14 |
 | `XR-EVID` | Config/relationship existing is not proof money moved; schedules are not events; a numeral in narration must trace to an evidenced block or a declared `derivation` (D3, responses.md §4). | dataset-scope-decisions.md §1 rules; database-design.md §2.2 D3 |
 | `XR-MODE` | Mode 1 (curated capability) is the only executable path now; Mode 2 (analytical contract compiled to SQL) is L8, gated on FIN-98. A row with no Mode-1 capability and no plan to author one this phase is still `gap`, not `Unsupported`-by-design. | analytical-contracts.md §1; build-order.md L8 |
@@ -110,9 +110,11 @@ cites it by tag (`[XR-n]`) instead of repeating the rule.
 | ORG-11 | Enum / reference values (supporting reference) | `m_code` + `m_code_value` (Fineract's generic lookup tables — not queried this session) | code name → value id/label | referenced from many domains (`gender_cv_id`, `closure_reason_cv_id`, etc.) | n/a | n/a | enum resolution must be declared before a capability uses it (mirrors L1 rule 4 / `XR-EVID`) | code/value lookup resolvable | none | candidate (standard Fineract tables, not queried this session) | gap |
 
 **Note on org-wide vs office-scoped rows** (`XR-SCOPE`): ORG-2, ORG-4, ORG-5,
-ORG-6, ORG-7, ORG-10, ORG-11 are configuration/reference data without a
-meaningful per-office split; office scope only becomes relevant where they are
-*joined into* an office-scoped fact table.
+ORG-6, ORG-7, ORG-10, ORG-11 and the master/config portions of PROD-1..11
+have no meaningful per-office split. Read-only global-reference access requires
+the declared and validated §6 exception; office scope still applies when these
+rows join an office-scoped fact table. Pledged collateral under PROD-5 remains
+office-scoped, not a global master.
 
 ---
 
