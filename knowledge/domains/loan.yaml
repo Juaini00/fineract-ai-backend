@@ -1,14 +1,13 @@
 id: loan
-status: gap
+status: approved_mvp
 display_name: Loan
 description: >-
   Loan portfolio per §1 baseline (dataset-scope-decisions.md:26) and
-  dataset-inventory.md LOAN-1..12 — identity/relations, lifecycle, effective
-  terms, staged disbursement, schedule vs paid/outstanding, transactions and
-  allocations, charges, balances, arrears/delinquency, collateral/guarantor,
-  reschedule/write-off/recovery, and D15's capitalized-income/buy-down-fee
-  balances. Agreed baseline scope; no approved Mode-1 capability exists yet
-  (dataset-inventory.md: every LOAN-* row is `gap`).
+  dataset-inventory.md LOAN-1..12. FIN-108 approves loan identity, recorded
+  lifecycle and effective terms (LOAN-1..3) read from m_loan. Disbursement,
+  schedule, transactions, charges, balances, arrears, collateral/guarantor,
+  reschedule/write-off/recovery and D15 balances remain `gap` and answer
+  Unsupported through gap_intents below, never through an unrelated capability.
 inventory_refs:
   - LOAN-1
   - LOAN-2
@@ -26,6 +25,7 @@ inventory_refs:
   - D03
   - D11
 data_areas:
+  - loans_identity
   - loans
 concepts:
   - id: loan
@@ -43,21 +43,52 @@ concepts:
   - id: write_off
     meaning: Charge-off of uncollectible loan balance.
     synonyms: [write off, write-off, charge off]
-supported_intents: []
+supported_intents:
+  - { phrase: "list every loan account of one client with status", inventory_ref: LOAN-1 }
+  - { phrase: "loan count by recorded status", inventory_ref: LOAN-2 }
+  - { phrase: "loan account terms beside product default", inventory_ref: LOAN-3 }
 gap_intents:
-  - { phrase: "loan disbursement totals", inventory_ref: LOAN-4 }
-  - { phrase: "loan repayment totals", inventory_ref: LOAN-6 }
-  - { phrase: "largest outstanding loans", inventory_ref: LOAN-8 }
-  - { phrase: "arrears summary", inventory_ref: LOAN-9 }
+  - { phrase: "loan disbursement", inventory_ref: LOAN-4 }
+  - { phrase: "pencairan", inventory_ref: LOAN-4 }
+  - { phrase: "dicairkan", inventory_ref: LOAN-4 }
+  - { phrase: "disbursed amount", inventory_ref: LOAN-4 }
+  - { phrase: "repayment schedule", inventory_ref: LOAN-5 }
+  - { phrase: "installment", inventory_ref: LOAN-5 }
+  - { phrase: "jadwal angsuran", inventory_ref: LOAN-5 }
+  - { phrase: "angsuran", inventory_ref: LOAN-5 }
+  - { phrase: "loan transaction", inventory_ref: LOAN-6 }
+  - { phrase: "transaksi pinjaman", inventory_ref: LOAN-6 }
+  - { phrase: "loan repayment", inventory_ref: LOAN-6 }
+  - { phrase: "repayment", inventory_ref: LOAN-6 }
+  - { phrase: "loan charge", inventory_ref: LOAN-7 }
+  - { phrase: "loan penalty", inventory_ref: LOAN-7 }
+  - { phrase: "outstanding loan", inventory_ref: LOAN-8 }
+  - { phrase: "loan outstanding", inventory_ref: LOAN-8 }
+  - { phrase: "loan balance", inventory_ref: LOAN-8 }
+  - { phrase: "saldo pinjaman", inventory_ref: LOAN-8 }
+  - { phrase: "outstanding pinjaman", inventory_ref: LOAN-8 }
+  - { phrase: "arrears", inventory_ref: LOAN-9 }
+  - { phrase: "overdue", inventory_ref: LOAN-9 }
+  - { phrase: "delinquent", inventory_ref: LOAN-9 }
+  - { phrase: "tunggakan", inventory_ref: LOAN-9 }
+  - { phrase: "guarantor", inventory_ref: LOAN-10 }
+  - { phrase: "penjamin", inventory_ref: LOAN-10 }
+  - { phrase: "write off", inventory_ref: LOAN-11 }
+  - { phrase: "write-off", inventory_ref: LOAN-11 }
+  - { phrase: "charge off", inventory_ref: LOAN-11 }
+  - { phrase: "reschedule", inventory_ref: LOAN-11 }
+  - { phrase: "loan recovery", inventory_ref: LOAN-11 }
+  - { phrase: "capitalized income", inventory_ref: LOAN-12 }
+  - { phrase: "buy down fee", inventory_ref: LOAN-12 }
 unsupported_intents:
   - { phrase: "create loan account", exempt: "write_action" }
   - { phrase: "disburse loan", exempt: "write_action" }
   - { phrase: "reverse loan transaction", exempt: "write_action" }
 default_rules:
-  - Loan is agreed baseline scope with no approved capability yet (dataset-inventory.md LOAN-1..12, every row `gap`); every loan-related request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
-  - "D01/D03/D11 apply to loan balances the same way they apply to savings (see savings.yaml default_rules for the full rule text): no reproduce-published-report branch, no cross-currency consolidation, and completeness/unclassified breakdowns are distinct from a plain aggregate. Loan's own `gap` status already blocks any loan-scoped request on these subjects; the citation here is for inventory traceability, not a second guard."
+  - Approved loan capabilities read m_loan only (LOAN-1..3); every other loan subject is `gap` and answers unsupported with a gap reason (dataset-inventory.md LOAN-4..12).
+  - A client's loans include every status; never default to active (§1 rule 29).
+  - Effective terms are the loan row's own; the product's current default is shown beside them, never substituted.
+  - "D01/D03/D11 apply to loan facts the same way they apply to savings: no reproduce-published-report branch, no cross-currency consolidation, completeness breakdowns distinct from a plain aggregate."
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and the inventory rows it covers move to `inherited`.
-  - id: loan_tables_not_runtime
-    rule: loan data areas must not be referenced by approved_mvp queries.
+  - id: servicing_facts_remain_gap
+    rule: loan servicing tables (schedule, transactions, charges, arrears) must not be referenced by approved queries until their rows move to inherited.

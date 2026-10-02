@@ -1,0 +1,6 @@
+info:
+  name: loans
+  seq: 6
+  description: |
+    FIN-108 LOAN-1..3: loan identity/lifecycle/effective terms, each job
+    answer compared row-for-row with independent SQL under tests/answers.

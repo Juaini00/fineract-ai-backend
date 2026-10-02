@@ -1,0 +1,22 @@
+info:
+  name: FIN-108 loans_by_client session
+  type: http
+  seq: 1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-108 loans_by_client" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin108loans_by_clientSession", res.getBody().data.id);

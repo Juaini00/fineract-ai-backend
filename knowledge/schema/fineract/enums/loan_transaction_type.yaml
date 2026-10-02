@@ -1,0 +1,43 @@
+id: fineract.enums.loan_transaction_type
+table: m_loan_transaction
+column: transaction_type_enum
+source: >-
+  Apache Fineract LoanTransactionType (fineract-loan, develop). The local
+  r_enum_value stops at 19 while m_loan_transaction holds 20/23/25/26/27/32,
+  so r_enum_value is not authoritative for this column (FIN-108).
+values:
+  - { value: 1, code: disbursement }
+  - { value: 2, code: repayment }
+  - { value: 3, code: contra }
+  - { value: 4, code: waive_interest }
+  - { value: 5, code: repayment_at_disbursement }
+  - { value: 6, code: writeoff }
+  - { value: 7, code: marked_for_rescheduling }
+  - { value: 8, code: recovery_repayment }
+  - { value: 9, code: waive_charges }
+  - { value: 10, code: accrual }
+  - { value: 12, code: initiate_transfer }
+  - { value: 13, code: approve_transfer }
+  - { value: 14, code: withdraw_transfer }
+  - { value: 15, code: reject_transfer }
+  - { value: 16, code: refund }
+  - { value: 17, code: charge_payment }
+  - { value: 18, code: refund_for_active_loan }
+  - { value: 19, code: income_posting }
+  - { value: 20, code: credit_balance_refund }
+  - { value: 21, code: merchant_issued_refund }
+  - { value: 22, code: payout_refund }
+  - { value: 23, code: goodwill_credit }
+  - { value: 24, code: charge_refund }
+  - { value: 25, code: chargeback }
+  - { value: 26, code: charge_adjustment }
+  - { value: 27, code: charge_off }
+  - { value: 28, code: down_payment }
+  - { value: 29, code: reage }
+  - { value: 30, code: reamortize }
+  - { value: 31, code: interest_payment_waiver }
+  - { value: 32, code: accrual_activity }
+  - { value: 33, code: interest_refund }
+  - { value: 34, code: accrual_adjustment }
+default_rules:
+  - Documented for LOAN-6/LOAN-11 contracts; no approved capability reads this column yet.

@@ -977,3 +977,18 @@ The locked `answers` stage passed 220 requests/272 tests, including
 `FIN-52 group_center_meeting_schedule: jawaban job = SQL langsung` and
 the `FIN-117 D08` completeness check (54 independently computed
 answer-oracle files).
+
+## 11. FIN-108 / LOAN-1..3 — loan identity, lifecycle and terms
+
+Two independent writings per capability, all offices in scope, client 65:
+
+| Capability | Production rows | Oracle rows | Equal |
+| --- | --- | --- | --- |
+| `loans_by_client` | 24 | 24 (EXISTS scope, `r_enum_value` labels) | yes |
+| `loan_status_summary` | 11 | 11 (UNION scope CTE) | yes |
+| `loan_terms_by_client` | 24 | 24 (correlated product subqueries) | yes |
+
+Client 65 holds 24 loans in statuses 200/300; 23 of 116 loans locally differ
+from their product's current rate or repayment count, so substituting product
+defaults would be visibly wrong. The locked `answers` stage passed 310
+requests / 389 tests including the three FIN-108 chains.

@@ -158,9 +158,9 @@ office-scoped, not a global master.
 
 | ID | Requirement | Source table(s) & grain | Field / measure | Relationship (cardinality) | Office-scope path | Time / as-of / currency | Evidence rule | Acceptance | Capability | Confidence | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| LOAN-1 | Identity / relations | `m_loan` (grain: loan account) | `account_no` (sensitive id), `client_id`, `group_id`, `product_id`, `loan_officer_id`, `fund_id` | `N:1` to client **or** group, product, staff, fund | via `m_loan.client_id → m_client.office_id` (no direct `office_id` on `m_loan`) | n/a | office path must be declared explicit per `analytical-contracts.md` §6.4 | loan identity resolvable, scope enforced through client/group | none | known (116 rows, §4) | gap |
-| LOAN-2 | Lifecycle | `m_loan.loan_status_id`, `submittedon_date, approvedon_date, disbursedon_date, closedon_date, rejectedon_date, writtenoffon_date, overpaidon_date, charged_off_on_date` | status id (**unresolved**: Fineract's internal status-id → label map not re-verified this session) | n/a | via client/group | full lifecycle date set | status is the recorded event | lifecycle resolvable | none | known columns exist (§4); status label mapping unresolved | gap |
-| LOAN-3 | Effective terms vs product now | `m_loan.nominal_interest_rate_per_period, interest_period_frequency_enum, term_frequency, number_of_repayments` vs `m_product_loan` current config | account-level effective terms vs product's current default | `N:1` loan → product | via loan | terms are as-approved on the loan, not "whatever the product says today" — an explicit distinction the requirement calls out | must not silently substitute current product config for the account's effective terms | none | known (§4) | gap |
+| LOAN-1 | Identity / relations | `m_loan` (grain: loan account) | `account_no` (sensitive id), `client_id`, `group_id`, `product_id`, `loan_officer_id`, `fund_id` | `N:1` to client **or** group, product, staff, fund | via `m_loan.client_id → m_client.office_id`, else `m_loan.group_id → m_group.office_id` (no direct `office_id` on `m_loan`; locally all 116 loans have a client, 0 group-only, and every `m_loan_transaction.office_id` equals this path — verified FIN-108) | n/a | office path must be declared explicit per `analytical-contracts.md` §6.4 | loan identity resolvable, scope enforced through client/group | `loan/loans_by_client` (FIN-108) | known (116 rows, §4) | inherited |
+| LOAN-2 | Lifecycle | `m_loan.loan_status_id`, `submittedon_date, approvedon_date, disbursedon_date, closedon_date, rejectedon_date, writtenoffon_date, overpaidon_date, charged_off_on_date` | status id + label from Fineract's own `r_enum_value` (`enum_name='loan_status_id'`: 100 submitted, 200 approved, 300 active, 400 withdrawn by client, 500 rejected, 600 closed, 601 written-off, 602 rescheduled, 700 overpaid; verified FIN-108, local values 100/200/300/600) | n/a | via client/group | full lifecycle date set | status is the recorded event | lifecycle resolvable | `loan/loan_status_summary, loan/loans_by_client` (FIN-108) | known (status labels verified FIN-108) | inherited |
+| LOAN-3 | Effective terms vs product now | `m_loan.nominal_interest_rate_per_period, interest_period_frequency_enum, term_frequency, number_of_repayments` vs `m_product_loan` current config | account-level effective terms vs product's current default | `N:1` loan → product | via loan | terms are as-approved on the loan, not "whatever the product says today" — an explicit distinction the requirement calls out | must not silently substitute current product config for the account's effective terms | `loan/loan_terms_by_client` (FIN-108) | known (§4) | inherited |
 | LOAN-4 | Planned/actual disbursement, staged | `m_loan.expected_disbursedon_date, disbursedon_date, net_disbursal_amount`; `m_loan_disbursement_detail` (0 rows, multi-tranche) | planned vs actual disbursement date/amount; per-tranche rows when staged | `1:N` loan → disbursement details (tranche) | via loan | disbursement date is the event date | planned ≠ actual must stay distinguishable | none | known (§4; 0 tranche rows on this fixture — single-disbursement loans only, so multi-tranche is unexercised) | gap |
 | LOAN-5 | Schedule and paid/outstanding | `m_loan_repayment_schedule` (grain: installment) | `duedate, principal_amount, principal_completed_derived, interest_amount, interest_completed_derived` etc. | `1:N` loan → schedule rows | via loan | schedule is not an event (§1 rule) — must be labeled as planned, cross-checked against LOAN-6 for actuals | schedule vs actual repayment distinguishable | none | known (1,661 rows, §4) | gap |
 | LOAN-6 | Transactions / allocations / reversals | `m_loan_transaction` (grain: transaction) | `transaction_type_enum, amount, principal_portion_derived, interest_portion_derived, fee_charges_portion_derived, penalty_charges_portion_derived, is_reversed, reversed_on_date` | `N:1` loan; `office_id` direct on this table (unlike `m_loan`) | `m_loan_transaction.office_id` direct | `transaction_date` | reversed transactions must not double-count (`is_reversed`) — mirrors savings `XR-EVID`/D3 pattern | allocations sum to transaction amount; reversals excluded by default | none | known (2,947 rows, §4) | gap |
@@ -168,7 +168,7 @@ office-scoped, not a global master.
 | LOAN-8 | Balances | `m_loan.*_derived` columns (`principal_outstanding_derived, interest_outstanding_derived, total_outstanding_derived`, etc.) | outstanding principal/interest/fees/penalties, total | n/a (denormalized on the loan row) | via loan | derived balances are Fineract-computed, not Jarvis-recomputed (mirrors GL rule in D12 — read recorded value, no re-derivation) | balance query reads `_derived` columns, never recomputes from schedule+transactions independently | none | known (§4) | gap |
 | LOAN-9 | Arrears / delinquency with as-of/freshness | `m_loan_arrears_aging` (grain: loan, 1 row per loan currently in arrears) | `principal_overdue_derived, total_overdue_derived, overdue_since_date_derived` | `1:1` loan (only present while overdue) | via loan | `XR-ASOF` — arrears is a point-in-time snapshot table, freshness depends on COB having run (D14) | overdue amount tied to an as-of date, not asserted as always-current | none | known (59 rows, §4) | gap |
 | LOAN-10 | Collateral / guarantor | `m_loan_collateral_management` (12 rows, PROD-5), `m_guarantor` (1 row), `m_guarantor_funding_details`, `m_guarantor_transaction` | guarantor identity/type; pledged collateral value | `1:N` loan → guarantor; `N:M` loan ↔ collateral | via loan | n/a | collateral/guarantor listed distinctly, not conflated | resolvable per loan | none | known (§4) | gap |
-| LOAN-11 | Reschedule / terms-change / write-off / recovery | `m_loan.rescheduledon_date`; write-off via `writtenoffon_date` + `writeoff_reason_cv_id`; recovery via `m_loan_transaction` filtered by `transaction_type_enum` (recovery-repayment value **unresolved** — not confirmed against Fineract's enum table this session), `m_loan_recovery_payment` **does not exist** in this schema (verified missing, §4) | reschedule/write-off dates and reason; recovery amount via transaction filter | n/a | via loan | event dates | must be evidence-backed, not inferred from balance deltas | reschedule/write-off/recovery resolvable, recovery via transaction-type filter (no dedicated table) | none | known reschedule/write-off columns (§4); recovery mechanism unresolved | gap |
+| LOAN-11 | Reschedule / terms-change / write-off / recovery | `m_loan.rescheduledon_date`; write-off via `writtenoffon_date` + `writeoff_reason_cv_id`; recovery via `m_loan_transaction` filtered by `transaction_type_enum` (recovery-repayment = `8` per both `r_enum_value` and Apache Fineract `LoanTransactionType`; 0 such rows locally. Note: local `r_enum_value` stops at 19 while rows carry 20/23/25/26/27/32 — labels for those come from `LoanTransactionType` source, verified FIN-108), `m_loan_recovery_payment` **does not exist** in this schema (verified missing, §4) | reschedule/write-off dates and reason; recovery amount via transaction filter | n/a | via loan | event dates | must be evidence-backed, not inferred from balance deltas | reschedule/write-off/recovery resolvable, recovery via transaction-type filter (no dedicated table) | none | known (recovery type value verified FIN-108) | gap |
 | LOAN-12 (D15) | Capitalized-income / buy-down-fee balances | `m_loan.capitalized_income_derived, capitalized_income_adjustment_derived, buy_down_fee_calculation_type` etc. (columns present, §4 shows the columns exist on `m_loan`), `m_loan_capitalized_income_balance` (0 rows), `m_loan_buy_down_fee_balance` (0 rows) | capitalized income / buy-down fee balance amounts | `1:N` loan → balance history rows | via loan | n/a | D15 disposition: "masuk baseline Loan sebagai sub-area balance, butuh detail kontrak, bukan scope baru" — in scope, contract detail still open | resolvable once contract detail is written | none | known — tables exist, currently **empty** (feature unused on this fixture, §4) | gap |
 
 ---
@@ -374,7 +374,7 @@ total (see D15 table-count note, §10).
 | Organization (`:23`) | ORG-1..ORG-11 | 11 | 1 inherited, 10 gap |
 | Products (`:24`) | PROD-1..PROD-11 | 11 | 11 inherited (FIN-109) |
 | Client/kepemilikan (`:25`) | CLI-1..CLI-8 | 8 | 3 inherited, 5 gap |
-| Loan (`:26`) | LOAN-1..LOAN-12 | 12 | 0 inherited, 12 gap |
+| Loan (`:26`) | LOAN-1..LOAN-12 | 12 | 3 inherited (FIN-108), 9 gap |
 | Savings (`:27`) | SAV-1..SAV-11 | 11 | 6 inherited, 5 gap |
 | FD/RD (`:28`) | FDRD-1..FDRD-10 | 10 | 0 inherited, 10 gap |
 | Share accounts (`:29`) | SHARE-1..SHARE-8 | 8 | 0 inherited, 8 gap |
@@ -398,11 +398,11 @@ total (see D15 table-count note, §10).
 **Totals:** 79 baseline-domain rows + 20 decision rows (D01–D14 = 14;
 D15 heading + five sub-rows = 6) = **99 inventory rows**, covering all 8
 §1 headings and all 15 decisions (D01–D15) with **zero omissions**.
-Twenty-one rows are `inherited` (an approved Mode-1 capability exists today;
-PROD-1..11 added by FIN-109); three
+Twenty-four rows are `inherited` (an approved Mode-1 capability exists today;
+PROD-1..11 added by FIN-109, LOAN-1..3 by FIN-108); three
 (D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
 `summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
-70 rows are `gap`: agreed scope lacking a capability, including unresolved
+67 rows are `gap`: agreed scope lacking a capability, including unresolved
 source mappings. Coverage counts requirements, not executable capabilities.
 
 ---
@@ -413,9 +413,9 @@ These are the concrete `unresolved` markers scattered through §2–§10, collec
 so FIN-153 does not have to re-scan every table:
 
 1. Enum value mappings not re-verified this session: `m_client.status_enum`/`sub_status`,
-   `m_loan.loan_status_id`, `m_savings_account.sub_status_enum` (dormant/block),
-   `m_savings_account.deposit_type_enum` (FD vs RD), loan-transaction recovery
-   type value.
+   `m_savings_account.sub_status_enum` (dormant/block),
+   `m_savings_account.deposit_type_enum` (FD vs RD). (`m_loan.loan_status_id`
+   and the loan-transaction recovery type were resolved by FIN-108.)
 2. Tables referenced by name but not queried this session: `m_fund`,
    `m_global_configuration` (business date), `m_code`/`m_code_value` (generic
    enums), `m_tax_group_mappings`, `m_payment_detail`, `m_note`, calendar/meeting

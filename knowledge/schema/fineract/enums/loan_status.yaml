@@ -1,0 +1,20 @@
+id: fineract.enums.loan_status
+table: m_loan
+column: loan_status_id
+source: fineract_default r_enum_value (enum_name = loan_status_id), verified FIN-108
+values:
+  - { value: 100, code: submitted_and_pending_approval, label: Submitted and awaiting approval, status: documented }
+  - { value: 200, code: approved, label: Approved, status: documented }
+  - { value: 300, code: active, label: Active, status: documented }
+  - { value: 400, code: withdrawn_by_client, label: Withdrawn by client, status: documented }
+  - { value: 500, code: rejected, label: Rejected, status: documented }
+  - { value: 600, code: closed, label: Closed, status: documented }
+  - { value: 601, code: written_off, label: Written-Off, status: documented }
+  - { value: 602, code: rescheduled, label: Rescheduled, status: documented }
+  - { value: 700, code: overpaid, label: Overpaid, status: documented }
+default_rules:
+  - A loan list for a client includes every status; never default to active (dataset-scope-decisions.md §1 rule 29).
+  - An unknown status value is reported with its raw id and no invented label.
+checks:
+  - id: enum_values_documented
+    rule: every status value used by an approved loan capability must be listed here.

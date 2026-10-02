@@ -1708,6 +1708,21 @@ Update after FIN-109 (Products masters, PROD-1..11):
 - L1C stays open: PROD rows are `inherited`, remaining domains are not; §5.1
   coverage is unchanged (no numbered L1C scenario).
 
+Update after FIN-108 slice 1 (Loan identity, lifecycle, effective terms — LOAN-1..3):
+
+- Loan domain is now `approved_mvp` for three capabilities reading `m_loan` only:
+  `loans_by_client` (every status, never active-only), `loan_status_summary`
+  (per status and currency), `loan_terms_by_client` (account terms beside the
+  product's current default, never substituted). Office scope binds the client
+  office, else the group office, in SQL.
+- LOAN-4..12 stay `gap` in area `loans`; their subjects answer `Unsupported`
+  through inventory-backed `gap_intents`. The surface guard no longer turns a
+  gap area's tables into policy rejections when its domain is partly approved.
+- Evidence resolved: loan status labels (`r_enum_value`), recovery type 8 and
+  transaction types 20–34 (Apache Fineract `LoanTransactionType`; local
+  `r_enum_value` stops at 19).
+- FIN-108 stays open for LOAN-4..12; L1C stays open; §5.1 unchanged.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

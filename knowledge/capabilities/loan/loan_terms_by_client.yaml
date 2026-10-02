@@ -1,0 +1,35 @@
+id: loan_terms_by_client
+status: approved_mvp
+domain: loan
+display_name: Loan Account Terms By Client
+description: >-
+  Show each loan account's own approved terms for one client beside its product's current default; the account terms are effective, the product default is never substituted.
+data_areas: [loans_identity, products_master, client_foundation, group_center_foundation]
+continuation: true
+required_api_capability: loan_terms_by_client
+query_id: loan.loan_terms_by_client
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - Show the loan terms for this client compared with the product default.
+  - Compare a client's loan interest rate with the product default.
+  - Bandingkan suku bunga pinjaman nasabah ini dengan default produknya.
+supported_intents:
+  - Show each loan account's own approved terms for one client beside its product's current default; the account terms are effective, the product default is never substituted.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  client_id:
+    type: integer
+    required: true
+    resolution: [authorized_data_probe]
+    probe:
+      dataset_id: client.identity
+      shape_id: identity_candidates
+      output_slot: client_id
