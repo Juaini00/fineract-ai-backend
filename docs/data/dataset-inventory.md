@@ -85,7 +85,7 @@ cites it by tag (`[XR-n]`) instead of repeating the rule.
 | `XR-GRAIN` | Every measure declares its grain (client / account / transaction). Aggregating child rows before a `1:N` join is mandatory; a join that would duplicate a parent-side measure without stating the resulting grain is rejected (§2.2). | analytical-contracts.md §2.2, §5 |
 | `XR-PAGE` | Result pagination is keyset (`sort_key_json`), not offset. | database-design.md §3 (L3, `dataset_lifecycle.md`) |
 | `XR-PII` | Field sensitivity classes (`public_business` / `sensitive_business_identifier` / `pii` / `security_sensitive` / `secret_never_expose` / `free_text_sensitive`) gate output; `pii` needs `can_view_pii` **and** capability approval; `secret_never_expose` never appears anywhere. Column-to-class mapping is a separate, unfinished audit (#15). | analytical-contracts.md §2.1 |
-| `XR-SCOPE` | `office_ids` comes from `authorized_scope`, never widened by the user; every contract/query on Fineract declares `office_scope_path` and `require_office_filter = true`, enforced **inside** SQL via bound parameter, never a Rust-side filter. | analytical-contracts.md §6 |
+| `XR-SCOPE` | `office_ids` comes from `authorized_scope`, never widened by the user. Every office-bound Fineract fact query declares an `office_scope_path` and `require_office_filter = true`, enforced inside SQL with a bound parameter, never a Rust-side filter. Verified organization-wide reference/configuration masters may instead declare `org_wide_reference` and be read tenant-wide by an authenticated admin, without an office predicate on the master row; this is a narrow exception, not a way to expose office-bound facts. A join to account/client/transaction facts still filters their authorized offices in SQL, and a global master alone cannot prove office-specific product usage or availability. | analytical-contracts.md §6 |
 | `XR-ASOF` | `as_of` / freshness is declared per contract; if a required batch (COB, interest posting, provisioning) has not run, the affected analysis is marked `Partial`, not silently wrong (ties to D01/D07/D11/D14). | database-design.md I4; dataset-scope-decisions.md D14 |
 | `XR-EVID` | Config/relationship existing is not proof money moved; schedules are not events; a numeral in narration must trace to an evidenced block or a declared `derivation` (D3, responses.md §4). | dataset-scope-decisions.md §1 rules; database-design.md §2.2 D3 |
 | `XR-MODE` | Mode 1 (curated capability) is the only executable path now; Mode 2 (analytical contract compiled to SQL) is L8, gated on FIN-98. A row with no Mode-1 capability and no plan to author one this phase is still `gap`, not `Unsupported`-by-design. | analytical-contracts.md §1; build-order.md L8 |
@@ -110,9 +110,11 @@ cites it by tag (`[XR-n]`) instead of repeating the rule.
 | ORG-11 | Enum / reference values (supporting reference) | `m_code` + `m_code_value` (Fineract's generic lookup tables — not queried this session) | code name → value id/label | referenced from many domains (`gender_cv_id`, `closure_reason_cv_id`, etc.) | n/a | n/a | enum resolution must be declared before a capability uses it (mirrors L1 rule 4 / `XR-EVID`) | code/value lookup resolvable | none | candidate (standard Fineract tables, not queried this session) | gap |
 
 **Note on org-wide vs office-scoped rows** (`XR-SCOPE`): ORG-2, ORG-4, ORG-5,
-ORG-6, ORG-7, ORG-10, ORG-11 are configuration/reference data without a
-meaningful per-office split; office scope only becomes relevant where they are
-*joined into* an office-scoped fact table.
+ORG-6, ORG-7, ORG-10, ORG-11 and the master/config portions of PROD-1..11
+have no meaningful per-office split. Read-only global-reference access requires
+the declared and validated §6 exception; office scope still applies when these
+rows join an office-scoped fact table. Pledged collateral under PROD-5 remains
+office-scoped, not a global master.
 
 ---
 
@@ -121,17 +123,17 @@ meaningful per-office split; office scope only becomes relevant where they are
 
 | ID | Requirement | Source table(s) & grain | Field / measure | Relationship (cardinality) | Office-scope path | Time / as-of / currency | Evidence rule | Acceptance | Capability | Confidence | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PROD-1 | Loan Products (master, incl. unused) | `m_product_loan` (grain: product) | name, currency_code, interest terms, min/max principal | `1:N` to `m_loan` (usage) — master listed independent of usage per §1 rule | none (product is org-wide unless product-office restriction table is checked) | n/a | product master ≠ account usage; unused products must still list | none | known (12 rows, §4) | gap |
-| PROD-2 | Savings Products | `m_savings_product` (grain: product) | name, currency_code, nominal_annual_interest_rate | `1:N` to `m_savings_account` | none | n/a | same as PROD-1 | `savings/products_by_client` (usage-side only — no standalone product-master capability) | known (23 rows, §4) | gap |
-| PROD-3 | Share Products | `m_share_product` (grain: product) | name, currency_code, total_shares | `1:N` to `m_share_account` | none | n/a | same as PROD-1 | none | known (1 row, §4) | gap |
-| PROD-4 | Charges (master) | `m_charge` (grain: charge definition) | name, currency_code, charge_time_enum, charge_calculation_enum, is_penalty | referenced by `m_savings_account_charge`, `m_loan_charge`, `m_client_charge`, `m_share_account_charge` | none | n/a | master vs actual charging is D04's separation | `savings/charge_type_identity_resolve`, `charge_count_by_type`, `charges_by_type` (savings-scoped only) | known (59 rows, §4) | gap (only savings side inherited) |
-| PROD-5 | Collateral Management | `m_collateral_management` (type master), `m_client_collateral_management` (8 rows), `m_loan_collateral_management` (12 rows) | collateral type, quantity, base value/pct → collateral value | `1:N` client → pledged collateral; `N:M` loan ↔ collateral via `m_loan_collateral_management` | via client/loan office path | n/a | pledged ≠ realized; no valuation simulation | collateral list per client/loan | none | known (§4) | gap |
-| PROD-6 | Delinquency Buckets | `m_delinquency_bucket` (4 rows), `m_delinquency_range` (6 rows), `m_delinquency_bucket_mappings` (10 rows, product↔bucket) | bucket name; range min/max days overdue | `1:N` bucket → ranges; `N:M` bucket ↔ loan product | n/a (config) | n/a | bucket assignment is config, not an actual arrears reading — see LOAN-9 | bucket/range list, product-to-bucket mapping | none | known (§4) | gap |
-| PROD-7 | Products Mix | `m_product_mix` (grain: allowed/restricted product-to-product pairing) | restricted product ids | `N:M` self-join on `m_product_loan` | n/a | n/a | n/a | pairing rule list | none | known (0 rows — configured empty on this fixture, §4) | gap |
-| PROD-8 | Fixed Deposit Products | `m_savings_product` where `deposit_type_enum` = FD, joined to `m_deposit_product_term_and_preclosure` (11 rows) | min/max deposit term, pre-closure penalty terms | `1:1` FD product row ↔ term/preclosure row | none | n/a | product master, see FDRD-1..7 for account-level | none | known (§4); **unresolved**: exact `deposit_type_enum` value mapping to "FD" not verified this session | gap |
-| PROD-9 | Recurring Deposit Products | `m_savings_product` where `deposit_type_enum` = RD, joined to `m_deposit_product_recurring_detail` (3 rows) | mandatory deposit amount, recurring frequency | `1:1` RD product ↔ recurring-detail row | none | n/a | same caveat as PROD-8 | none | known (§4); same enum caveat | gap |
-| PROD-10 | Tax Configurations | `m_tax_component` (51 rows), `m_tax_group` (16 rows), mapping table `m_tax_group_mappings` (not queried this session) | tax rate, component name → group | `N:M` component ↔ group via mapping | n/a | tax rate has an effective-date history (`m_tax_component_history`, not queried) | tax config vs actual tax withheld is a separate question (see SAV-9) | tax config list | none | known for component/group (§4); mapping table candidate | gap |
-| PROD-11 | Floating Rates | `m_floating_rates` (0 rows), `m_floating_rates_periods` (0 rows, §4) | rate name, base lending rate, differential, effective period | `1:N` floating rate → periods | n/a | period `from_date` | floating-rate product linkage not verified against `m_product_loan.is_floating_interest_rate` this session | floating rate schedule list | none | known — both tables exist and are **empty** on this fixture; feature likely unused by this tenant | gap |
+| PROD-1 | Loan Products (master, incl. unused) | `m_product_loan` (grain: product) | name, currency_code, interest terms, min/max principal | `1:N` to `m_loan` (usage) — master listed independent of usage per §1 rule | none (product is org-wide unless product-office restriction table is checked) | n/a | product master ≠ account usage; unused products must still list | none | known (12 rows, §4) | inherited |
+| PROD-2 | Savings Products | `m_savings_product` (grain: product) | name, currency_code, nominal_annual_interest_rate | `1:N` to `m_savings_account` | none | n/a | same as PROD-1 | `savings/products_by_client` (usage-side only — no standalone product-master capability) | known (23 rows, §4) | inherited |
+| PROD-3 | Share Products | `m_share_product` (grain: product) | name, currency_code, total_shares | `1:N` to `m_share_account` | none | n/a | same as PROD-1 | none | known (1 row, §4) | inherited |
+| PROD-4 | Charges (master) | `m_charge` (grain: charge definition) | name, currency_code, charge_time_enum, charge_calculation_enum, is_penalty | referenced by `m_savings_account_charge`, `m_loan_charge`, `m_client_charge`, `m_share_account_charge` | none | n/a | master vs actual charging is D04's separation | `savings/charge_type_identity_resolve`, `charge_count_by_type`, `charges_by_type` (savings-scoped only) | known (59 rows, §4) | inherited |
+| PROD-5 | Collateral Management | `m_collateral_management` (type master), `m_client_collateral_management` (8 rows), `m_loan_collateral_management` (12 rows) | collateral type, quantity, base value/pct → collateral value | `1:N` client → pledged collateral; `N:M` loan ↔ collateral via `m_loan_collateral_management` | via client/loan office path | n/a | pledged ≠ realized; no valuation simulation | collateral list per client/loan | none | known (§4) | inherited |
+| PROD-6 | Delinquency Buckets | `m_delinquency_bucket` (4 rows, grain: bucket), `m_delinquency_range` (6 rows), `m_delinquency_bucket_mappings` (10 rows, bucket↔range), `m_product_loan.delinquency_bucket_id` (product↔bucket FK) | bucket name; range classification/min/max days overdue; product ID attached to bucket | `1:N` bucket → range mappings; `1:N` bucket → loan products through `m_product_loan.delinquency_bucket_id` (not through `m_delinquency_bucket_mappings`) | n/a (config) | n/a | bucket assignment is config, not an actual arrears reading — see LOAN-9 | bucket/range list and product-to-bucket mapping, without implying a loan is currently delinquent | none | known (schema columns and FK path verified locally; counts §4) | inherited |
+| PROD-7 | Products Mix | `m_product_mix` (grain: allowed/restricted product-to-product pairing) | restricted product ids | `N:M` self-join on `m_product_loan` | n/a | n/a | n/a | pairing rule list | none | known (0 rows — configured empty on this fixture, §4) | inherited |
+| PROD-8 | Fixed Deposit Products | `m_savings_product.deposit_type_enum = 200` (FD) joined to `m_deposit_product_term_and_preclosure` (11 term rows across FD/RD) | min/max deposit term, pre-closure penalty terms | `1:1` FD product row ↔ term/preclosure row | none | n/a | product master, see FDRD-1..7 for account-level; projected maturity is not payout | standalone FD product and its term/preclosure configuration | none | verified locally: 8 FD products and 8 matching term rows; enum 200 also documented in `knowledge/datasets/savings/deposits.yaml` | inherited |
+| PROD-9 | Recurring Deposit Products | `m_savings_product.deposit_type_enum = 300` (RD) joined to `m_deposit_product_term_and_preclosure` and `m_deposit_product_recurring_detail` (3 rows each for RD) | `deposit_amount` on product term; `is_mandatory`, `allow_withdrawal`, `adjust_advance_towards_future_payments` on recurring detail | `1:1` RD product ↔ term/preclosure row and recurring-detail row | none | n/a | product configuration is distinct from an account's contribution schedule; this deployment has **no product-level recurring-frequency column** in these tables, so do not invent or infer one from `lockin_period_frequency` | RD master amount and mandatory rule resolvable; product-level recurring frequency stays Unsupported without an approved source (account-level schedule belongs to FIN-110) | none | verified locally: 3 RD products with both detail rows; enum 300 documented in `knowledge/datasets/savings/deposits.yaml`; frequency source absent | inherited |
+| PROD-10 | Tax Configurations | `m_tax_component` (51 rows), `m_tax_group` (16 rows), mapping table `m_tax_group_mappings` (not queried this session) | tax rate, component name → group | `N:M` component ↔ group via mapping | n/a | tax rate has an effective-date history (`m_tax_component_history`, not queried) | tax config vs actual tax withheld is a separate question (see SAV-9) | tax config list | none | known for component/group (§4); mapping table candidate | inherited |
+| PROD-11 | Floating Rates | `m_floating_rates` (0 rows), `m_floating_rates_periods` (0 rows, §4) | rate name, base lending rate, differential, effective period | `1:N` floating rate → periods | n/a | period `from_date` | floating-rate product linkage not verified against `m_product_loan.is_floating_interest_rate` this session | floating rate schedule list | none | known — both tables exist and are **empty** on this fixture; feature likely unused by this tenant | inherited |
 
 ---
 
@@ -370,7 +372,7 @@ total (see D15 table-count note, §10).
 | §1 heading / decision | Inventory IDs | Row count | Statuses present |
 | --- | --- | --- | --- |
 | Organization (`:23`) | ORG-1..ORG-11 | 11 | 1 inherited, 10 gap |
-| Products (`:24`) | PROD-1..PROD-11 | 11 | 0 inherited, 11 gap |
+| Products (`:24`) | PROD-1..PROD-11 | 11 | 11 inherited (FIN-109) |
 | Client/kepemilikan (`:25`) | CLI-1..CLI-8 | 8 | 3 inherited, 5 gap |
 | Loan (`:26`) | LOAN-1..LOAN-12 | 12 | 0 inherited, 12 gap |
 | Savings (`:27`) | SAV-1..SAV-11 | 11 | 6 inherited, 5 gap |
@@ -395,11 +397,12 @@ total (see D15 table-count note, §10).
 
 **Totals:** 79 baseline-domain rows + 20 decision rows (D01–D14 = 14;
 D15 heading + five sub-rows = 6) = **99 inventory rows**, covering all 8
-§1 headings and all 15 decisions (D01–D15) with **zero omissions**. Ten
-rows are `inherited` (an approved Mode-1 capability exists today); three
+§1 headings and all 15 decisions (D01–D15) with **zero omissions**.
+Twenty-one rows are `inherited` (an approved Mode-1 capability exists today;
+PROD-1..11 added by FIN-109); three
 (D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
 `summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
-81 rows are `gap`: agreed scope lacking a capability, including unresolved
+70 rows are `gap`: agreed scope lacking a capability, including unresolved
 source mappings. Coverage counts requirements, not executable capabilities.
 
 ---

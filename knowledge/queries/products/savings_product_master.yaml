@@ -1,0 +1,16 @@
+id: products.savings_product_master
+database: fineract
+sql_file: queries/products/savings_product_master.sql
+data_areas: [products_master]
+tables: [m_savings_product]
+metrics: []
+parameters: []
+output_fields:
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: deposit_type_enum, type: integer, sensitivity: public_business }
+  - { name: nominal_annual_interest_rate, type: decimal, sensitivity: public_business }
+grain: [product_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

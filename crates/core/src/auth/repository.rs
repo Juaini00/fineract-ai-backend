@@ -52,6 +52,17 @@ pub async fn find_user_by_id(pool: &PgPool, user_id: Uuid) -> sqlx::Result<Optio
     .fetch_optional(pool)
     .await
 }
+/// Recheck current authorization for a tenant-wide master at execution time.
+/// A saved job scope is an audit snapshot, not an authorization grant (I7).
+pub async fn is_active_admin(pool: &PgPool, user_id: Uuid) -> sqlx::Result<bool> {
+    sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active AND role = 'admin')",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+}
+
 
 pub async fn count_users(pool: &PgPool) -> sqlx::Result<i64> {
     sqlx::query_scalar::<_, i64>("SELECT count(*) FROM users")

@@ -1,0 +1,22 @@
+info:
+  name: FIN-109 share_product_master session
+  type: http
+  seq: 7
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-109 share_product_master" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin109shareproductmasterSession", res.getBody().data.id);

@@ -3,20 +3,15 @@ status: gap
 source_doc: docs/data/dataset-inventory.md#3-domain-b--products
 inventory_refs:
   - SAV-9
-  - PROD-10
-description: Tax components, groups, and applied tax — agreed baseline scope (§1 Savings/FD-RD), no approved capability yet.
+description: Applied tax on accounts remains agreed scope without an approved capability; product tax configuration is owned by products_master (PROD-10).
 included_tables: []
 conditional_tables: []
 excluded_tables:
-  - m_tax_component
-  - m_tax_component_history
-  - m_tax_group
-  - m_tax_group_mappings
   - m_savings_account_transaction_tax_details
 allowed_domains:
   - tax
 default_rules:
-  - Applied tax is agreed baseline scope with no approved capability yet; tax tables must not be used until a capability and its output-sensitivity policy are approved.
+  - Applied account tax remains a gap; approved tax component/group configuration belongs to the separate products_master area.
 checks:
   - id: gap_not_runtime
     rule: this area must not be referenced by approved_mvp capabilities or queries.

@@ -1,20 +1,37 @@
 id: office_scope_policy
-source_doc: docs/reporting-capabilities.md#4-common-mvp-savings-joins
+source_doc: docs/data/analytical-contracts.md#6-office-scope--d5-penegakan-di-sql
 rules:
-  - Fineract report queries must constrain office ids to API key allowed_office_ids.
-  - User-provided office_ids must be a subset of allowed_office_ids.
-  - If office_ids is omitted, use all allowed_office_ids.
-  - Transaction reports must constrain m_savings_account_transaction.office_id with ANY($office_ids).
-  - Account owner office paths should be validated where practical to avoid broadening access.
-default_source: api_key.allowed_office_ids
+  - Office-bound Fineract facts must bind authorized office_ids inside SQL.
+  - User office_ids can only narrow the authenticated admin's tenant scope.
+  - Verified organization-wide masters are read-only tenant references, not evidence of office-specific product use.
+  - Any join from an organization-wide master to client/account/transaction facts restores the office filter on those facts.
+default_source: auth_sessions.entitlements_json
+org_wide_reference_tables:
+  - m_product_loan
+  - m_savings_product
+  - m_share_product
+  - m_charge
+  - m_collateral_management
+  - m_delinquency_bucket
+  - m_delinquency_range
+  - m_delinquency_bucket_mappings
+  - m_product_mix
+  - m_deposit_product_term_and_preclosure
+  - m_deposit_product_recurring_detail
+  - m_tax_component
+  - m_tax_group
+  - m_tax_group_mappings
+  - m_tax_component_history
+  - m_floating_rates
+  - m_floating_rates_periods
 enforcement_points:
   - policy guard validates requested office_ids
   - query metadata declares office_ids parameter source authorized_scope
   - SQL uses bound office_ids array, never string interpolation
 checks:
-  - id: every_fineract_query_has_office_ids
-    rule: every Fineract query must declare office_ids as source authorized_scope.
-  - id: every_fineract_query_requires_office_filter
-    rule: every Fineract query guard must set require_office_filter=true.
+  - id: every_office_fact_query_has_office_ids
+    rule: every office-bound Fineract query declares office_ids from authorized_scope and require_office_filter=true.
+  - id: approved_org_wide_reference_only
+    rule: org_wide_reference queries may read only declared tables from org_wide_reference_tables, without office-bound facts.
   - id: sql_uses_bound_office_array
-    rule: SQL must use ANY($n::bigint[]) for office scope.
+    rule: every office-bound fact SQL uses ANY($n::bigint[]) for office scope.

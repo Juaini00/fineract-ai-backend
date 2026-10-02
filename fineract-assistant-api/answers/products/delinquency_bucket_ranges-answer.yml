@@ -1,0 +1,24 @@
+info:
+  name: FIN-109 delinquency_bucket_ranges answer
+  type: http
+  seq: 21
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin109delinquencybucketrangesJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "delinquency_bucket_ranges", document);
+          test("FIN-109 PROD-6: delinquency_bucket_ranges has verified outcome and completeness", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+        }

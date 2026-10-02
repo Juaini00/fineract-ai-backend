@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 tax_components job
+  type: http
+  seq: 35
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109taxcomponentsKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109taxcomponentsSession}}", "request_text": "List tax component configurations and their current percentages."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109taxcomponentsKey", "fin109-tax_components-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109taxcomponentsJob", res.getBody().data.job_id);

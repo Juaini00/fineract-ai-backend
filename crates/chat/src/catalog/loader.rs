@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 use crate::catalog::{
     inventory,
     model::{
-        Capability, DataScopeArea, Dataset, DatasetShape, Domain, QueryManifest, SafetyPolicy,
-        SensitivityClasses,
+        Capability, DataScopeArea, Dataset, DatasetShape, Domain, OfficeScopePolicy,
+        QueryManifest, SafetyPolicy, SensitivityClasses,
     },
     surface::{DeferredDomains, Surfaces},
 };
@@ -38,6 +38,7 @@ pub struct Catalog {
     /// bukan salinan/konstanta yang bisa menyimpang diam-diam (FIN-153).
     pub inventory: BTreeMap<String, String>,
     pub safety_policy: SafetyPolicy,
+    pub office_scope_policy: OfficeScopePolicy,
     /// Nama kelas sensitivitas yang sah, dari `columns/sensitivity.yaml`.
     pub sensitivity_classes: BTreeSet<String>,
     /// Kosakata permukaan yang tidak disetujui, diturunkan dari knowledge
@@ -73,6 +74,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
     let mut queries = Vec::new();
     let mut datasets = Vec::new();
     let mut safety_policy = SafetyPolicy::default();
+    let mut office_scope_policy = OfficeScopePolicy::default();
     let mut sensitivity_classes = BTreeSet::new();
     let mut sql_files = BTreeMap::new();
     let mut secret_fields = Vec::new();
@@ -130,6 +132,11 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         } else if relative.ends_with("policies/query_safety.yaml") {
             match serde_yaml::from_str::<SafetyPolicy>(&text) {
                 Ok(policy) => safety_policy = policy,
+                Err(error) => unreadable.push((relative, error.to_string())),
+            }
+        } else if relative.ends_with("policies/office_scope.yaml") {
+            match serde_yaml::from_str::<OfficeScopePolicy>(&text) {
+                Ok(policy) => office_scope_policy = policy,
                 Err(error) => unreadable.push((relative, error.to_string())),
             }
         } else if relative.contains("/data-scope/areas/") {
@@ -219,6 +226,7 @@ pub fn load(knowledge_root: &Path, query_root: &Path) -> anyhow::Result<Catalog>
         areas,
         inventory,
         safety_policy,
+        office_scope_policy,
         sensitivity_classes,
         unapproved_surfaces,
         deferred_domains,

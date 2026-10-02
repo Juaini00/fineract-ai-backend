@@ -34,7 +34,15 @@ runtime:
           shape.assertBlockShape(test, expect, document);
           test("L5.1 §1–§2: grouping none → blok metric, bukan table", function () {
             const blocks = document.blocks_json;
-            expect(blocks.filter((b) => b.type === "metric").length).to.be.above(0);
             expect(blocks.find((b) => b.type === "table")).to.equal(undefined);
+            // The default period is the current month; on its first days the
+            // fixture may hold no deposits (FIN-158). An Empty document has
+            // no value to shape, so metric is required only when rows exist.
+            if (document.outcome === "Empty") {
+              expect(blocks.map((b) => b.type)).to.deep.equal(["narrative"]);
+            } else {
+              expect(document.outcome).to.equal("Answered");
+              expect(blocks.filter((b) => b.type === "metric").length).to.be.above(0);
+            }
           });
         }

@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 floating_rate_periods job
+  type: http
+  seq: 44
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109floatingrateperiodsKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109floatingrateperiodsSession}}", "request_text": "List floating rate masters and their configured effective periods."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109floatingrateperiodsKey", "fin109-floating_rate_periods-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109floatingrateperiodsJob", res.getBody().data.job_id);

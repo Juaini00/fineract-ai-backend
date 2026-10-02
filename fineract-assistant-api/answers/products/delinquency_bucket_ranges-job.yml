@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 delinquency_bucket_ranges job
+  type: http
+  seq: 20
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109delinquencybucketrangesKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109delinquencybucketrangesSession}}", "request_text": "List delinquency bucket range rules and overdue-day boundaries."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109delinquencybucketrangesKey", "fin109-delinquency_bucket_ranges-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109delinquencybucketrangesJob", res.getBody().data.job_id);

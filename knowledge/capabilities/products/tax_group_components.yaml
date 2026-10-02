@@ -1,0 +1,19 @@
+id: tax_group_components
+status: approved_mvp
+domain: products
+display_name: Tax Group Component Rules
+description: >-
+  List tax-group membership with recorded effective dates, separate from actual tax charged.
+data_areas: [products_master]
+required_api_capability: tax_group_components
+query_id: products.tax_group_components
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List configured tax groups and their mapped tax components.
+  - Tampilkan pemetaan komponen pada kelompok pajak.
+supported_intents:
+  - List tax-group membership with recorded effective dates, separate from actual tax charged.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

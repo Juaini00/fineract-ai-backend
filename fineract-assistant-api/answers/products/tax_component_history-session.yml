@@ -1,0 +1,22 @@
+info:
+  name: FIN-109 tax_component_history session
+  type: http
+  seq: 40
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-109 tax_component_history" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin109taxcomponenthistorySession", res.getBody().data.id);

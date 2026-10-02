@@ -16,7 +16,10 @@ runtime:
         test("OVR-6.6 (kontrol): 'credit' pada subjek savings TIDAK ditolak sebagai domain gap/deferred", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
-          expect(job.outcome).to.equal("Answered");
+          // "this month" may hold no savings activity early in a month
+          // (FIN-158): Empty is still a planned savings answer, not a refusal.
+          expect(job.outcome).to.be.oneOf(["Answered", "Empty"]);
+          expect(job.plan_version).to.equal(1);
           expect(job.completeness_reason).to.not.equal("domain_deferred");
           expect(job.completeness_reason).to.not.equal("domain_gap");
         });

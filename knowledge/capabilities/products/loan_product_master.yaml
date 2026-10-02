@@ -1,0 +1,19 @@
+id: loan_product_master
+status: approved_mvp
+domain: products
+display_name: Loan Product Master
+description: >-
+  List every loan product configuration, including unused products; principal and rate are product defaults, never account terms or disbursements.
+data_areas: [products_master]
+required_api_capability: loan_product_master
+query_id: products.loan_product_master
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List all loan product masters including unused loan products.
+  - Tampilkan semua produk pinjaman termasuk yang belum dipakai.
+supported_intents:
+  - List every loan product configuration, including unused products; principal and rate are product defaults, never account terms or disbursements.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

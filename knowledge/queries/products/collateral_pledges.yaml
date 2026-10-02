@@ -1,0 +1,20 @@
+id: products.collateral_pledges
+database: fineract
+sql_file: queries/products/collateral_pledges.sql
+data_areas: [products_master, client_foundation]
+tables: [m_client_collateral_management, m_client, m_loan_collateral_management]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+output_fields:
+  - { name: client_collateral_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: collateral_type_id, type: bigint, sensitivity: public_business }
+  - { name: quantity, type: decimal, sensitivity: public_business }
+  - { name: loan_collateral_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: is_released, type: boolean, sensitivity: public_business }
+grain: [client_collateral_id, loan_collateral_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, org_wide_reference: false, parameterized_only: true }
+timeout_ms: 3000

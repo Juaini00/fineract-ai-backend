@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 tax_group_components job
+  type: http
+  seq: 38
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109taxgroupcomponentsKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109taxgroupcomponentsSession}}", "request_text": "List configured tax groups and their mapped tax components."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109taxgroupcomponentsKey", "fin109-tax_group_components-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109taxgroupcomponentsJob", res.getBody().data.job_id);

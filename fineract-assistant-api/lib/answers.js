@@ -142,6 +142,17 @@ function expectOfficeIds(test, expect, capabilityId, document, truth) {
   });
 }
 
+function expectScope(test, expect, capabilityId, document, truth) {
+  if (document.evidence_json.lineage[0].scope_class === "org_wide_reference") {
+    test(`FIN-109 ${capabilityId}: tenant-wide master is disclosed, not office usage`, function () {
+      expect(document.evidence_json.lineage[0].parameters.some((p) => p.name === "office_ids")).to.equal(false);
+      expect(document.blocks_json.some((b) => b.block_id === "org_wide_reference" && b.type === "note")).to.equal(true);
+    });
+    return;
+  }
+  expectOfficeIds(test, expect, capabilityId, document, truth);
+}
+
 // Kolom jawaban job (dikurangi yang ditahan) harus SAMA PERSIS dengan kolom
 // baris acuan — bukan cuma superset/subset. `columns` adalah daftar nama
 // kolom SQL pembanding (biasanya `Object.keys` baris pertama).
@@ -184,7 +195,7 @@ function check(test, expect, capabilityId, document, options) {
     expect(bound).to.deep.equal(assumed);
   });
 
-  expectOfficeIds(test, expect, capabilityId, document, truth);
+  expectScope(test, expect, capabilityId, document, truth);
   expectColumnSet(test, expect, capabilityId, document, (want || []).length > 0 ? Object.keys(want[0]) : []);
 
   test(`FIN-52 ${capabilityId}: jawaban job = SQL langsung`, function () {
@@ -228,7 +239,7 @@ function checkSubset(test, expect, capabilityId, document, cap) {
     expect(bound).to.deep.equal(truth.params[capabilityId]);
   });
 
-  expectOfficeIds(test, expect, capabilityId, document, truth);
+  expectScope(test, expect, capabilityId, document, truth);
   expectColumnSet(test, expect, capabilityId, document, (population || []).length > 0 ? Object.keys(population[0]) : []);
 
   test(`FIN-52 ${capabilityId}: setiap baris jawaban ada di populasi SQL langsung`, function () {

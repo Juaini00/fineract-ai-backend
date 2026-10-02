@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 share_product_master job
+  type: http
+  seq: 8
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109shareproductmasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109shareproductmasterSession}}", "request_text": "List all share product masters and their current unit prices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109shareproductmasterKey", "fin109-share_product_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109shareproductmasterJob", res.getBody().data.job_id);

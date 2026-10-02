@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 recurring_deposit_product_master job
+  type: http
+  seq: 32
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109recurringdepositproductmasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109recurringdepositproductmasterSession}}", "request_text": "List recurring deposit product masters and mandatory deposit amounts."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109recurringdepositproductmasterKey", "fin109-recurring_deposit_product_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109recurringdepositproductmasterJob", res.getBody().data.job_id);

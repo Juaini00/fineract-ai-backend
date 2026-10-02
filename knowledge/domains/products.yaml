@@ -1,26 +1,25 @@
 id: products
-status: gap
+status: approved_mvp
 display_name: Products
 description: >-
-  Product master data — Loan/Savings/Share Products, Collateral Management,
-  Delinquency Buckets, Products Mix, Fixed/Recurring Deposit Products,
-  Floating Rates — per §1 baseline (dataset-scope-decisions.md:24) and
-  dataset-inventory.md PROD-1..11. Master listed independent of account usage,
-  including unused products (§1 rule). Charges master (PROD-4) is partially
-  inherited via savings-scoped capabilities (`charge_type_identity_resolve`);
-  tax configuration (PROD-10) is a separate domain (`tax`). Agreed baseline
-  scope for the rest; no approved Mode-1 capability exists yet.
+  Organization-wide Loan/Savings/Share/FD/RD product masters, charge
+  definitions, collateral types, delinquency buckets, product mix, tax
+  configuration and floating rates per dataset-inventory.md PROD-1..11.
+  Masters include unused products and never imply account usage or office
+  availability. Pledged collateral is a separate office-bound fact.
 inventory_refs:
   - PROD-1
   - PROD-2
   - PROD-3
+  - PROD-4
   - PROD-5
   - PROD-6
   - PROD-7
   - PROD-8
+  - PROD-10
   - PROD-9
   - PROD-11
-data_areas: []
+data_areas: [products_master]
 concepts:
   - id: loan_product
     meaning: Master loan product configuration, independent of accounts using it.
@@ -33,7 +32,7 @@ concepts:
     synonyms: [share product, produk saham]
   - id: collateral_management
     meaning: Collateral type master and pledged-collateral valuation rules.
-    synonyms: [collateral management, manajemen agunan]
+    synonyms: [collateral management, manajemen agunan, loan collateral, agunan pinjaman]
   - id: delinquency_bucket
     meaning: Configured arrears-aging bucket and range definitions.
     synonyms: [delinquency bucket, bucket tunggakan]
@@ -43,18 +42,35 @@ concepts:
   - id: floating_rate
     meaning: Floating interest rate base and differential configuration.
     synonyms: [floating rate, suku bunga mengambang]
-supported_intents: []
-gap_intents:
-  - { phrase: "loan product master list", inventory_ref: PROD-1 }
-  - { phrase: "savings product master list", inventory_ref: PROD-2 }
+  - id: charge_definition
+    meaning: Global charge configuration, not a collected client fee.
+    synonyms: [charge master, konfigurasi biaya]
+  - id: tax_configuration
+    meaning: Tax component, group and dated configuration, not tax withheld.
+    synonyms: [tax component, tax group, komponen pajak, kelompok pajak]
+  - id: deposit_product
+    meaning: Fixed or recurring deposit product terms, not an account schedule.
+    synonyms: [fixed deposit product, recurring deposit product, produk deposito]
+supported_intents:
+  - { phrase: "loan product master list including unused products", inventory_ref: PROD-1 }
+  - { phrase: "savings product master list including unused products", inventory_ref: PROD-2 }
   - { phrase: "share product master list", inventory_ref: PROD-3 }
+  - { phrase: "charge definition master configuration", inventory_ref: PROD-4 }
+  - { phrase: "collateral type rules and recorded client loan pledges", inventory_ref: PROD-5 }
+  - { phrase: "delinquency bucket ranges and loan product assignments", inventory_ref: PROD-6 }
+  - { phrase: "loan product mix restrictions", inventory_ref: PROD-7 }
+  - { phrase: "fixed deposit product terms and preclosure", inventory_ref: PROD-8 }
+  - { phrase: "recurring deposit product mandatory amount and rules", inventory_ref: PROD-9 }
+  - { phrase: "tax component groups and dated configuration", inventory_ref: PROD-10 }
+  - { phrase: "floating rate master effective periods", inventory_ref: PROD-11 }
+gap_intents: []
 unsupported_intents:
   - { phrase: "create loan product", exempt: "write_action" }
   - { phrase: "create savings product", exempt: "write_action" }
   - { phrase: "update product configuration", exempt: "write_action" }
 default_rules:
-  - Product master data (PROD-1..11) is agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason, never routed to an unrelated approved capability.
-  - Master listing must include unused products (§1 rule) once a capability exists — it must never be conflated with account-usage capabilities that already exist per-domain (mis. savings/products_by_client).
+  - Product masters are organization-wide read-only references; they include unused products and never prove office-specific usage.
+  - Account facts, collateral pledges, movements and tax actually withheld require separately approved office-scoped queries.
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to inherited.
+  - id: masters_not_account_usage
+    rule: org_wide_reference queries read only verified master/config tables and disclose their global scope.

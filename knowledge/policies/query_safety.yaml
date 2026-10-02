@@ -6,7 +6,7 @@ rules:
   parameterized_only: true
   approved_sql_files_only: true
   no_runtime_ai_sql: true
-  require_office_filter_for_fineract: true
+  require_office_filter_for_fineract_facts: true
   require_date_filter_for_transaction_reports: true
 unsafe_commands:
   - INSERT
@@ -33,5 +33,7 @@ checks:
     rule: every runtime parameter must use a bound placeholder.
   - id: no_unsafe_sql_tokens
     rule: SQL tokens must not include unsafe_commands.
+  - id: global_reference_has_approved_tables
+    rule: queries declaring org_wide_reference must read only tenant-wide master/config tables allowlisted by office_scope.yaml.
   - id: no_ai_generated_sql
     rule: runtime execution may only use query ids mapped to reviewed SQL files.

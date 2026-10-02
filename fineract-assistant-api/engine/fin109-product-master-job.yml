@@ -1,0 +1,32 @@
+info:
+  name: "FIN-109 loan product master — job"
+  type: http
+  seq: 38.997
+  description: |
+    PROD-1 is now an approved organization-wide master capability, independent
+    of accounts. The answer stage compares all rows with direct SQL.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{fin109ProductMasterKey}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show the loan product master list.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109ProductMasterKey", "fin109-product-master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("FIN-109 PROD-1: master job diterima", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("fin109ProductMasterJob", res.getBody().data.job_id);

@@ -1,0 +1,19 @@
+id: products.share_product_master
+database: fineract
+sql_file: queries/products/share_product_master.sql
+data_areas: [products_master]
+tables: [m_share_product]
+metrics: []
+parameters: []
+output_fields:
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: total_shares, type: bigint, sensitivity: public_business }
+  - { name: issued_shares, type: bigint, sensitivity: public_business }
+  - { name: unit_price, type: decimal, sensitivity: public_business }
+  - { name: start_date, type: date, sensitivity: public_business }
+  - { name: end_date, type: date, sensitivity: public_business }
+grain: [product_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

@@ -362,6 +362,17 @@ pub fn analysis(
         }
     };
 
+    if plan.org_wide_reference {
+        blocks.push(block(
+            "org_wide_reference",
+            "note",
+            &[],
+            json!({
+                "body": "This is organization-wide master configuration, not evidence of product use or availability in any particular office.",
+            }),
+        ));
+    }
+
     // I5 — tidak ada penghilangan senyap: kolom yang ditahan dinyatakan, bukan
     // sekadar hilang dari tabel (§7, PII #15).
     if !withheld.is_empty() {
@@ -750,6 +761,7 @@ pub fn evidence(
                 "capability_id": plan.capability_id,
                 "query_id": plan.query_id,
                 "sql_file": plan.sql_file,
+                "scope_class": if plan.org_wide_reference { "org_wide_reference" } else { "office_bound" },
                 "catalog_version_id": plan.catalog_version_id,
                 "catalog_content_hash": plan.catalog_content_hash,
                 "as_of": as_of(plan),
@@ -776,6 +788,7 @@ mod tests {
             query_id: "savings.deposit_total".into(),
             sql: "SELECT 1".into(),
             sql_file: "queries/savings/deposit_total.sql".into(),
+            org_wide_reference: false,
             parameters: vec![
                 Bound::Date(chrono::NaiveDate::from_ymd_opt(2026, 9, 1).unwrap()),
                 Bound::OfficeIds(vec![1, 2, 3]),

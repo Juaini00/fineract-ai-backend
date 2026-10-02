@@ -155,6 +155,11 @@ impl Surfaces {
 #[derive(Debug, Clone, Default)]
 pub struct DeferredDomains {
     terms: Vec<Term>,
+    /// Multi-word synonyms of approved domains (e.g. `loan product`, FIN-109).
+    /// Tokens they cover are masked before matching, so an approved subject
+    /// that contains an uncontracted word (`loan`) neither triggers the guard
+    /// nor removes that word from the guard's vocabulary.
+    shields: Vec<Vec<String>>,
 }
 
 impl DeferredDomains {
@@ -162,6 +167,14 @@ impl DeferredDomains {
         domains: &[Domain],
         capabilities: impl Iterator<Item = &'a Capability>,
     ) -> Self {
+        let shields: Vec<Vec<String>> = domains
+            .iter()
+            .filter(|domain| !is_uncontracted(domain))
+            .flat_map(|domain| domain.concepts.iter())
+            .flat_map(|concept| concept.synonyms.iter())
+            .map(|synonym| tokens(synonym))
+            .filter(|phrase| phrase.len() > 1)
+            .collect();
         let mut excluded: Vec<Vec<String>> = capabilities
             // A deployment without verified group/center support keeps its
             // domain and capability candidate. Candidate wording must not
@@ -182,7 +195,7 @@ impl DeferredDomains {
                     .chain(capability.examples.iter())
                     .chain(capability.supported_intents.iter())
             })
-            .map(|text| tokens(text))
+            .map(|text| mask(tokens(text), &shields))
             .collect();
         excluded.extend(
             domains
@@ -190,7 +203,7 @@ impl DeferredDomains {
                 .filter(|domain| !is_uncontracted(domain))
                 .flat_map(|domain| domain.concepts.iter())
                 .flat_map(|concept| concept.synonyms.iter())
-                .map(|synonym| tokens(synonym)),
+                .map(|synonym| mask(tokens(synonym), &shields)),
         );
 
         let mut terms: Vec<Term> = domains
@@ -216,14 +229,33 @@ impl DeferredDomains {
         terms.sort_by(|left, right| left.name.cmp(&right.name));
         terms.dedup_by(|left, right| left.name == right.name);
 
-        Self { terms }
+        Self { terms, shields }
     }
 
     /// Istilah pertama yang menandai subjek domain deferred/gap di `text`, bila ada.
     pub fn find(&self, text: &str) -> Option<&Term> {
-        let tokens = tokens(text);
+        let tokens = mask(tokens(text), &self.shields);
         self.terms.iter().find(|term| term.occurs_in(&tokens))
     }
+}
+
+/// Replaces every token covered by a shield phrase with an empty token, which
+/// no term matches and no phrase window can span.
+fn mask(mut tokens: Vec<String>, shields: &[Vec<String>]) -> Vec<String> {
+    for shield in shields {
+        let mut start = 0;
+        while start + shield.len() <= tokens.len() {
+            if tokens[start..start + shield.len()] == shield[..] {
+                for token in &mut tokens[start..start + shield.len()] {
+                    token.clear();
+                }
+                start += shield.len();
+            } else {
+                start += 1;
+            }
+        }
+    }
+    tokens
 }
 
 /// Domain tanpa capability disetujui secara umum: `deferred`
@@ -466,9 +498,9 @@ mod tests {
             // FIN-153 — D09 source audit Fineract sendiri (gap, bukan raw payload).
             "Who performed this action on the account?",
             // FIN-153 — cakupan tambahan yang koordinator minta dipetakan:
-            // products, FD/RD, linking resources, teller/cashier, standing
+            // FD/RD, linking resources, teller/cashier, standing
             // instructions, provisioning, scheduler, group meeting (D08).
-            "Show the loan product master list.",
+            // Products masters moved to approved under FIN-109.
             "Show the recurring deposit contribution for this account.",
             "Show the actual account transfer between these two accounts.",
             "Show the teller assignment for this branch.",
@@ -507,6 +539,25 @@ mod tests {
             "Show the results per office.",
         ] {
             assert!(deferred.find(text).is_none(), "{text}");
+        }
+    }
+
+    /// FIN-109: approved product masters contain the uncontracted word
+    /// `loan`; the shielded subject is answered while loan facts stay guarded.
+    #[test]
+    fn approved_product_master_shields_loan_without_unguarding_loan_facts() {
+        let deferred = deferred_domains();
+        for text in [
+            "Show the loan product master list.",
+            "Tampilkan semua produk pinjaman termasuk yang belum dipakai.",
+        ] {
+            assert!(deferred.find(text).is_none(), "{text}");
+        }
+        for text in [
+            "Show loan transactions.",
+            "Tampilkan transaksi pinjaman bulan ini.",
+        ] {
+            assert!(deferred.find(text).is_some(), "{text}");
         }
     }
 

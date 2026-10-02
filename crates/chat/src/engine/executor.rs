@@ -28,7 +28,9 @@ pub struct Executed {
 #[derive(Debug)]
 pub enum ExecutionError {
     /// Query melewati batas waktunya. Hasilnya tidak diketahui — bukan nol.
-    TimedOut { timeout_ms: u64 },
+    TimedOut {
+        timeout_ms: u64,
+    },
     Database(String),
 }
 
@@ -124,7 +126,12 @@ fn row_to_json(row: &PgRow) -> Map<String, Value> {
     for column in row.columns() {
         let name = column.name().to_string();
         let value = match column.type_info().name() {
-            "INT2" | "INT4" => row
+            "INT2" => row
+                .try_get::<Option<i16>, _>(column.ordinal())
+                .ok()
+                .flatten()
+                .map(|value| Value::from(value as i64)),
+            "INT4" => row
                 .try_get::<Option<i32>, _>(column.ordinal())
                 .ok()
                 .flatten()

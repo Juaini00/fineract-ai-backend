@@ -1,0 +1,18 @@
+id: products.recurring_deposit_product_master
+database: fineract
+sql_file: queries/products/recurring_deposit_product_master.sql
+data_areas: [products_master]
+tables: [m_savings_product, m_deposit_product_term_and_preclosure, m_deposit_product_recurring_detail]
+metrics: []
+parameters: []
+output_fields:
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: deposit_amount, type: decimal, sensitivity: public_business }
+  - { name: is_mandatory, type: boolean, sensitivity: public_business }
+  - { name: allow_withdrawal, type: boolean, sensitivity: public_business }
+  - { name: adjust_advance_towards_future_payments, type: boolean, sensitivity: public_business }
+grain: [product_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000
