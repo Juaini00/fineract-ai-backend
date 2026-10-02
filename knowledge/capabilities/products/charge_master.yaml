@@ -1,0 +1,19 @@
+id: charge_master
+status: approved_mvp
+domain: products
+display_name: Charge Definition Master
+description: >-
+  List global charge definitions and their configured calculation, penalty and amount; not charged, paid, waived or outstanding amounts.
+data_areas: [products_master]
+required_api_capability: charge_master
+query_id: products.charge_master
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List all charge definitions and their configured penalty rules.
+  - Daftar konfigurasi biaya dan aturan penalti, bukan biaya yang dibayar.
+supported_intents:
+  - List global charge definitions and their configured calculation, penalty and amount; not charged, paid, waived or outstanding amounts.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

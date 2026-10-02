@@ -1,0 +1,18 @@
+id: products.tax_group_components
+database: fineract
+sql_file: queries/products/tax_group_components.sql
+data_areas: [products_master]
+tables: [m_tax_group_mappings, m_tax_group, m_tax_component]
+metrics: []
+parameters: []
+output_fields:
+  - { name: mapping_id, type: bigint, sensitivity: public_business }
+  - { name: tax_group_id, type: bigint, sensitivity: public_business }
+  - { name: tax_group_name, type: string, sensitivity: public_business }
+  - { name: component_id, type: bigint, sensitivity: public_business }
+  - { name: component_name, type: string, sensitivity: public_business }
+  - { name: start_date, type: date, sensitivity: public_business }
+  - { name: end_date, type: date, sensitivity: public_business }
+grain: [mapping_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

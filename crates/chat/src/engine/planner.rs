@@ -75,6 +75,8 @@ pub struct Plan {
     pub query_id: String,
     pub sql: String,
     pub sql_file: String,
+    /// The query is tenant-wide reference/configuration, not an office fact.
+    pub org_wide_reference: bool,
     pub parameters: Vec<Bound>,
     pub parameter_names: Vec<String>,
     pub output_fields: Vec<String>,
@@ -131,6 +133,12 @@ pub enum Unplannable {
     RetrievalMiss,
     /// Capability terpilih merujuk query yang tidak ada di katalog.
     QueryMissing(String),
+    /// Tenant-wide master access is limited to an active admin of this tenant.
+    GlobalReferenceUnauthorized,
+    /// No office-to-product relation proves office-specific applicability.
+    GlobalReferenceOfficeUnavailable,
+    /// This deployment has no product-level recurring contribution frequency.
+    RecurringProductFrequencyUnavailable,
     /// Parameter wajib tidak dapat diisi tanpa bertanya lebih dulu.
     ///
     /// Seluruh parameter yang kurang dikumpulkan sekaligus: kontrak klarifikasi
@@ -201,6 +209,13 @@ impl Unplannable {
             Self::OutOfScope => "out_of_scope".to_string(),
             Self::RetrievalMiss => "retrieval_miss".to_string(),
             Self::QueryMissing(_) => "capability_query_missing".to_string(),
+            Self::GlobalReferenceUnauthorized => "global_reference_not_authorized".to_string(),
+            Self::GlobalReferenceOfficeUnavailable => {
+                "global_reference_office_unavailable".to_string()
+            }
+            Self::RecurringProductFrequencyUnavailable => {
+                "recurring_product_frequency_unavailable".to_string()
+            }
             Self::NeedsClarification { missing, .. }
                 if missing.iter().any(Missing::unanswerable) =>
             {
@@ -224,6 +239,15 @@ impl Unplannable {
             Self::QueryMissing(query_id) => format!(
                 "The selected capability refers to query '{query_id}', which is not present in the approved catalog."
             ),
+            Self::GlobalReferenceUnauthorized => {
+                "This tenant-wide master requires an active administrator; no source query was run.".to_string()
+            }
+            Self::GlobalReferenceOfficeUnavailable => {
+                "The product master is organization-wide; no approved relationship proves which products are available or used in the requested office.".to_string()
+            }
+            Self::RecurringProductFrequencyUnavailable => {
+                "Recurring contribution frequency is not recorded on the product master in this deployment; an account schedule cannot stand in for product configuration.".to_string()
+            }
             Self::NeedsClarification {
                 capability,
                 missing,
@@ -290,9 +314,14 @@ pub async fn plan(
     catalog_version_id: Uuid,
     request_text: &str,
     authorized_office_ids: &[i64],
+    global_reference_allowed: bool,
+    explicit_office_scope: bool,
     // `supplied`: jawaban klarifikasi yang sudah diterima, dikunci nama parameter.
     supplied: &BTreeMap<String, String>,
 ) -> sqlx::Result<Result<Plan, Unplannable>> {
+    if asks_for_recurring_product_frequency(request_text) {
+        return Ok(Err(Unplannable::RecurringProductFrequencyUnavailable));
+    }
     let lexical = best_capability(pool, catalog_version_id, request_text).await?;
     let semantic = || {
         semantic_capability(
@@ -335,6 +364,19 @@ pub async fn plan(
     else {
         return Ok(Err(Unplannable::QueryMissing(query_id)));
     };
+    if query.guards.org_wide_reference == Some(true) {
+        if !global_reference_allowed {
+            return Ok(Err(Unplannable::GlobalReferenceUnauthorized));
+        }
+        if explicit_office_scope || asks_for_office_specific_products(request_text) {
+            return Ok(Err(Unplannable::GlobalReferenceOfficeUnavailable));
+        }
+    }
+    if query.id == "products.recurring_deposit_product_master"
+        && has_any_term(request_text, &["frequency", "frekuensi"])
+    {
+        return Ok(Err(Unplannable::RecurringProductFrequencyUnavailable));
+    }
 
     let Some(sql_file) = query.sql_file.clone() else {
         return Ok(Err(Unplannable::QueryMissing(query_id)));
@@ -369,6 +411,7 @@ pub async fn plan(
     Ok(Ok(Plan {
         capability_id: capability.id.clone(),
         query_id: query.id.clone(),
+        org_wide_reference: query.guards.org_wide_reference == Some(true),
         parameter_names: query
             .parameters
             .iter()
@@ -407,6 +450,26 @@ pub async fn plan(
         sql,
         sql_file,
     }))
+}
+
+/// A recurring-deposit product frequency question has no source on this
+/// deployment's product schema (FIN-109 PROD-9); answering it from a client
+/// account schedule would substitute account data for product configuration.
+fn asks_for_recurring_product_frequency(text: &str) -> bool {
+    has_any_term(text, &["frequency", "frekuensi"])
+        && has_any_term(text, &["recurring", "berjangka"])
+        && has_any_term(text, &["product", "products", "produk"])
+}
+
+fn has_any_term(text: &str, wanted: &[&str]) -> bool {
+    text.split(|character: char| !character.is_alphanumeric())
+        .any(|term| wanted.iter().any(|word| term.eq_ignore_ascii_case(word)))
+}
+
+/// A global master cannot answer an office-specific availability question
+/// without a verified product-to-office relation (FIN-109 / XR-SCOPE).
+fn asks_for_office_specific_products(text: &str) -> bool {
+    has_any_term(text, &["office", "branch", "cabang", "kantor"])
 }
 
 /// Normalize a request into the lexical terms that retrieval can overlap.
@@ -1109,6 +1172,7 @@ mod tests {
             areas: Vec::new(),
             inventory: Default::default(),
             safety_policy: Default::default(),
+            office_scope_policy: Default::default(),
             sensitivity_classes: Default::default(),
             unapproved_surfaces: Default::default(),
             deferred_domains: Default::default(),
@@ -1158,6 +1222,7 @@ mod tests {
             id: "savings.deposit_total".into(),
             database: None,
             sql_file: None,
+            tables: Vec::new(),
             parameters,
             output_fields: Vec::new(),
             grain: Vec::new(),

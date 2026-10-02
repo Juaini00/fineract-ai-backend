@@ -1,0 +1,20 @@
+id: products.floating_rate_periods
+database: fineract
+sql_file: queries/products/floating_rate_periods.sql
+data_areas: [products_master]
+tables: [m_floating_rates, m_floating_rates_periods]
+metrics: []
+parameters: []
+output_fields:
+  - { name: floating_rate_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: is_base_lending_rate, type: boolean, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+  - { name: rate_period_id, type: bigint, sensitivity: public_business }
+  - { name: from_date, type: date, sensitivity: public_business }
+  - { name: interest_rate, type: decimal, sensitivity: public_business }
+  - { name: is_differential_to_base_lending_rate, type: boolean, sensitivity: public_business }
+  - { name: period_active, type: boolean, sensitivity: public_business }
+grain: [floating_rate_id, rate_period_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

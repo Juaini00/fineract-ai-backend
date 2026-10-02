@@ -91,6 +91,9 @@ pub struct QueryManifest {
     pub database: Option<String>,
     #[serde(default)]
     pub sql_file: Option<String>,
+    /// Source tables used by a curated query; mandatory for org-wide references.
+    #[serde(default)]
+    pub tables: Vec<String>,
     #[serde(default)]
     pub parameters: Vec<QueryParameter>,
     #[serde(default)]
@@ -204,6 +207,9 @@ pub struct QueryGuards {
     pub single_statement: Option<bool>,
     #[serde(default)]
     pub require_office_filter: Option<bool>,
+    /// Explicitly approved tenant-wide master/config read, never an office fact.
+    #[serde(default)]
+    pub org_wide_reference: Option<bool>,
     #[serde(default)]
     pub parameterized_only: Option<bool>,
 }
@@ -349,4 +355,12 @@ impl IntentRef {
 pub struct SafetyPolicy {
     #[serde(default)]
     pub unsafe_commands: Vec<String>,
+}
+
+/// `knowledge/policies/office_scope.yaml`: exact source allowlist for
+/// organization-wide reference/configuration reads.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct OfficeScopePolicy {
+    #[serde(default)]
+    pub org_wide_reference_tables: Vec<String>,
 }

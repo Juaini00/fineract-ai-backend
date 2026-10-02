@@ -1,0 +1,22 @@
+info:
+  name: FIN-109 rd_product_frequency negative session
+  type: http
+  seq: 49
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-109 rd_product_frequency negative" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin109rdproductfrequencySession", res.getBody().data.id);

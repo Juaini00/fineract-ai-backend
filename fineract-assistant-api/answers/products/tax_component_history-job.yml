@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 tax_component_history job
+  type: http
+  seq: 41
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109taxcomponenthistoryKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109taxcomponenthistorySession}}", "request_text": "Show the recorded history of tax component rates."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109taxcomponenthistoryKey", "fin109-tax_component_history-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109taxcomponenthistoryJob", res.getBody().data.job_id);

@@ -1,0 +1,24 @@
+info:
+  name: FIN-109 tax_component_history answer
+  type: http
+  seq: 42
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin109taxcomponenthistoryJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "tax_component_history", document);
+          test("FIN-109 PROD-10: tax_component_history has verified outcome and completeness", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+        }

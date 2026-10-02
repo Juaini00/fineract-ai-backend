@@ -27,6 +27,7 @@ excluded_tables:
 allowed_domains:
   - client
   - savings
+  - products
 default_rules:
   - Prefer aggregate reporting by default.
   - Client identity fields require explicit capability approval and can_view_pii=true.

@@ -1,0 +1,25 @@
+info:
+  name: "FIN-109 loan product master — job state"
+  type: http
+  seq: 38.998
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin109ProductMasterJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, (job) => poll.TERMINAL.includes(job.lifecycle))) {
+          const job = res.getBody().data;
+          test("FIN-109 PROD-1: global loan master is Answered and Complete", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(job.lifecycle).to.equal("Completed");
+            expect(job.outcome).to.equal("Answered");
+            expect(job.completeness).to.equal("Complete");
+            expect(job.plan_version).to.equal(1);
+          });
+        }

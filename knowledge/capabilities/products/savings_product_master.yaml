@@ -1,0 +1,19 @@
+id: savings_product_master
+status: approved_mvp
+domain: products
+display_name: Savings Product Master
+description: >-
+  List every savings product master including unused products and FD/RD subclasses; this is configuration, not account usage.
+data_areas: [products_master]
+required_api_capability: savings_product_master
+query_id: products.savings_product_master
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List all savings product masters including unused deposit products.
+  - Daftar master produk tabungan termasuk produk deposito yang belum dipakai.
+supported_intents:
+  - List every savings product master including unused products and FD/RD subclasses; this is configuration, not account usage.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

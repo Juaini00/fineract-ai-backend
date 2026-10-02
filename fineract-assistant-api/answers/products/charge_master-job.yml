@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 charge_master job
+  type: http
+  seq: 11
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109chargemasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109chargemasterSession}}", "request_text": "List all charge definitions and their configured penalty rules."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109chargemasterKey", "fin109-charge_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109chargemasterJob", res.getBody().data.job_id);

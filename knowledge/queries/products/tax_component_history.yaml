@@ -1,0 +1,17 @@
+id: products.tax_component_history
+database: fineract
+sql_file: queries/products/tax_component_history.sql
+data_areas: [products_master]
+tables: [m_tax_component_history, m_tax_component]
+metrics: []
+parameters: []
+output_fields:
+  - { name: history_id, type: bigint, sensitivity: public_business }
+  - { name: component_id, type: bigint, sensitivity: public_business }
+  - { name: component_name, type: string, sensitivity: public_business }
+  - { name: percentage, type: decimal, sensitivity: public_business }
+  - { name: start_date, type: date, sensitivity: public_business }
+  - { name: end_date, type: date, sensitivity: public_business }
+grain: [history_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

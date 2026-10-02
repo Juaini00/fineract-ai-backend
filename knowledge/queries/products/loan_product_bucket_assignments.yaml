@@ -1,0 +1,15 @@
+id: products.loan_product_bucket_assignments
+database: fineract
+sql_file: queries/products/loan_product_bucket_assignments.sql
+data_areas: [products_master]
+tables: [m_product_loan, m_delinquency_bucket]
+metrics: []
+parameters: []
+output_fields:
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: product_name, type: string, sensitivity: public_business }
+  - { name: bucket_id, type: bigint, sensitivity: public_business }
+  - { name: bucket_name, type: string, sensitivity: public_business }
+grain: [product_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

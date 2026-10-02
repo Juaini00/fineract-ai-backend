@@ -1692,6 +1692,22 @@ Update after FIN-156 (D02 historical-office Bruno polling race):
   768 tests. This changes test synchronization, not the catalog or the D02
   contract; L1C stays ⬜ and §5.1 coverage stays 36/59.
 
+Update after FIN-109 (Products masters, PROD-1..11):
+
+- Owner-approved contract (`analytical-contracts.md` §6, `dataset-inventory.md`
+  XR-SCOPE): verified organization-wide product/config masters are read
+  tenant-wide by an active admin, never inferring per-office availability;
+  pledged collateral (PROD-5) stays office-scoped. PROD-6 maps product to bucket
+  through `m_product_loan.delinquency_bucket_id`; PROD-9 has no product-level
+  RD frequency source on this deployment and answers `Unsupported`.
+- Fifteen Mode-1 capabilities under `products_master`, each compared row-for-row
+  with independent SQL (`tests/answers/`), including unused and zero-row masters.
+  Office-specific or non-admin master requests return `Unsupported`.
+- Fixed on the way: FIN-157 (INT2 columns decoded as `null`), FIN-158
+  (three Bruno controls assumed "this month" has activity).
+- L1C stays open: PROD rows are `inherited`, remaining domains are not; §5.1
+  coverage is unchanged (no numbered L1C scenario).
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

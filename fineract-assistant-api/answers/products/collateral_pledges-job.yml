@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 collateral_pledges job
+  type: http
+  seq: 17
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109collateralpledgesKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109collateralpledgesSession}}", "request_text": "List recorded client and loan collateral pledges in my authorized offices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109collateralpledgesKey", "fin109-collateral_pledges-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109collateralpledgesJob", res.getBody().data.job_id);

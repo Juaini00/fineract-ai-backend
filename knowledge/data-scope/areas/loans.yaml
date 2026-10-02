@@ -12,7 +12,6 @@ included_tables: []
 conditional_tables: []
 excluded_tables:
   - m_loan
-  - m_product_loan
   - m_loan_transaction
   - m_loan_repayment_schedule
   - m_loan_charge

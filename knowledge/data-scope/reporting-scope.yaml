@@ -13,6 +13,7 @@ included_areas:
   - organization_foundation
   - client_foundation
   - savings_core
+  - products_master
   - savings_transactions
 conditional_areas:
   - group_center_foundation

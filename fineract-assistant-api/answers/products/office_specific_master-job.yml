@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 office_specific_master negative job
+  type: http
+  seq: 47
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109officespecificmasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109officespecificmasterSession}}", "request_text": "List all loan product masters available in Branch A.", "office_ids": [2]}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109officespecificmasterKey", "fin109-office_specific_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109officespecificmasterJob", res.getBody().data.job_id);

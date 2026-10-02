@@ -1,0 +1,20 @@
+id: products.charge_master
+database: fineract
+sql_file: queries/products/charge_master.sql
+data_areas: [products_master]
+tables: [m_charge]
+metrics: []
+parameters: []
+output_fields:
+  - { name: charge_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: charge_applies_to_enum, type: integer, sensitivity: public_business }
+  - { name: charge_time_enum, type: integer, sensitivity: public_business }
+  - { name: charge_calculation_enum, type: integer, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: is_penalty, type: boolean, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [charge_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

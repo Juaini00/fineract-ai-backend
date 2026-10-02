@@ -224,6 +224,56 @@ fn check_query(
         }
     }
 
+    // The exception is for verified tenant-wide reference rows, never a
+    // replacement for the office predicate on client/account/transaction facts.
+    let org_wide = query.guards.org_wide_reference == Some(true);
+    if query.database.as_deref() == Some("fineract") {
+        match (query.guards.require_office_filter == Some(true), org_wide) {
+            (false, false) | (true, true) => findings.push(Finding::error(
+                &subject,
+                "fineract_scope_class_declared",
+                "query Fineract harus tepat satu: office filter terikat ATAU org_wide_reference",
+            )),
+            _ => {}
+        }
+    }
+
+    if org_wide {
+        if query.guards.require_office_filter != Some(false)
+            || query
+                .parameters
+                .iter()
+                .any(|parameter| parameter.source.as_deref() == Some("authorized_scope"))
+        {
+            findings.push(Finding::error(
+                &subject,
+                "global_reference_not_office_fact",
+                "referensi global tidak boleh menyamar sebagai query fakta office",
+            ));
+        }
+        let approved: BTreeSet<&str> = catalog
+            .office_scope_policy
+            .org_wide_reference_tables
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let declared: BTreeSet<&str> = query.tables.iter().map(String::as_str).collect();
+        let sql_tables = global_reference_tables(&stripped);
+        if declared.is_empty()
+            || declared.len() != query.tables.len()
+            || !declared.is_subset(&approved)
+            || sql_tables
+                .as_ref()
+                .is_none_or(|tables| tables != &query.tables.iter().cloned().collect())
+        {
+            findings.push(Finding::error(
+                &subject,
+                "approved_org_wide_reference_only",
+                "tabel referensi global harus tepat sama dengan FROM/JOIN SQL dan semuanya ada di allowlist office_scope.yaml",
+            ));
+        }
+    }
+
     // office_filter_is_bound (D5: scope ditegakkan DI DALAM SQL)
     if query.guards.require_office_filter == Some(true) {
         // Dicari lewat POSISI parameter authorized_scope, bukan lewat nama
@@ -1115,6 +1165,35 @@ fn strip_literals_and_comments(sql: &str) -> String {
     }
 
     output
+}
+
+/// Restrict org-wide SQL to plain SELECTs over the exact approved FROM/JOIN
+/// tables. Nested/CTE sources cannot borrow the global-reference exception.
+fn global_reference_tables(sql: &str) -> Option<BTreeSet<String>> {
+    let tokens: Vec<&str> = sql.split_whitespace().collect();
+    if tokens.first().is_none_or(|token| !token.eq_ignore_ascii_case("SELECT"))
+        || tokens.iter().any(|token| {
+            ["WITH", "LATERAL", "UNION", "INTERSECT", "EXCEPT"]
+                .iter()
+                .any(|forbidden| token.eq_ignore_ascii_case(forbidden))
+        })
+    {
+        return None;
+    }
+    let mut tables = BTreeSet::new();
+    for pair in tokens.windows(2) {
+        if pair[0].eq_ignore_ascii_case("FROM") || pair[0].eq_ignore_ascii_case("JOIN") {
+            let table = pair[1];
+            if !table
+                .chars()
+                .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_')
+            {
+                return None;
+            }
+            tables.insert(table.to_string());
+        }
+    }
+    (!tables.is_empty()).then_some(tables)
 }
 
 fn contains_word(haystack: &str, word: &str) -> bool {

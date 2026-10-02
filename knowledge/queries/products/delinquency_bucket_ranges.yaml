@@ -1,0 +1,18 @@
+id: products.delinquency_bucket_ranges
+database: fineract
+sql_file: queries/products/delinquency_bucket_ranges.sql
+data_areas: [products_master]
+tables: [m_delinquency_bucket, m_delinquency_bucket_mappings, m_delinquency_range]
+metrics: []
+parameters: []
+output_fields:
+  - { name: bucket_id, type: bigint, sensitivity: public_business }
+  - { name: bucket_name, type: string, sensitivity: public_business }
+  - { name: range_mapping_id, type: bigint, sensitivity: public_business }
+  - { name: range_id, type: bigint, sensitivity: public_business }
+  - { name: classification, type: string, sensitivity: public_business }
+  - { name: min_age_days, type: bigint, sensitivity: public_business }
+  - { name: max_age_days, type: bigint, sensitivity: public_business }
+grain: [bucket_id, range_mapping_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000

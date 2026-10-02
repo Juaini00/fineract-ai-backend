@@ -1,0 +1,20 @@
+id: collateral_pledges
+status: approved_mvp
+domain: products
+display_name: Client and Loan Collateral Pledges
+description: >-
+  List recorded client collateral and its explicit loan collateral linkage within authorized offices; quantity is recorded, not realized value.
+data_areas: [products_master, client_foundation]
+required_api_capability: collateral_pledges
+query_id: products.collateral_pledges
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List recorded client and loan collateral pledges in my authorized offices.
+  - Daftar agunan yang dicatat sebagai agunan nasabah dan agunan pinjaman pada kantor berizin.
+supported_intents:
+  - List recorded client collateral and its explicit loan collateral linkage within authorized offices; quantity is recorded, not realized value.
+guards: { require_office_scope: true, pii: { returns_pii: false } }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }

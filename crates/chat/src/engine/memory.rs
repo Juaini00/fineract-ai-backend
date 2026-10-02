@@ -160,6 +160,7 @@ mod tests {
             query_id: "savings.balance_summary".into(),
             sql: "SELECT 1".into(),
             sql_file: "queries/savings/balance_summary.sql".into(),
+            org_wide_reference: false,
             parameters: vec![
                 Bound::Date(NaiveDate::from_ymd_opt(2025, 9, 15).unwrap()),
                 Bound::OfficeIds(vec![1, 2, 3]),

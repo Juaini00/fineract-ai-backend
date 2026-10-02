@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 fixed_deposit_product_master job
+  type: http
+  seq: 29
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109fixeddepositproductmasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109fixeddepositproductmasterSession}}", "request_text": "List fixed deposit product masters and their preclosure terms."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109fixeddepositproductmasterKey", "fin109-fixed_deposit_product_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109fixeddepositproductmasterJob", res.getBody().data.job_id);

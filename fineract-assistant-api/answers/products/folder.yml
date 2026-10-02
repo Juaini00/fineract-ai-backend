@@ -1,0 +1,8 @@
+info:
+  name: products
+  seq: 4
+  description: |
+    FIN-109 L1C: fifteen Mode-1 product/configuration capabilities covering
+    PROD-1..11. Each job response is compared row-for-row against separately
+    written Fineract SQL under tests/answers, including zero-row configurations,
+    unused masters, office-scoped collateral and global-reference disclosures.

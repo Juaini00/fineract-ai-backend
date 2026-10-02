@@ -9,7 +9,6 @@ description: >-
 inventory_refs:
   - SAV-9
   - FDRD-5
-  - PROD-10
 data_areas:
   - tax
 concepts:
@@ -21,14 +20,13 @@ concepts:
     synonyms: [tax group, group pajak]
 supported_intents: []
 gap_intents:
-  - { phrase: "tax collected by period", inventory_ref: PROD-10 }
-  - { phrase: "tax by component or group", inventory_ref: PROD-10 }
+  - { phrase: "tax collected by period", inventory_ref: SAV-9 }
   - { phrase: "applied tax on an account", inventory_ref: SAV-9 }
 unsupported_intents:
   - { phrase: "create tax component", exempt: "write_action" }
   - { phrase: "update tax rate", exempt: "write_action" }
 default_rules:
-  - Applied tax is agreed baseline scope (§1 Savings/FD-RD; SAV-9/PROD-10 `gap`) with no approved capability yet; requests answer unsupported with a gap reason, not a permanent rejection.
+  - Applied tax remains an office-bound gap (SAV-9/FDRD-5); product tax component and group configuration is approved separately under products_master.
 checks:
   - id: gap_domain_no_approved_capability
     rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to `inherited`.

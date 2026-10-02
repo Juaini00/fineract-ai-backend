@@ -1,0 +1,24 @@
+info:
+  name: FIN-109 recurring_deposit_product_master answer
+  type: http
+  seq: 33
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin109recurringdepositproductmasterJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "recurring_deposit_product_master", document);
+          test("FIN-109 PROD-9: recurring_deposit_product_master has verified outcome and completeness", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+        }

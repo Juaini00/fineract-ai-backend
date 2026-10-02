@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 collateral_type_master job
+  type: http
+  seq: 14
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109collateraltypemasterKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109collateraltypemasterSession}}", "request_text": "List collateral type masters and base price rules."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109collateraltypemasterKey", "fin109-collateral_type_master-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109collateraltypemasterJob", res.getBody().data.job_id);

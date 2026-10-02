@@ -1,0 +1,27 @@
+info:
+  name: FIN-109 rd_product_frequency negative job
+  type: http
+  seq: 50
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+    - name: Idempotency-Key
+      value: "{{fin109rdproductfrequencyKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin109rdproductfrequencySession}}", "request_text": "What is the recurring deposit product frequency?", "office_ids": []}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin109rdproductfrequencyKey", "fin109-rd_product_frequency-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin109rdproductfrequencyJob", res.getBody().data.job_id);

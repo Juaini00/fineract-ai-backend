@@ -1,0 +1,19 @@
+id: share_product_master
+status: approved_mvp
+domain: products
+display_name: Share Product Master
+description: >-
+  List every share product master, including unused share products; current unit price is not historical purchase or payout evidence.
+data_areas: [products_master]
+required_api_capability: share_product_master
+query_id: products.share_product_master
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List all share product masters and their current unit prices.
+  - Tampilkan master produk saham beserta harga unit saat ini.
+supported_intents:
+  - List every share product master, including unused share products; current unit price is not historical purchase or payout evidence.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

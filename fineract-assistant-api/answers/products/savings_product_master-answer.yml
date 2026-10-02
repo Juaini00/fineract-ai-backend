@@ -1,0 +1,32 @@
+info:
+  name: FIN-109 savings_product_master answer
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin109savingsproductmasterJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin109Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_product_master", document);
+          test("FIN-109 PROD-2: savings_product_master has verified outcome and completeness", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-109 PROD-2: unused savings products are present in the master", function () {
+            const unused = require("./.answers/expected.js").rows.fin109_unused_savings_products;
+            expect(unused.length).to.be.greaterThan(0);
+            const master = answers.answerRows(document).rows;
+            for (const product of unused) {
+              expect(master.some((row) => row.product_id === product.product_id)).to.equal(true);
+            }
+          });
+        }

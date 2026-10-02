@@ -1,0 +1,19 @@
+id: floating_rate_periods
+status: approved_mvp
+domain: products
+display_name: Floating Rate Master Periods
+description: >-
+  List configured floating rates and dated rate periods; an empty fixture does not prove historical interest or product linkage.
+data_areas: [products_master]
+required_api_capability: floating_rate_periods
+query_id: products.floating_rate_periods
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List floating rate masters and their configured effective periods.
+  - Daftar suku bunga mengambang dan periode berlaku yang dikonfigurasi.
+supported_intents:
+  - List configured floating rates and dated rate periods; an empty fixture does not prove historical interest or product linkage.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}

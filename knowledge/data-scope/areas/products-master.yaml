@@ -1,0 +1,40 @@
+id: products_master
+status: included_mvp_foundation
+source_doc: docs/data/dataset-inventory.md#3-domain-b--products
+inventory_refs: [PROD-1, PROD-2, PROD-3, PROD-4, PROD-5, PROD-6, PROD-7, PROD-8, PROD-9, PROD-10, PROD-11]
+description: >-
+  Verified organization-wide product and configuration masters, distinct from
+  client/account usage. Client and loan collateral links are separate
+  office-bound facts and never inherit the org-wide read exception.
+included_tables:
+  - m_product_loan
+  - m_savings_product
+  - m_share_product
+  - m_charge
+  - m_collateral_management
+  - m_client_collateral_management
+  - m_loan_collateral_management
+  - m_delinquency_bucket
+  - m_delinquency_range
+  - m_delinquency_bucket_mappings
+  - m_product_mix
+  - m_deposit_product_term_and_preclosure
+  - m_deposit_product_recurring_detail
+  - m_tax_component
+  - m_tax_group
+  - m_tax_group_mappings
+  - m_tax_component_history
+  - m_floating_rates
+  - m_floating_rates_periods
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [products]
+default_rules:
+  - A global master includes unused products; it never proves use in a branch.
+  - A client/loan collateral link is scoped through the owner's office in SQL.
+  - Configuration, scheduled events, recorded movements and payouts are distinct evidence.
+checks:
+  - id: global_reference_whitelist
+    rule: Only office_scope.yaml org_wide_reference_tables may omit the office filter.
+  - id: office_facts_remain_scoped
+    rule: Client and loan collateral linkage requires the authorized office predicate.

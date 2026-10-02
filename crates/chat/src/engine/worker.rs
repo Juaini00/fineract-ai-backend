@@ -318,6 +318,12 @@ async fn run_job(
     // Jawaban klarifikasi yang sudah diterima dibaca lebih dulu: slot yang
     // sudah dijawab tidak pernah ditanyakan ulang (clarifications.md).
     let supplied = clarification_repository::accepted_answers(pool, job.id).await?;
+    let global_reference_allowed =
+        foundation::auth::repository::is_active_admin(pool, job.owner_user_id).await?
+            && job.scope_json["fineract_tenant"].as_str()
+                == Some(foundation.config().fineract_tenant.as_str())
+            && job.scope_json["source"].as_str() == Some("admin_projection");
+
 
     let planned = planner::plan(
         pool,
@@ -327,6 +333,8 @@ async fn run_job(
         catalog_version_id,
         &job.request_text,
         &authorized,
+        global_reference_allowed,
+        !requested_offices.is_empty(),
         &supplied,
     )
     .await?;
@@ -705,7 +713,7 @@ async fn retain_dataset(
             // dinyatakan, dan itu tidak boleh dibaca sebagai "tanpa fanout".
             grain_json: serde_json::json!({}),
             // Scope yang BENAR-BENAR dipakai mengeksekusi, bukan yang diminta.
-            scope_json: serde_json::json!({ "office_ids": authorized }),
+            scope_json: serde_json::json!({ "office_ids": authorized, "scope_class": if plan.org_wide_reference { "org_wide_reference" } else { "office_bound" } }),
             provenance_json: provenance,
             // Urutan dibekukan pada saat materialisasi: chunk menyimpan baris
             // persis seperti yang dikembalikan query yang disetujui, dan

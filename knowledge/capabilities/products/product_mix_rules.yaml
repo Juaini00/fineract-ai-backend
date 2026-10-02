@@ -1,0 +1,19 @@
+id: product_mix_rules
+status: approved_mvp
+domain: products
+display_name: Loan Product Mix Rules
+description: >-
+  List configured restricted loan-product pairings. An empty source means no pairing rules recorded, not that all combinations are approved.
+data_areas: [products_master]
+required_api_capability: product_mix_rules
+query_id: products.product_mix_rules
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
+examples:
+  - List configured restricted product mix pairings.
+  - Tampilkan aturan pasangan produk pinjaman yang dibatasi.
+supported_intents:
+  - List configured restricted loan-product pairings. An empty source means no pairing rules recorded, not that all combinations are approved.
+guards: { org_wide_reference: true, pii: { returns_pii: false } }
+parameters: {}
