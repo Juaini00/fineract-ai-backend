@@ -1,0 +1,33 @@
+id: loan.loans_by_client
+database: fineract
+sql_file: queries/loan/loans_by_client.sql
+data_areas: [loans_identity, client_foundation, group_center_foundation]
+tables: [m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: client_id, type: integer, required: true }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: group_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: loan_officer_id, type: bigint, sensitivity: public_business }
+  - { name: fund_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: loan_status_id, type: bigint, sensitivity: public_business }
+  - { name: loan_status, type: string, sensitivity: public_business }
+  - { name: submitted_on_date, type: date, sensitivity: public_business }
+  - { name: approved_on_date, type: date, sensitivity: public_business }
+  - { name: disbursed_on_date, type: date, sensitivity: public_business }
+  - { name: closed_on_date, type: date, sensitivity: public_business }
+  - { name: rejected_on_date, type: date, sensitivity: public_business }
+  - { name: written_off_on_date, type: date, sensitivity: public_business }
+grain: [loan_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the client office, else the group office.
+  - id: no_identity_fields
+    rule: account_no and external_id are never output.

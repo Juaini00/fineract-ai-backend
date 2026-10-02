@@ -1,0 +1,26 @@
+id: loan_status_summary
+status: approved_mvp
+domain: loan
+display_name: Loan Status Summary
+description: >-
+  Count loan accounts per recorded loan status and currency within authorized offices.
+data_areas: [loans_identity, client_foundation, group_center_foundation]
+required_api_capability: loan_status_summary
+query_id: loan.loan_status_summary
+metrics: []
+output_mode: summary
+request_shape: { operation: summary, subject: loan, grouping: status, output: table, pii: none }
+examples:
+  - How many loans are in each status?
+  - Count loans by status.
+  - Berapa jumlah pinjaman per status?
+supported_intents:
+  - Count loan accounts per recorded loan status and currency within authorized offices.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }

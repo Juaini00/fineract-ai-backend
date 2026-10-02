@@ -1,0 +1,35 @@
+id: loans_by_client
+status: approved_mvp
+domain: loan
+display_name: Loan Accounts By Client
+description: >-
+  Show one client's loan accounts with officer, fund, recorded status and lifecycle dates; every status is included, never only active.
+data_areas: [loans_identity, client_foundation, group_center_foundation]
+continuation: true
+required_api_capability: loans_by_client
+query_id: loan.loans_by_client
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - What loans does this client have?
+  - Show the loan accounts of a client and their status.
+  - Pinjaman apa saja yang dimiliki nasabah ini?
+supported_intents:
+  - Show one client's loan accounts with officer, fund, recorded status and lifecycle dates; every status is included, never only active.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  client_id:
+    type: integer
+    required: true
+    resolution: [authorized_data_probe]
+    probe:
+      dataset_id: client.identity
+      shape_id: identity_candidates
+      output_slot: client_id

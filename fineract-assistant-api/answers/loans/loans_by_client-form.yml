@@ -1,0 +1,25 @@
+info:
+  name: FIN-108 loans_by_client clarification form
+  type: http
+  seq: 3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loans_by_clientJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const form = res.getBody().data;
+          test("FIN-108 loans_by_client: client_id clarification is open", function () {
+            expect(res.getStatus()).to.equal(200);
+            expect(form.state).to.equal("open");
+            expect(form.fields_json[0].field_id).to.equal("client_id");
+          });
+          bru.setVar("fin108loans_by_clientClarificationId", form.clarification_id);
+          bru.setVar("fin108loans_by_clientRevision", form.revision);
+        }

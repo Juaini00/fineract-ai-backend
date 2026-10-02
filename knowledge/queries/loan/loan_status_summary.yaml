@@ -1,0 +1,21 @@
+id: loan.loan_status_summary
+database: fineract
+sql_file: queries/loan/loan_status_summary.sql
+data_areas: [loans_identity, client_foundation, group_center_foundation]
+tables: [m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+output_fields:
+  - { name: loan_status_id, type: bigint, sensitivity: public_business }
+  - { name: loan_status, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: loan_count, type: bigint, sensitivity: public_business }
+grain: [loan_status_id, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the client office, else the group office.
+  - id: no_identity_fields
+    rule: account_no and external_id are never output.

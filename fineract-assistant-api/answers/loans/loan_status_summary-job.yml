@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_status_summary job
+  type: http
+  seq: 12
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_status_summaryKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_status_summarySession}}", "request_text": "How many loans are in each status?"}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_status_summaryKey", "fin108-loan_status_summary-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_status_summaryJob", res.getBody().data.job_id);

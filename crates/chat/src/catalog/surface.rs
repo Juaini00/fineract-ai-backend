@@ -76,10 +76,19 @@ impl Surfaces {
         domains: &[Domain],
         capabilities: impl Iterator<Item = &'a Capability>,
     ) -> Self {
+        // An area that is itself uncontracted (e.g. `loans` while its domain
+        // is partly approved, FIN-108) answers through the domain gap guard,
+        // not as a policy rejection of its tables.
         let deferred_areas: BTreeSet<&str> = domains
             .iter()
             .filter(|domain| is_uncontracted(domain))
             .flat_map(|domain| domain.data_areas.iter().map(String::as_str))
+            .chain(
+                areas
+                    .iter()
+                    .filter(|area| matches!(area.status.as_deref(), Some("gap") | Some("deferred")))
+                    .map(|area| area.id.as_str()),
+            )
             .collect();
 
         let mut terms: Vec<Term> = secret_fields

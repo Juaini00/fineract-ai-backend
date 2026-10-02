@@ -2,16 +2,14 @@ id: loans
 status: gap
 source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
 inventory_refs:
-  - LOAN-1
   - LOAN-5
   - LOAN-6
   - LOAN-9
   - LOAN-11
-description: Loan portfolio — identity, disbursement, schedule, transactions, arrears, write-offs (agreed baseline scope, `gap`).
+description: Loan servicing facts — disbursement, schedule, transactions, charges, arrears, write-offs (agreed baseline scope, `gap`). Loan identity, lifecycle and effective terms moved to `loans_identity` (FIN-108).
 included_tables: []
 conditional_tables: []
 excluded_tables:
-  - m_loan
   - m_loan_transaction
   - m_loan_repayment_schedule
   - m_loan_charge

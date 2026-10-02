@@ -1,0 +1,22 @@
+id: loans_identity
+status: included_mvp_foundation
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs: [LOAN-1, LOAN-2, LOAN-3]
+description: >-
+  Loan account identity, recorded lifecycle and effective terms read from the
+  m_loan row itself (FIN-108). Schedule, transactions, charges, balances,
+  arrears, collateral/guarantor and write-off/recovery stay in the gap area
+  `loans` until their own contracts exist.
+included_tables:
+  - m_loan
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [loan]
+default_rules:
+  - Office scope is the owner's office: client office, else group office, bound in SQL.
+  - Account number and external id are never output; loan_id is the surrogate.
+  - A client's loan list includes every status; it never defaults to active.
+  - Effective terms come from the loan row; the product's current default is shown beside it, never substituted.
+checks:
+  - id: office_scope_required
+    rule: every approved loan query binds authorized office_ids through the client or group office path.

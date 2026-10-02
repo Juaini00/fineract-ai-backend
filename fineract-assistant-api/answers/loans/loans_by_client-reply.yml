@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loans_by_client answer clarification
+  type: http
+  seq: 5
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{fin108loans_by_clientJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loans_by_clientKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{fin108loans_by_clientClarificationId}}",
+        "revision": {{fin108loans_by_clientRevision}},
+        "answers": { "client_id": "{{fin108loans_by_clientOptionId}}" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);

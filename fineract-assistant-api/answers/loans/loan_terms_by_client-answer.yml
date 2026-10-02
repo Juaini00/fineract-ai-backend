@@ -1,0 +1,29 @@
+info:
+  name: FIN-108 loan_terms_by_client answer
+  type: http
+  seq: 26
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_terms_by_clientJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_terms_by_client", document);
+          test("FIN-108 loan_terms_by_client: verified answer", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-108 LOAN-3: account terms are not replaced by product defaults", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.some((r) => Number(r.account_interest_rate_per_period) !== Number(r.product_default_interest_rate_per_period)
+              || Number(r.account_number_of_repayments) !== Number(r.product_default_number_of_repayments))).to.equal(true);
+          });
+        }
