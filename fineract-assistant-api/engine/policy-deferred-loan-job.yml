@@ -4,10 +4,11 @@ info:
   seq: 38.92
   description: |
     Domain `loan` is `approved_mvp` since FIN-108 (identity, lifecycle, terms,
-    schedule, transactions), but `loans_identity`/`loans_servicing` do not
-    cover loan charges (LOAN-7, area `loans`, still `gap`). This subject
-    keeps proving the domain-gap guard now that "Show loan transactions."
-    is answered — see answers/loans/loan_transactions-answer.yml.
+    schedule, transactions, charges, balances, arrears), but
+    `loans_identity`/`loans_servicing`/`loans_charges_balances` do not cover
+    loan disbursement (LOAN-4, area `loans`, still `gap`). This subject keeps
+    proving the domain-gap guard now that "Show loan charges." is answered —
+    see answers/loans/loan_charges-answer.yml.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -21,7 +22,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show loan charges.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show loan disbursement details.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

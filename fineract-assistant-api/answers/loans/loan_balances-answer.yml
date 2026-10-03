@@ -1,0 +1,29 @@
+info:
+  name: FIN-108 loan_balances answer
+  type: http
+  seq: 142
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_balancesJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_balances", document);
+          test("FIN-108 loan_balances: verified answer", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-108 LOAN-8: total_outstanding_derived is read, not recomputed", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            expect(rows.every((r) => Math.abs(Number(r.total_outstanding_derived) - (Number(r.principal_outstanding_derived) + Number(r.interest_outstanding_derived) + Number(r.fee_charges_outstanding_derived) + Number(r.penalty_charges_outstanding_derived))) < 0.01)).to.equal(true);
+          });
+        }

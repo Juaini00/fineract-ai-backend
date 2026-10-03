@@ -1,0 +1,34 @@
+id: loan.loan_charges
+database: fineract
+sql_file: queries/loan/loan_charges.sql
+data_areas: [loans_charges_balances, products_master, client_foundation, group_center_foundation]
+tables: [m_loan_charge, m_loan, m_charge, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_charge_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: charge_id, type: bigint, sensitivity: public_business }
+  - { name: charge_name, type: string, sensitivity: public_business }
+  - { name: is_penalty, type: boolean, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: amount_paid_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_waived_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: is_paid_derived, type: boolean, sensitivity: public_business }
+  - { name: waived, type: boolean, sensitivity: public_business }
+grain: [loan_charge_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: charge_state_separated
+    rule: amount, amount_paid_derived, amount_waived_derived, amount_writtenoff_derived and amount_outstanding_derived must each be output distinctly, never merged into one figure.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

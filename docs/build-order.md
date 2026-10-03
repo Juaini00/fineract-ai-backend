@@ -1747,6 +1747,26 @@ Update after FIN-108 slice 2 (loan repayment schedule, transactions — LOAN-5, 
 - LOAN-4, 7..12 stay `gap`. FIN-108 stays open; L1C stays open; §5.1
   unchanged.
 
+Update after FIN-108 slice 3 (loan charges, balances, arrears — LOAN-7, LOAN-8,
+LOAN-9):
+
+- Three more Mode-1 capabilities under new area `loans_charges_balances`:
+  `loan_charges` (`m_loan_charge` joined to `m_charge`, charged vs
+  paid/waived/written-off/outstanding kept distinct), `loan_balances` (reads
+  `m_loan`'s own `*_derived` columns directly, never recomputed from schedule
+  or transactions), `loan_arrears` (`m_loan_arrears_aging`, 1:1 while
+  overdue, `overdue_since_date_derived` carried on every row as the XR-ASOF
+  signal — arrears currency still depends on COB/D14, which stays `gap`, so
+  no job-run join was added).
+- Office scope for all three binds the owning loan's client-or-group office
+  (`COALESCE(c.office_id, g.office_id)`), same path as LOAN-1..3; none of
+  `m_loan_charge`/`m_loan_arrears_aging` carry a direct `office_id`.
+- "Show loan charges."/"Tampilkan biaya pinjaman bulan ini." moved from
+  refused (`domain_gap`) to `Answered`; the `policy-deferred-loan*` Bruno
+  controls now prove a still-gap subject (loan disbursement, LOAN-4) instead.
+- LOAN-4, 10..12 stay `gap` in area `loans`. FIN-108 stays open for LOAN-4,
+  10..12 (slice 4); L1C stays open; §5.1 unchanged.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
