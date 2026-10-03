@@ -3,10 +3,11 @@ info:
   type: http
   seq: 38.92
   description: |
-    Domain `loan` berstatus `deferred` (`knowledge/domains/loan.yaml`) — `default_rules`:
-    "respond as unsupported with a deferred reason". Sebelum FIN-140 pertanyaan baca ini tidak
-    ditolak dan jatuh ke capability savings terdekat, dijawab Answered dengan data yang salah
-    subjeknya (savings, bukan loan).
+    Domain `loan` is `approved_mvp` since FIN-108 (identity, lifecycle, terms,
+    schedule, transactions), but `loans_identity`/`loans_servicing` do not
+    cover loan charges (LOAN-7, area `loans`, still `gap`). This subject
+    keeps proving the domain-gap guard now that "Show loan transactions."
+    is answered — see answers/loans/loan_transactions-answer.yml.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -20,7 +21,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show loan transactions.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show loan charges.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

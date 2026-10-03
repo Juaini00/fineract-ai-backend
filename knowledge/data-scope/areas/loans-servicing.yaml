@@ -1,0 +1,25 @@
+id: loans_servicing
+status: included_mvp_domain
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs: [LOAN-5, LOAN-6]
+description: >-
+  Loan repayment schedule (planned, never an event) and loan transactions
+  (disbursement, repayment, waivers, write-off and their reversals), FIN-108
+  slice 2. Charges, balances, arrears, collateral/guarantor and
+  reschedule/write-off/recovery stay in the gap area `loans`.
+included_tables:
+  - m_loan_repayment_schedule
+  - m_loan_transaction
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [loan]
+default_rules:
+  - A repayment schedule row is a plan, not proof a payment happened; it is never presented as an actual transaction.
+  - Reversed transactions (is_reversed = true) are excluded by default.
+  - Allocation portions (principal/interest/fee/penalty/overpayment) reconcile to the transaction amount only for repayment-type transactions; a disbursement's amount is not allocated across those columns.
+  - m_loan_transaction.office_id is used directly; it is not re-derived through the client/group path.
+checks:
+  - id: office_scope_required
+    rule: every approved query binds authorized office_ids to m_loan_transaction.office_id directly, or to the owning loan's client/group office for schedule rows.
+  - id: reversed_excluded_by_default
+    rule: a transaction query must filter is_reversed = false unless explicitly analyzing reversals.

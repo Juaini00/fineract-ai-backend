@@ -1,0 +1,23 @@
+info:
+  name: FIN-108 loan_schedule_by_client client options
+  type: http
+  seq: 103
+  description: Client 14 (78 installments, mixed completed/pending) is on the first options page, no cursor needed.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_schedule_by_clientJob}}/clarification/options?field_id=client_id"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const option = res.getBody().data.options.find(function (o) { return String(o.option_id) === "14"; });
+          test("FIN-108 loan_schedule_by_client: client 14 is an authorized option", function () {
+            expect(option).to.not.equal(undefined);
+          });
+          bru.setVar("fin108loan_schedule_by_clientOptionId", option && option.option_id);
+        }

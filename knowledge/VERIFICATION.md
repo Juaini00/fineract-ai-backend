@@ -992,3 +992,17 @@ Client 65 holds 24 loans in statuses 200/300; 23 of 116 loans locally differ
 from their product's current rate or repayment count, so substituting product
 defaults would be visibly wrong. The locked `answers` stage passed 310
 requests / 389 tests including the three FIN-108 chains.
+
+## 12. FIN-108 slice 2 / LOAN-5, LOAN-6 — loan schedule and transactions
+
+| Capability | Production rows | Oracle rows | Equal |
+| --- | --- | --- | --- |
+| `loan_schedule_by_client` | 78 (client 14) | 78 (EXISTS scope) | yes |
+| `loan_transactions` | 100 of 2,859 (last 12 months, LIMIT 100) | 100 (`:today`-token oracle, no fixed dates) | yes |
+
+Allocation check (`principal + interest + fee + penalty + overpayment`)
+reconciles to `amount` for every REPAYMENT-type row in the last-12-months
+sample; the 95/2,859 DISBURSEMENT-type mismatches across the whole table are
+expected (disbursement is not allocated across those columns) and are
+documented in `loans-servicing.yaml`, not treated as a defect. The locked
+`answers` stage passed 322 requests / 405 tests including the two new chains.

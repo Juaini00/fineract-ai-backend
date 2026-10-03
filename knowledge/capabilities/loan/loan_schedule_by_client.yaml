@@ -1,0 +1,38 @@
+id: loan_schedule_by_client
+status: approved_mvp
+domain: loan
+display_name: Loan Repayment Schedule By Client
+description: >-
+  Show the planned repayment schedule for one client's loans — due date,
+  principal/interest/fee/penalty per installment, and what has been
+  completed against it. A schedule row is a plan Fineract generated, not
+  proof a payment happened; actual payment history is a separate capability (LOAN-6).
+data_areas: [loans_identity, loans_servicing, client_foundation, group_center_foundation]
+continuation: true
+required_api_capability: loan_schedule_by_client
+query_id: loan.loan_schedule_by_client
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - Show the repayment schedule for this client's loan.
+  - What is the loan installment schedule for a client?
+  - Tampilkan jadwal angsuran pinjaman nasabah ini.
+supported_intents:
+  - show the planned loan repayment schedule for one client, not an actual payment history
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  client_id:
+    type: integer
+    required: true
+    resolution: [authorized_data_probe]
+    probe:
+      dataset_id: client.identity
+      shape_id: identity_candidates
+      output_slot: client_id

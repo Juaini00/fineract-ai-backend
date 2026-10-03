@@ -3,7 +3,7 @@ status: approved_mvp
 domain: products
 display_name: Delinquency Bucket Range Rules
 description: >-
-  List configured delinquency buckets and their range mappings; configuration is not actual arrears.
+  List configured delinquency buckets and their range mappings; configuration is not an actual delinquency status.
 data_areas: [products_master]
 required_api_capability: delinquency_bucket_ranges
 query_id: products.delinquency_bucket_ranges
@@ -14,6 +14,6 @@ examples:
   - List delinquency bucket range rules and overdue-day boundaries.
   - Tampilkan rentang hari untuk bucket tunggakan yang dikonfigurasi.
 supported_intents:
-  - List configured delinquency buckets and their range mappings; configuration is not actual arrears.
+  - List configured delinquency buckets and their range mappings; configuration is not an actual delinquency status.
 guards: { org_wide_reference: true, pii: { returns_pii: false } }
 parameters: {}

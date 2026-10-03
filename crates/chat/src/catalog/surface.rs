@@ -22,9 +22,10 @@
 //! - **Intent yang tidak didukung** — `unsupported_intents` setiap
 //!   `domains/*.yaml`.
 //!
-//! Domain berstatus `deferred` (loans, tax, accounting_gl) punya guard
+//! Domain berstatus `deferred`/`gap`, dan subjek `gap` sebuah domain yang
+//! sebagian sudah `approved_mvp` (mis. loan sejak FIN-108), punya guard
 //! terpisah, [`DeferredDomains`] (FIN-140): pertanyaan baca atas subjeknya
-//! ("Show loan transactions.", "Tampilkan transaksi pinjaman bulan ini.")
+//! ("Show loan charges.", "Tampilkan biaya pinjaman bulan ini.")
 //! bukan penolakan kebijakan, jadi tidak masuk kosakata [`Surfaces`] di atas
 //! — outcome-nya `Unsupported`, bukan `BlockedByPolicy`. Tanpa guard ini
 //! pertanyaan itu jatuh ke capability baca terdekat (mis. `savings_*`) dan
@@ -491,8 +492,8 @@ mod tests {
     fn deferred_domain_subjects_are_recognized() {
         let deferred = deferred_domains();
         for text in [
-            "Show loan transactions.",
-            "Tampilkan transaksi pinjaman bulan ini.",
+            "Show loan charges.",
+            "Tampilkan biaya pinjaman bulan ini.",
             "Berapa jumlah pinjaman yang dicairkan bulan ini?",
             "Berapa pajak yang terkumpul bulan ini?",
             "What is the tax rate for this account?",
@@ -562,9 +563,30 @@ mod tests {
         ] {
             assert!(deferred.find(text).is_none(), "{text}");
         }
+        for text in ["Show loan charges.", "Tampilkan biaya pinjaman bulan ini."] {
+            assert!(deferred.find(text).is_some(), "{text}");
+        }
+    }
+
+    /// FIN-108: loan identity/lifecycle/terms (LOAN-1..3), schedule (LOAN-5)
+    /// and transactions with allocation (LOAN-6) are now approved; only the
+    /// remaining loan subjects (charges, balances, arrears, collateral,
+    /// reschedule/write-off, D15 balances) stay gap.
+    #[test]
+    fn fin_108_approved_loan_subjects_no_longer_trigger_the_deferred_guard() {
+        let deferred = deferred_domains();
         for text in [
             "Show loan transactions.",
             "Tampilkan transaksi pinjaman bulan ini.",
+            "What loans does this client have?",
+            "Show the loan repayment schedule for this client.",
+        ] {
+            assert!(deferred.find(text).is_none(), "{text}");
+        }
+        for text in [
+            "Show loan charges.",
+            "Show the loan arrears for this account.",
+            "Show the loan guarantor for this account.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
         }
@@ -655,8 +677,8 @@ mod tests {
         let deferred = deferred_domains();
 
         let gap = deferred
-            .find("Show loan transactions.")
-            .expect("loan cocok");
+            .find("Show loan charges.")
+            .expect("loan charge cocok");
         assert_eq!(gap.source, "domain_gap");
 
         let group_gap = deferred

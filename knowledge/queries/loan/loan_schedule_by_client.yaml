@@ -1,0 +1,30 @@
+id: loan.loan_schedule_by_client
+database: fineract
+sql_file: queries/loan/loan_schedule_by_client.sql
+data_areas: [loans_identity, loans_servicing, client_foundation, group_center_foundation]
+tables: [m_loan_repayment_schedule, m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: client_id, type: integer, required: true }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: installment, type: bigint, sensitivity: public_business }
+  - { name: duedate, type: date, sensitivity: public_business }
+  - { name: principal_amount, type: decimal, sensitivity: public_business }
+  - { name: principal_completed_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_amount, type: decimal, sensitivity: public_business }
+  - { name: interest_completed_derived, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_amount, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_completed_derived, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_amount, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_completed_derived, type: decimal, sensitivity: public_business }
+  - { name: completed_derived, type: boolean, sensitivity: public_business }
+grain: [loan_id, installment]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the loan's client office, else the group office.
+  - id: schedule_not_presented_as_event
+    rule: output never asserts an installment was actually paid beyond the *_completed_derived columns Fineract itself computed.
