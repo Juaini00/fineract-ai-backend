@@ -1723,6 +1723,30 @@ Update after FIN-108 slice 1 (Loan identity, lifecycle, effective terms — LOAN
   `r_enum_value` stops at 19).
 - FIN-108 stays open for LOAN-4..12; L1C stays open; §5.1 unchanged.
 
+Update after FIN-108 slice 2 (loan repayment schedule, transactions — LOAN-5, LOAN-6):
+
+- Two more Mode-1 capabilities read `m_loan_repayment_schedule` and
+  `m_loan_transaction`: `loan_schedule_by_client` (per-client plan, never
+  presented as an event) and `loan_transactions` (date-ranged, office-scoped
+  directly on `m_loan_transaction.office_id`, reversed excluded by default,
+  allocation across principal/interest/fee/penalty/overpayment).
+- Allocation reconciles to the transaction amount for repayment-type rows
+  only; a disbursement's amount is not spread across those columns (verified:
+  95 of 2,859 non-reversed transactions are DISBURSEMENT and legitimately
+  don't reconcile — documented, not hidden).
+- Partial-domain contract fix: `loan.yaml`'s `concepts:` block was removed.
+  Once a domain mixes `approved_mvp` and `gap` subjects, that domain's own
+  concepts flow into `DeferredDomains`'s `excluded` list and silently cancel
+  its own `gap_intents` (e.g. "arrears" stopped guarding LOAN-9). Guarding now
+  rests on inventory-backed `gap_intents` alone; two FIN-109 capability
+  descriptions that happened to contain the bare word "arrears" were reworded
+  for the same reason.
+- "Show loan transactions."/"Tampilkan transaksi pinjaman bulan ini." moved
+  from refused (`domain_gap`) to `Answered`; the two `policy-deferred-loan*`
+  Bruno controls now prove a still-gap subject (loan charges, LOAN-7) instead.
+- LOAN-4, 7..12 stay `gap`. FIN-108 stays open; L1C stays open; §5.1
+  unchanged.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

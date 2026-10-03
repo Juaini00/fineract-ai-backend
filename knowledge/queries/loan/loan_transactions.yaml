@@ -1,0 +1,36 @@
+id: loan.loan_transactions
+database: fineract
+sql_file: queries/loan/loan_transactions.sql
+data_areas: [loans_servicing]
+tables: [m_loan_transaction]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: transaction_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: transaction_type_enum, type: bigint, sensitivity: public_business }
+  - { name: transaction_type, type: string, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: principal_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: overpayment_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+grain: [transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_loan_transaction.office_id directly to authorized office_ids.
+  - id: reversed_filter_declared
+    rule: SQL filters is_reversed = false.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

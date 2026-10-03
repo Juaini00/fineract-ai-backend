@@ -3,7 +3,7 @@ status: approved_mvp
 domain: products
 display_name: Loan Product Bucket Assignments
 description: >-
-  List loan product to delinquency bucket configuration through the actual product foreign key; not current arrears.
+  List loan product to delinquency bucket configuration through the actual product foreign key; not current delinquency status.
 data_areas: [products_master]
 required_api_capability: loan_product_bucket_assignments
 query_id: products.loan_product_bucket_assignments
@@ -12,8 +12,8 @@ output_mode: list
 request_shape: { operation: list, subject: product, grouping: none, output: list, pii: none }
 examples:
   - Which loan products are configured to use each delinquency bucket?
-  - Produk pinjaman mana yang dihubungkan ke bucket tunggakan?
+  - Produk pinjaman mana yang dihubungkan ke setiap kelompok keterlambatan?
 supported_intents:
-  - List loan product to delinquency bucket configuration through the actual product foreign key; not current arrears.
+  - List loan product to delinquency bucket configuration through the actual product foreign key; not current delinquency status.
 guards: { org_wide_reference: true, pii: { returns_pii: false } }
 parameters: {}

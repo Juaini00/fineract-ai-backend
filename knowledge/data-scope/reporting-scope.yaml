@@ -15,6 +15,7 @@ included_areas:
   - savings_core
   - products_master
   - loans_identity
+  - loans_servicing
   - savings_transactions
 conditional_areas:
   - group_center_foundation
