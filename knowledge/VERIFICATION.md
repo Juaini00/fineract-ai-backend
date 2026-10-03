@@ -1006,3 +1006,31 @@ sample; the 95/2,859 DISBURSEMENT-type mismatches across the whole table are
 expected (disbursement is not allocated across those columns) and are
 documented in `loans-servicing.yaml`, not treated as a defect. The locked
 `answers` stage passed 322 requests / 405 tests including the two new chains.
+
+## 13. FIN-108 slice 3 / LOAN-7, LOAN-8, LOAN-9 — loan charges, balances, arrears
+
+All offices in scope (`office_id IN (1,2,3,4,5,6,8,9)` / `ANY(ARRAY[2,3,5,8,9,4,6,1])`,
+both forms independently written):
+
+| Capability | Production rows | Oracle rows | Equal |
+| --- | --- | --- | --- |
+| `loan_charges` | 217 | 217 (correlated `EXISTS` scope, separate from the production `COALESCE` join) | yes |
+| `loan_balances` | 116 (of 116 loans; 88 carry a non-zero `total_outstanding_derived`) | 116 (`EXISTS` scope) | yes |
+| `loan_arrears` | 59 | 59 (`EXISTS` scope) | yes |
+
+Aggregate cross-check (production query output vs a plain `sum()`/`count()` over
+the whole table, both office-unrestricted since every row resolves into scope
+locally): `loan_charges` sums `amount=30249.95, amount_paid_derived=18750.74,
+amount_outstanding_derived=11499.21` against the table's own totals — equal.
+`loan_balances` sums `total_outstanding_derived=537817.37,
+principal_outstanding_derived=325461.41` against `m_loan`'s own totals —
+equal. `loan_arrears` carries `overdue_since_date_derived` from
+`2025-11-18` to `2026-05-18` (`total_overdue_derived` sums to `71250.10`) —
+every row keeps this per-row as-of date, so the XR-ASOF signal travels with
+the response rather than being asserted as always-current; freshness still
+depends on COB (D14), which remains `gap`, so no job-run join was added.
+`loan_balances` reads `m_loan`'s own `*_derived` columns directly with no
+join to `m_loan_repayment_schedule`/`m_loan_transaction` (LOAN-8 rule).
+The locked `answers` stage additionally passed the three new FIN-108 slice 3
+chains (loan_charges, loan_balances, loan_arrears) — see
+`fineract-assistant-api/answers/loans/`.

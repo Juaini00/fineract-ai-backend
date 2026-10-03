@@ -3,8 +3,9 @@ info:
   type: http
   seq: 38.93
   description: |
-    Padanan Indonesia dari subjek loan yang masih gap — biaya pinjaman
-    (LOAN-7), bukan transaksi (LOAN-6, sudah Answered sejak FIN-108).
+    Padanan Indonesia dari subjek loan yang masih gap — pencairan pinjaman
+    (LOAN-4), bukan biaya pinjaman (LOAN-7, sudah Answered sejak FIN-108
+    slice 3).
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -18,7 +19,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Tampilkan biaya pinjaman bulan ini.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Tampilkan detail pencairan pinjaman ini.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

@@ -1,0 +1,30 @@
+id: loan.loan_balances
+database: fineract
+sql_file: queries/loan/loan_balances.sql
+data_areas: [loans_charges_balances, client_foundation, group_center_foundation]
+tables: [m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: principal_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: total_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: total_overpaid_derived, type: decimal, sensitivity: public_business }
+grain: [loan_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: derived_columns_only
+    rule: SQL reads m_loan's own *_derived columns directly; it must never recompute a balance from m_loan_repayment_schedule or m_loan_transaction (LOAN-8).
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

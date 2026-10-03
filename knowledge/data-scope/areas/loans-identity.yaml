@@ -4,9 +4,10 @@ source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
 inventory_refs: [LOAN-1, LOAN-2, LOAN-3]
 description: >-
   Loan account identity, recorded lifecycle and effective terms read from the
-  m_loan row itself (FIN-108). Schedule, transactions, charges, balances,
-  arrears, collateral/guarantor and write-off/recovery stay in the gap area
-  `loans` until their own contracts exist.
+  m_loan row itself (FIN-108). Schedule and transactions moved to
+  `loans_servicing`, charges/balances/arrears to `loans_charges_balances`;
+  disbursement, collateral/guarantor and write-off/recovery stay in the gap
+  area `loans` until their own contracts exist.
 included_tables:
   - m_loan
 conditional_tables: []

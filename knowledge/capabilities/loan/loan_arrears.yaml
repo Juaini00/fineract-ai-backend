@@ -1,0 +1,37 @@
+id: loan_arrears
+status: approved_mvp
+domain: loan
+display_name: Loan Arrears
+description: >-
+  Loans currently in arrears within authorized offices, with overdue amounts
+  per component and the date arrears began (LOAN-9). XR-ASOF: a point-in-time
+  snapshot whose currency depends on COB having run; never presented as
+  always-current.
+data_areas: [loans_charges_balances]
+required_api_capability: loan_arrears
+query_id: loan.loan_arrears
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - Show loans in arrears in my authorized offices.
+  - List overdue loans.
+  - Tampilkan pinjaman yang menunggak.
+supported_intents:
+  - list loans currently in arrears with overdue amounts and the as-of date arrears began
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+checks:
+  - id: asof_disclosed
+    rule: response must carry overdue_since_date_derived per row; arrears is never presented as always-current (XR-ASOF).
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

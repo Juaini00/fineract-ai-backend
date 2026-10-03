@@ -3,19 +3,14 @@ status: gap
 source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
 inventory_refs:
   - LOAN-4
-  - LOAN-7
-  - LOAN-8
-  - LOAN-9
   - LOAN-10
   - LOAN-11
   - LOAN-12
-description: Loan disbursement, charges, balances, arrears, collateral/guarantor and reschedule/write-off/recovery (agreed baseline scope, `gap`). Identity/lifecycle/terms moved to `loans_identity`, schedule/transactions to `loans_servicing` (FIN-108).
+description: Loan disbursement, collateral/guarantor and reschedule/write-off/recovery (agreed baseline scope, `gap`). Identity/lifecycle/terms moved to `loans_identity`, schedule/transactions to `loans_servicing`, charges/balances/arrears to `loans_charges_balances` (FIN-108).
 included_tables: []
 conditional_tables: []
 excluded_tables:
-  - m_loan_charge
   - m_loan_disbursement_detail
-  - m_loan_arrears_aging
   - m_loan_collateral_management
   - m_guarantor
 allowed_domains:
