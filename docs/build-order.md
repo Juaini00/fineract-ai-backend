@@ -1767,6 +1767,40 @@ LOAN-9):
 - LOAN-4, 10..12 stay `gap` in area `loans`. FIN-108 stays open for LOAN-4,
   10..12 (slice 4); L1C stays open; §5.1 unchanged.
 
+Update after FIN-160 (Settings admin surface — read-only inspection + catalog
+reindex, additive ops tooling outside the L0–L8 ladder):
+
+- New `/settings/*` HTTP surface (`crates/chat/src/admin/`): models,
+  connections, catalog, access, runtime, observability, audit (admin-wide,
+  sanitized metadata only — owner decision 2026-10-04, no controlled
+  evidence/raw SQL/prompts/secrets). Every handler rechecks the live
+  `users`/`auth_sessions` row, not the stateless JWT claim alone.
+- `POST /settings/catalog/reindex` + status reads
+  (`crates/chat/src/catalog/reindex/`): revalidates the full disk catalog
+  (including `knowledge/datasets` definitions and resolver shapes, which
+  contribute to `content_hash` but are **not** a new `knowledge_index`
+  `source_type` — that enum stays `capability`/`query`/… unchanged),
+  republishes `capability`/`query` rows for that catalog version under one
+  cross-process `pg_advisory_lock`, and reports the running (process-pinned)
+  catalog hash separately from the latest indexed hash with an explicit
+  `restart_required_for_latest` flag — no silent worker/resolver hot-swap.
+  `rebuild_embeddings=false` preserves existing vectors whose retrieval text
+  is unchanged (cheap lexical-only path, what `app catalog --sync --embed`
+  now runs through); `true` forces a full Voyage-compatible re-embed. A
+  provider failure leaves previously published vectors/metadata untouched
+  and reports a public `error_code`; `app catalog`'s CLI sync/embed path was
+  migrated onto this same `Admission` so CLI and HTTP share one lock and one
+  publication contract instead of two.
+- No LLM integration was added: `/settings/models` reports the configured
+  `LLM_PROVIDER`/`LLM_MODEL` as `implementation: "not_integrated"`,
+  `operational: false` for generation/planning/narration/summarization —
+  consistent with the planner staying fully deterministic (no LLM call
+  exists on the plan/compose path today).
+- Not in scope: FIN-102 (traces/metrics exporters — `/settings/observability`
+  reports them `not_implemented`, not simulated), FIN-101 (final identity/
+  permission model), FIN-105 (tunable runtime budgets). This ticket exposes
+  existing mechanisms truthfully; it does not close any of those three.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without

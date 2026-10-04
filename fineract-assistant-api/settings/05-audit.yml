@@ -1,0 +1,28 @@
+info:
+  name: inspect sanitized audit page
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit?limit=2"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("audit exposes bounded metadata and no sensitive payload", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.events.length).to.be.at.most(2);
+          expect(data.controlled_evidence).to.equal("unavailable_on_settings_api");
+          for (const event of data.events) {
+            expect(event).to.have.property("id");
+            expect(event).to.have.property("has_evidence");
+            expect(event).to.not.have.property("detail_json");
+            expect(event).to.not.have.property("scope_json");
+            expect(event).to.not.have.property("payload_json");
+          }
+          if (data.events.length) bru.setVar("settingsAuditId", data.events[0].id);
+        });

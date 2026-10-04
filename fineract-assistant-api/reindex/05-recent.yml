@@ -1,0 +1,20 @@
+info:
+  name: recent reindex history is bounded
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexAdminToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("history includes admitted run and is bounded", function () {
+          expect(res.getStatus()).to.equal(200);
+          const rows = res.getBody().data;
+          expect(rows.length).to.be.at.most(25);
+          expect(rows.some((row) => row.id === bru.getVar("reindexRunId"))).to.equal(true);
+        });

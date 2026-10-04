@@ -1,0 +1,4 @@
+info:
+  name: settings
+  seq: 15
+  description: Read-only current settings and sanitized admin-wide audit metadata.

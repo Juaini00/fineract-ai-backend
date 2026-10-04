@@ -1,0 +1,18 @@
+info:
+  name: unknown audit id
+  type: http
+  seq: 7
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit/00000000-0000-0000-0000-000000000000"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("unknown audit id returns sanitized 404", function () {
+          expect(res.getStatus()).to.equal(404);
+          expect(res.getBody().error.code).to.equal("NOT_FOUND");
+        });

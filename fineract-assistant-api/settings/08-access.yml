@@ -1,0 +1,25 @@
+info:
+  name: inspect effective access
+  type: http
+  seq: 8
+http:
+  method: get
+  url: "{{baseUrl}}/settings/access"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("current session, office entitlement and fail-closed PII are explicit", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.principal.role).to.equal("admin");
+          expect(data.principal.auth_session_id).to.be.a("string");
+          expect(data.entitlements.source).to.be.a("string");
+          expect(data.entitlements.office_ids).to.be.an("array");
+          expect(data.pii.supported_mode).to.equal("withhold");
+          expect(data.materialized_result_authorization).to.equal("owner_bound");
+          expect(JSON.stringify(data)).to.not.match(/password_hash|scope_json|entitlements_json/);
+        });

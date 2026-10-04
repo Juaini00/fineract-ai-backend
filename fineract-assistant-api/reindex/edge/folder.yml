@@ -1,0 +1,7 @@
+info:
+  name: reindex provider edge
+  seq: 1
+  description: |
+    Manual isolated chain. Configure a local controllable Voyage-compatible provider
+    to delay 5 seconds then return HTTP 500. Run with --delay 1500; do not include
+    this folder in the normal integration runner.

@@ -1,0 +1,26 @@
+info:
+  name: provider failure is durable and sanitized
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex/{{reindexEdgeRunId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexEdgeToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("failed run does not publish vectors or leak provider detail", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.status).to.equal("Failed");
+          expect(data.error_code).to.equal("EMBEDDING_PROVIDER_ERROR");
+          expect(data.indexed_content_hash).to.equal(null);
+          expect(data.published_embedded_row_count).to.equal(Number(bru.getVar("reindexEdgeInitialEmbedded")));
+          expect(data.published_lexical_row_count).to.equal(Number(bru.getVar("reindexEdgeInitialLexical")));
+          const body = JSON.stringify(data);
+          expect(body).to.not.include("/embeddings");
+          expect(body).to.not.include("api_key");
+        });

@@ -1,0 +1,32 @@
+info:
+  name: admit lexical catalog reindex
+  type: http
+  seq: 3
+http:
+  method: post
+  url: "{{baseUrl}}/settings/catalog/reindex"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexAdminToken}}"
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {"rebuild_embeddings":false}
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("202 only after durable admission and catalog validation", function () {
+          expect(res.getStatus()).to.equal(202);
+          const data = res.getBody().data;
+          expect(data.status).to.equal("Pending");
+          expect(data.catalog_version_id).to.be.a("string");
+          expect(data.content_hash).to.be.a("string");
+          expect(data.rebuild_embeddings).to.equal(false);
+          expect(data.dataset_definition_count).to.be.a("number");
+          expect(data.resolver_shape_count).to.be.a("number");
+          expect(data.indexed_content_hash).to.equal(null);
+        });
+        bru.setVar("reindexRunId", res.getBody().data.id);

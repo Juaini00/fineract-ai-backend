@@ -67,52 +67,26 @@ pub async fn run(
         report.warnings(),
         checked.status()
     );
+    let passed = report.errors() == 0;
+    anyhow::ensure!(sync || !embed, "--embed wajib dipakai bersama --sync");
 
     if sync {
-        let version_id = catalog::repository::upsert_version(
-            foundation.app_db().pool(),
-            &checked.catalog,
-            checked.status(),
-            serde_json::json!({
-                "errors": report.errors(),
-                "warnings": report.warnings(),
-                "probe": !skip_probe,
-            }),
-        )
-        .await?;
-        println!("Versi katalog dicatat: {version_id}");
-    }
-
-    if embed {
-        anyhow::ensure!(sync, "--embed wajib dipakai bersama --sync");
-        let client = foundation::embedding::EmbeddingClient::new(foundation.config())?;
-        anyhow::ensure!(
-            client.available(),
-            "EMBEDDING_API_KEY belum diisi; backfill embedding tidak dapat dijalankan"
-        );
-        let pending = catalog::repository::pending_embeddings(foundation.app_db().pool()).await?;
-        println!("Embedding NULL: {} baris", pending.len());
-        for chunk in pending.chunks(32) {
-            let texts: Vec<String> = chunk.iter().map(|row| row.retrieval_text.clone()).collect();
-            let vectors = client
-                .embed(&texts, foundation::embedding::InputKind::Document)
-                .await?;
-            let rows: Vec<_> = chunk
-                .iter()
-                .zip(vectors)
-                .map(|(row, vector)| (row.id, vector))
-                .collect();
-            catalog::repository::persist_embeddings(
-                foundation.app_db().pool(),
-                &rows,
-                client.model(),
-                client.dimensions(),
-                client.document_input_type(),
-            )
-            .await?;
+        let admission =
+            chat::catalog::reindex::service::admit(foundation, checked, None, embed, None)
+                .await
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+        let version_id = admission.run().catalog_version_id;
+        let finished = admission.execute(foundation).await?;
+        if let Some(version_id) = version_id.or(finished.catalog_version_id) {
+            println!("Versi katalog dicatat: {version_id}");
         }
-        println!("Backfill embedding selesai: {} baris", pending.len());
+        if embed {
+            println!(
+                "Backfill embedding selesai: {} baris ({} total)",
+                finished.embedded_row_count, finished.lexical_row_count
+            );
+        }
     }
 
-    Ok(report.errors() == 0)
+    Ok(passed)
 }

@@ -1,0 +1,17 @@
+info:
+  name: revoke settings auth session
+  type: http
+  seq: 10
+http:
+  method: post
+  url: "{{baseUrl}}/auth/logout"
+  headers:
+    - name: cookie
+      value: "refresh_token={{settingsRefreshToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("logout revokes current auth session", function () {
+          expect(res.getStatus()).to.equal(200);
+        });

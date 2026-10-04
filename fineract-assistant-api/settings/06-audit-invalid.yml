@@ -1,0 +1,19 @@
+info:
+  name: reject invalid audit filters
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit?stage=not-a-stage"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("invalid audit stage uses INVALID envelope", function () {
+          expect(res.getStatus()).to.equal(422);
+          expect(res.getBody().error.code).to.equal("INVALID");
+          expect(res.getBody().data).to.equal(null);
+        });

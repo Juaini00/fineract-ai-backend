@@ -1,0 +1,19 @@
+info:
+  name: wait for delayed provider outcome
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex/{{reindexEdgeRunId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexEdgeToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("status remains durable during provider delay", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(["Running","Failed"]).to.include(data.status);
+        });

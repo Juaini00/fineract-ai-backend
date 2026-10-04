@@ -1,0 +1,27 @@
+info:
+  name: forced reembed admitted before provider reply
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/settings/catalog/reindex"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexEdgeToken}}"
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      {"rebuild_embeddings":true}
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("durable 202 before provider responds", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.rebuild_embeddings).to.equal(true);
+        });
+        bru.setVar("reindexEdgeRunId", res.getBody().data.id);
+        bru.setVar("reindexEdgeInitialEmbedded", res.getBody().data.published_embedded_row_count);
+        bru.setVar("reindexEdgeInitialLexical", res.getBody().data.published_lexical_row_count);

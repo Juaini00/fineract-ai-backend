@@ -1,0 +1,18 @@
+info:
+  name: in-flight run remains visible
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex/{{reindexEdgeRunId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexEdgeToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("run is pending or running before delayed provider fails", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(["Pending","Running"]).to.include(res.getBody().data.status);
+        });

@@ -1,0 +1,27 @@
+info:
+  name: login admin for settings
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      { "username": "{{username}}", "password": "{{password}}" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("login issues admin access token", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().data.access_token).to.be.a("string");
+        });
+        bru.setVar("settingsToken", res.getBody().data.access_token);
+        const header = res.getHeader("set-cookie");
+        const list = Array.isArray(header) ? header : [header];
+        const raw = list.find((c) => c && c.indexOf("refresh_token=") === 0);
+        bru.setVar("settingsRefreshToken", raw.split(";")[0].split("=")[1]);
