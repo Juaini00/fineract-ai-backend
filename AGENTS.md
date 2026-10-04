@@ -16,6 +16,28 @@ Jangan pulihkan pola lama itu.
 3. Bila menambah FK, periksa **§5 matriks referential action** — lihat invarian I2.
 4. Bila menambah atau mengubah endpoint, perbarui [docs/contracts/api-reference.md](docs/contracts/api-reference.md) pada commit yang sama. Dokumen itu adalah satu-satunya yang boleh dipercaya frontend, dan ia hanya berguna selama ia diturunkan dari kode.
 
+## Graphify
+
+Gunakan Graphify sebelum pencarian luas, analisis arsitektur, analisis dampak, atau
+penelusuran alur lintas berkas. Setiap checkout memiliki graph sendiri di
+`graphify-out/graph.json`; **jangan pernah** menautkan atau membagikan
+`graphify-out/` antara main checkout dan worktree.
+
+Pada awal sesi:
+
+1. Bila graph belum ada, jalankan `graphify extract . --code-only --cargo`.
+2. Bila graph sudah ada, jalankan `graphify update .` sebelum mengandalkannya
+   untuk state branch aktif.
+3. Panggil MCP `graph_stats` untuk memastikan corpus aktif, lalu gunakan
+   `query_graph`, `get_node`, `get_neighbors`, atau `shortest_path`.
+4. Konfirmasi temuan yang menentukan perubahan terhadap source asli; graph
+   adalah indeks navigasi, bukan sumber kebenaran.
+
+Setelah perubahan lintas berkas yang signifikan, jalankan `graphify update .`
+sebelum impact review. Jangan menjalankan dua penulis Graphify terhadap output
+yang sama. Bila MCP tidak tersedia, gunakan
+`graphify query "<pertanyaan>" --graph graphify-out/graph.json`.
+
 ## Empat aturan kerja (dilanggar = pekerjaan dibuang)
 
 Ditetapkan 2026-09-15 setelah audit menemukan tiga milestone dinyatakan selesai
