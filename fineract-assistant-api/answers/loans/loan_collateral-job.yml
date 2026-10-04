@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_collateral job
+  type: http
+  seq: 181
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_collateralKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_collateralSession}}", "request_text": "List pledged collateral for loans in my authorized offices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_collateralKey", "fin108-loan_collateral-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_collateralJob", res.getBody().data.job_id);

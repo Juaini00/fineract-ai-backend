@@ -30,6 +30,22 @@ capability_rules:
       - external_id
       - ref_no
       - payment_detail_id
+  loan_guarantor:
+    returns_pii: conditional
+    allowed_when_can_view_pii:
+      - firstname
+      - lastname
+    never_return:
+      - address_line_1
+      - address_line_2
+      - city
+      - state
+      - country
+      - zip
+      - house_phone_number
+      - mobile_number
+      - dob
+      - comment
 checks:
   - id: sensitivity_classes_match_schema
     rule: sensitivity_classes must match knowledge/schema/fineract/columns/sensitivity.yaml classes.

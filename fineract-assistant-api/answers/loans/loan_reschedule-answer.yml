@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_reschedule answer
+  type: http
+  seq: 212
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_rescheduleJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_reschedule", document);
+          test("FIN-108 LOAN-11: reschedule status label matches status_enum, evidence-backed (not inferred)", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            const labels = { 100: "pending", 200: "approved", 300: "rejected" };
+            for (const r of rows) {
+              expect(r.status).to.equal(labels[Number(r.status_enum)]);
+            }
+          });
+        }

@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_capitalized_income_balance job
+  type: http
+  seq: 251
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_capitalized_income_balanceKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_capitalized_income_balanceSession}}", "request_text": "Show capitalized income balances for loans in my offices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_capitalized_income_balanceKey", "fin108-loan_capitalized_income_balance-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_capitalized_income_balanceJob", res.getBody().data.job_id);

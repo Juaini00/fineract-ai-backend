@@ -1,0 +1,33 @@
+id: loan_reschedule
+status: approved_mvp
+domain: loan
+display_name: Loan Reschedule
+description: >-
+  Recorded reschedule requests per loan (pending/approved/rejected, reason,
+  dates), read from m_loan_reschedule_request -- never inferred from balance
+  deltas (LOAN-11).
+data_areas: [loans_reschedule_recovery]
+required_api_capability: loan_reschedule
+query_id: loan.loan_reschedule
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_reschedule, grouping: none, output: list, pii: none }
+examples:
+  - Show reschedule requests for loans in my offices.
+  - List rescheduled loans and the reason.
+  - Tampilkan permintaan penjadwalan ulang pinjaman ini.
+supported_intents:
+  - list recorded reschedule requests per loan with status, reason and dates
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

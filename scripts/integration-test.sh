@@ -66,6 +66,9 @@
 #   scripts/integration-test.sh engine          # tahap engine saja
 #   scripts/integration-test.sh dataset-capped  # tahap cap dataset saja
 #   scripts/integration-test.sh answers         # gerbang jawaban L4 saja
+#   scripts/integration-test.sh answers/loans   # satu sub-folder, di tahap folder induknya
+#   scripts/integration-test.sh engine/login.yml engine/policy-session.yml  # berkas tertentu (beserta prasyaratnya)
+#   ANSWERS_ORACLE_PREFIX=loan scripts/integration-test.sh answers/loans  # pembanding hanya tests/answers/loan*.sql
 #   PORT=3210 scripts/integration-test.sh       # port tertentu
 #   KEEP_RUNNING=1 scripts/integration-test.sh  # biarkan app terakhir hidup
 #
@@ -114,7 +117,11 @@ if [ "$#" -gt 0 ]; then
     RETRIEVAL_HEALTHY_FOLDERS=()
     RETRIEVAL_SELECTION_FOLDERS=()
     for folder in "$@"; do
-        if [ "$folder" = "answers" ]; then
+        # A sub-path (`answers/loans`, `engine/login.yml`) runs only that part
+        # of a folder, in the stage of its top-level folder: a scoped run after
+        # a narrow change. A bare folder name keeps its default behaviour.
+        top="${folder%%/*}"
+        if [ "$top" = "answers" ]; then
             ANSWERS_FOLDERS+=("$folder")
         elif [ "$folder" = "redis-down" ]; then
             REDIS_DOWN_FOLDERS+=("$folder")
@@ -130,7 +137,7 @@ if [ "$#" -gt 0 ]; then
             RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
         elif [ "$folder" = "retrieval-selection" ]; then
             RETRIEVAL_SELECTION_FOLDERS+=("$folder")
-        elif [ "$folder" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ] || [ "$folder" = "params" ]; then
+        elif [ "$top" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ] || [ "$folder" = "params" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
             INTAKE_FOLDERS+=("$folder")

@@ -1,0 +1,28 @@
+info:
+  name: FIN-108 loan_guarantor answer
+  type: http
+  seq: 192
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_guarantorJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_guarantor", document);
+          test("FIN-108 LOAN-10: guarantor_type label matches Apache Fineract GuarantorType, no collateral fields present", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            const labels = { 1: "customer", 2: "staff", 3: "external", 4: "group" };
+            for (const r of rows) {
+              expect(r.guarantor_type).to.equal(labels[Number(r.type_enum)]);
+            }
+            expect(answers.answerRows(document).columns).to.not.include("collateral_type_name");
+          });
+        }

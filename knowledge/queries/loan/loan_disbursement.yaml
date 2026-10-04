@@ -1,0 +1,31 @@
+id: loan.loan_disbursement
+database: fineract
+sql_file: queries/loan/loan_disbursement.sql
+data_areas: [loans_disbursement, loans_identity, client_foundation, group_center_foundation]
+tables: [m_loan, m_loan_disbursement_detail, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: expected_disbursedon_date, type: date, sensitivity: public_business }
+  - { name: disbursedon_date, type: date, sensitivity: public_business }
+  - { name: approved_principal, type: decimal, sensitivity: public_business }
+  - { name: net_disbursal_amount, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: tranche_count, type: bigint, sensitivity: public_business }
+grain: [loan_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: planned_vs_actual_separated
+    rule: expected_disbursedon_date and disbursedon_date, and approved_principal and net_disbursal_amount, must each be output distinctly, never merged.
+  - id: tranche_count_is_scalar
+    rule: tranche_count must come from a scalar subquery, never a join that would fan the loan row out.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

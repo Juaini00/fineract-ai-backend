@@ -65,7 +65,9 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/rows" "$tmp/params"
 count=0
 
-for file in "$SQL_DIR"/*.sql; do
+# ANSWERS_ORACLE_PREFIX (opsional, mis. `loan`) membatasi pembanding ke
+# tests/answers/<prefix>*.sql untuk run terarah satu domain; kosong = semua.
+for file in "$SQL_DIR"/"${ANSWERS_ORACLE_PREFIX:-}"*.sql; do
     [ -e "$file" ] || continue
     capability="$(basename "$file" .sql)"
 

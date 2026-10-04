@@ -1,0 +1,36 @@
+info:
+  name: FIN-108 loan_terms_change answer
+  type: http
+  seq: 222
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_terms_changeJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_terms_change", document);
+          test("FIN-108 LOAN-11: term_type_label matches Apache Fineract LoanTermVariationType, distinct grain from the reschedule request", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            const labels = { 1: "emi_amount", 2: "interest_rate", 3: "principal_amount", 4: "due_date", 5: "insert_installment", 6: "delete_installment", 7: "grace_on_interest", 8: "grace_on_principal", 9: "extend_repayment_period", 10: "interest_rate_from_installment", 11: "interest_pause" };
+            for (const r of rows) {
+              expect(r.term_type_label).to.equal(labels[Number(r.term_type)]);
+              expect(r).to.have.property("loan_reschedule_request_id");
+              if (r.loan_reschedule_request_id === null) {
+                expect(Number(r.reschedule_mapping_count)).to.equal(0);
+              } else {
+                expect(Number(r.reschedule_mapping_count)).to.be.at.least(1);
+              }
+            }
+            // One row per recorded term variation: no fanout through the reschedule mapping.
+            const ids = rows.map((r) => r.term_variation_id);
+            expect(new Set(ids).size).to.equal(ids.length);
+          });
+        }

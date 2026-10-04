@@ -1,0 +1,38 @@
+info:
+  name: "OVR-6.6 domain deferred (tax, EN, full chain) — job"
+  type: http
+  seq: 38.92
+  description: |
+    FIN-108 slice 4 approved the last gap loan subjects (LOAN-4, 10..12), so
+    the loan domain no longer has a gap_intents entry to prove OVR-6.6 against
+    ("Show loan disbursement details." is now Answered — see
+    answers/loans/loan_disbursement-answer.yml). This control keeps proving
+    the full domain-gap chain (job/events/state/response) on a still-gap
+    subject: domain `tax` (wholly gap, SAV-9/FDRD-5, `knowledge/domains/tax.yaml`
+    gap_intents "tax collected by period") -- see also the existing ID-only
+    policy-deferred-tax-id-* pair.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_taxfc_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Show tax collected by period for this portfolio.", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_taxfc_key", "fin108-deferred-taxfc-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_taxfc_job", res.getBody().data.job_id);

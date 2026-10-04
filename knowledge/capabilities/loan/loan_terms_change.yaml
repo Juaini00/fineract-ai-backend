@@ -1,0 +1,35 @@
+id: loan_terms_change
+status: approved_mvp
+domain: loan
+display_name: Loan Terms Change
+description: >-
+  Recorded loan terms-change rows (due date, EMI, interest rate, installment
+  insert/delete, grace, repayment-period extension, interest pause), including
+  variations no reschedule request applied, with the mapped reschedule request
+  when there is one; distinct from the reschedule request itself
+  (loan_reschedule); never inferred from schedule or balance deltas (LOAN-11).
+data_areas: [loans_reschedule_recovery]
+required_api_capability: loan_terms_change
+query_id: loan.loan_terms_change
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_terms_change, grouping: none, output: list, pii: none }
+examples:
+  - Show the terms changes applied by this loan's reschedule.
+  - List loan terms changes in my offices.
+  - Tampilkan perubahan persyaratan pinjaman akibat penjadwalan ulang.
+supported_intents:
+  - list recorded terms-change rows, mapped to a reschedule request when one applied them, distinct from the reschedule request
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

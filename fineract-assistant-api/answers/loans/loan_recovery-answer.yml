@@ -1,0 +1,24 @@
+info:
+  name: FIN-108 loan_recovery answer
+  type: http
+  seq: 242
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_recoveryJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_recovery", document);
+          test("FIN-108 LOAN-11: production source has zero rows; Empty outcome, not a fallback (positive behaviour is fixture-proven only, VERIFICATION §14)", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.equal(0);
+            expect(document.outcome).to.equal("Empty");
+          });
+        }

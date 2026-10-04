@@ -1,0 +1,34 @@
+id: loan_capitalized_income_balance
+status: approved_mvp
+domain: loan
+display_name: Loan Capitalized Income Balances
+description: >-
+  Capitalized-income balance records per loan read from m_loan_capitalized_income_balance (LOAN-12, D15), one row per
+  Capitalized-income source transaction: original amount, adjustments, unrecognized
+  (not yet amortized) amount, charged-off amount and the closed flag, in the
+  loan's currency. Records whose source transaction was reversed (is_deleted)
+  are excluded. Kept separate from the other D15 balance table.
+data_areas: [loans_capitalized_balances]
+required_api_capability: loan_capitalized_income_balance
+query_id: loan.loan_capitalized_income_balance
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_capitalized_income_balance, grouping: none, output: list, pii: none }
+examples:
+  - Show capitalized income balances for loans in my offices.
+  - Tampilkan saldo pendapatan yang dikapitalisasi untuk pinjaman.
+supported_intents:
+  - list Capitalized-income balance records per loan with amount, adjustment, unrecognized and charged-off amounts
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

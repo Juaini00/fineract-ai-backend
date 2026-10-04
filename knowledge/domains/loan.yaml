@@ -3,15 +3,23 @@ status: approved_mvp
 display_name: Loan
 description: >-
   Loan portfolio per §1 baseline (dataset-scope-decisions.md:26) and
-  dataset-inventory.md LOAN-1..12. FIN-108 approves loan identity, recorded
-  lifecycle, effective terms (LOAN-1..3), repayment schedule (LOAN-5, planned
-  only), transactions with allocation (LOAN-6, reversals excluded by
-  default), charges/penalties with charged-vs-collected separation (LOAN-7),
-  outstanding balances read from m_loan's own derived columns (LOAN-8), and
-  arrears/delinquency snapshots with an as-of signal (LOAN-9, XR-ASOF).
-  Disbursement, collateral/guarantor, reschedule/write-off/recovery and D15
-  balances remain `gap` and answer Unsupported through gap_intents below,
-  never through an unrelated capability.
+  dataset-inventory.md LOAN-1..12. FIN-108 slices 1-3 approved loan identity,
+  recorded lifecycle, effective terms (LOAN-1..3), repayment schedule
+  (LOAN-5, planned only), transactions with allocation (LOAN-6, reversals
+  excluded by default), charges/penalties with charged-vs-collected
+  separation (LOAN-7), outstanding balances read from m_loan's own derived
+  columns (LOAN-8), and arrears/delinquency snapshots with an as-of signal
+  (LOAN-9, XR-ASOF). FIN-108 slice 4 approves the remaining LOAN-4, 10..12:
+  planned/actual disbursement including staged tranches (LOAN-4); collateral
+  and guarantor kept as distinct result sets, never conflated, including
+  guarantor self-guarantee funding where evidence-backed (LOAN-10); recorded
+  reschedule, the terms-change rows it applies, write-off and recovery, all
+  evidence-backed and never inferred from balance deltas (LOAN-11); and the
+  two D15 balance tables, m_loan_capitalized_income_balance and
+  m_loan_buy_down_fee_balance, each its own capability and grain (LOAN-12).
+  Tranche, guarantor-funding, write-off, recovery and D15 balance tables are
+  empty in this deployment: their positive behaviour is proven by a read-only
+  fixture only (knowledge/VERIFICATION.md §14).
 inventory_refs:
   - LOAN-1
   - LOAN-2
@@ -32,48 +40,46 @@ data_areas:
   - loans_identity
   - loans_servicing
   - loans_charges_balances
-  - loans
+  - loans_disbursement
+  - loans_collateral_guarantor
+  - loans_reschedule_recovery
+  - loans_capitalized_balances
 # `concepts` dulu memuat kosakata umum loan (arrears, write-off,
 # disbursement, repayment...) supaya domain yang sepenuhnya gap dikenali
 # DeferredDomains lewat jalur `is_uncontracted`. Sejak FIN-108 loan
 # berstatus `approved_mvp`, jalur itu tidak lagi memakainya, dan
 # mempertahankannya justru berbahaya: build() menambahkan kosakata
-# domain-approved ke `excluded`, yang akan membatalkan gap_intents di
-# bawah (mis. "write off" terhapus dari guard LOAN-11 oleh concept
-# "write-off" miliknya sendiri). Setiap subjek yang masih gap sekarang hanya dijaga
-# lewat gap_intents per baris inventaris, bukan kosakata domain generik.
+# domain-approved ke `excluded`. Sejak slice 4 loan tidak punya
+# gap_intents lagi.
 supported_intents:
   - { phrase: "list every loan account of one client with status", inventory_ref: LOAN-1 }
   - { phrase: "loan count by recorded status", inventory_ref: LOAN-2 }
   - { phrase: "loan account terms beside product default", inventory_ref: LOAN-3 }
+  - { phrase: "planned vs actual loan disbursement, including staged tranches", inventory_ref: LOAN-4 }
   - { phrase: "loan repayment schedule, planned not actual", inventory_ref: LOAN-5 }
   - { phrase: "loan transactions with allocation, reversals excluded by default", inventory_ref: LOAN-6 }
   - { phrase: "loan charges/penalties with charged vs paid/waived/written-off/outstanding separated", inventory_ref: LOAN-7 }
   - { phrase: "outstanding loan balances read from recorded derived columns", inventory_ref: LOAN-8 }
   - { phrase: "loans in arrears with overdue amounts and as-of date", inventory_ref: LOAN-9 }
-gap_intents:
-  - { phrase: "loan disbursement", inventory_ref: LOAN-4 }
-  - { phrase: "pencairan", inventory_ref: LOAN-4 }
-  - { phrase: "dicairkan", inventory_ref: LOAN-4 }
-  - { phrase: "disbursed amount", inventory_ref: LOAN-4 }
-  - { phrase: "guarantor", inventory_ref: LOAN-10 }
-  - { phrase: "penjamin", inventory_ref: LOAN-10 }
-  - { phrase: "write off", inventory_ref: LOAN-11 }
-  - { phrase: "write-off", inventory_ref: LOAN-11 }
-  - { phrase: "charge off", inventory_ref: LOAN-11 }
-  - { phrase: "reschedule", inventory_ref: LOAN-11 }
-  - { phrase: "loan recovery", inventory_ref: LOAN-11 }
-  - { phrase: "capitalized income", inventory_ref: LOAN-12 }
-  - { phrase: "buy down fee", inventory_ref: LOAN-12 }
+  - { phrase: "loan collateral and guarantor, kept as distinct result sets", inventory_ref: LOAN-10 }
+  - { phrase: "recorded loan reschedule, terms change, write-off and recovery, evidence-backed", inventory_ref: LOAN-11 }
+  - { phrase: "loan capitalized income and buy-down fee balances, kept distinct", inventory_ref: LOAN-12 }
 unsupported_intents:
   - { phrase: "create loan account", exempt: "write_action" }
   - { phrase: "disburse loan", exempt: "write_action" }
   - { phrase: "reverse loan transaction", exempt: "write_action" }
+  - { phrase: "reschedule loan", exempt: "write_action" }
+  - { phrase: "write off loan", exempt: "write_action" }
 default_rules:
-  - Approved loan capabilities read m_loan, m_loan_repayment_schedule, m_loan_transaction, m_loan_charge and m_loan_arrears_aging (LOAN-1..3, 5..9); every other loan subject is `gap` and answers unsupported with a gap reason (dataset-inventory.md LOAN-4, 10..12).
+  - Approved loan capabilities read m_loan, m_loan_repayment_schedule, m_loan_transaction, m_loan_charge, m_loan_arrears_aging, m_loan_disbursement_detail, m_loan_collateral_management, m_client_collateral_management, m_collateral_management, m_guarantor, m_guarantor_funding_details, m_guarantor_transaction, m_loan_reschedule_request, m_loan_term_variations, m_loan_capitalized_income_balance and m_loan_buy_down_fee_balance, plus m_portfolio_account_associations, m_savings_account and m_currency only to resolve a guarantor-held account and currencies (LOAN-1..12, FIN-108 slices 1-4).
   - A client's loans include every status; never default to active (§1 rule 29).
   - Effective terms are the loan row's own; the product's current default is shown beside them, never substituted.
+  - Collateral (loan_collateral) and guarantor (loan_guarantor) are distinct result sets; a reschedule request (loan_reschedule) and the terms-change rows it applies (loan_terms_change) are distinct grains; none of these are merged into one fanned-out row set (LOAN-10, LOAN-11).
+  - Write-off amounts are read from m_loan's own derived columns (LOAN-8 rule); recovery from type-8 transactions with reversals excluded; capitalized-income/buy-down-fee balances from their own D15 tables with reversed (is_deleted) records excluded. None of these facts is inferred from a balance delta.
+  - Every monetary loan output carries its source currency per row; collateral value carries the collateral master's currency and guarantor funding the held savings account's currency, never assumed equal to the loan currency.
   - "D01/D03/D11 apply to loan facts the same way they apply to savings: no reproduce-published-report branch, no cross-currency consolidation, completeness breakdowns distinct from a plain aggregate."
 checks:
-  - id: unservicing_facts_remain_gap
-    rule: loan tables outside loans_identity/loans_servicing/loans_charges_balances (collateral, disbursement detail, write-off/recovery) must not be referenced by approved queries until their rows move to inherited.
+  - id: no_collateral_guarantor_fanout
+    rule: no approved loan query joins m_loan_collateral_management with m_guarantor, or m_loan_reschedule_request with m_loan_term_variations into a single-row-per-loan result, into one result set.
+  - id: d15_tables_not_joined
+    rule: no approved loan query joins m_loan_capitalized_income_balance with m_loan_buy_down_fee_balance.

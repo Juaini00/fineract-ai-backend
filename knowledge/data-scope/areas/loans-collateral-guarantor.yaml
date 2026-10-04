@@ -1,0 +1,36 @@
+id: loans_collateral_guarantor
+status: included_mvp_domain
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs: [LOAN-10]
+description: >-
+  Pledged collateral and guarantor per loan, each its own result set -- never
+  conflated into one list (LOAN-10), FIN-108 slice 4. Disbursement and
+  reschedule/write-off/recovery have their own areas.
+included_tables:
+  - m_loan_collateral_management
+  - m_client_collateral_management
+  - m_collateral_management
+  - m_guarantor
+  - m_guarantor_funding_details
+  - m_guarantor_transaction
+  - m_portfolio_account_associations
+  - m_savings_account
+  - m_currency
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [loan]
+default_rules:
+  - Collateral (loan.loan_collateral) and guarantor (loan.loan_guarantor) are distinct result sets; a query must never join m_loan_collateral_management to m_guarantor.
+  - current_master_collateral_value is quantity * base_price * pct_to_base / 100 at the collateral master's CURRENT rate (Fineract keeps no historic pledged valuation); it is labelled as a present-rate computation, never as the value recorded at pledge time.
+  - Collateral value is in the collateral master's currency (m_collateral_management.currency -> m_currency.id), returned as collateral_currency_code beside loan_currency_code; the two are never assumed equal (locally USD master vs AED loans).
+  - Guarantor funding currency is the held guarantor savings account's currency (m_portfolio_account_associations.linked_savings_account_id, association_type_enum = 2); NULL when that association is absent, never borrowed from the loan.
+  - m_portfolio_account_associations and m_savings_account are read only to resolve that held account and its currency; m_currency only to resolve the collateral master currency code.
+  - Guarantor firstname/lastname are pii, gated by the existing global PII switch; address/phone/dob are not fetched by any approved query here.
+  - Guarantor funding/transaction rows (loan.loan_guarantor_funding) are evidence-backed when present; a zero-row result is not asserted as proof the loan has no self-guarantee funding configured anywhere, only that none is recorded here.
+checks:
+  - id: office_scope_required
+    rule: every approved query binds authorized office_ids through the owning loan's client or group office path.
+  - id: collateral_guarantor_not_joined
+    rule: no approved query joins m_loan_collateral_management with m_guarantor in one result set.
+  - id: pii_columns_labelled
+    rule: a guarantor query must label firstname/lastname sensitivity=pii and must never output address, phone or dob.

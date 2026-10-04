@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_collateral (ID) job
+  type: http
+  seq: 186
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_collateralIdKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_collateralIdSession}}", "request_text": "Tampilkan agunan yang dijaminkan untuk pinjaman ini."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_collateralIdKey", "fin108-loan_collateral-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_collateralIdJob", res.getBody().data.job_id);

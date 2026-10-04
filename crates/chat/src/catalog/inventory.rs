@@ -162,7 +162,6 @@ mod tests {
         assert_eq!(rows.get("ORG-1").map(String::as_str), Some("inherited"));
         assert_eq!(rows.get("CLI-5").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("CLI-6").map(String::as_str), Some("gap"));
-        assert_eq!(rows.get("LOAN-12").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("FDRD-8").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D09").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D12").map(String::as_str), Some("gap"));
