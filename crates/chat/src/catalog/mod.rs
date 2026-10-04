@@ -9,6 +9,7 @@ pub mod inventory;
 pub mod loader;
 pub mod model;
 pub mod probe;
+pub mod reindex;
 pub mod repository;
 pub mod surface;
 pub mod validate;

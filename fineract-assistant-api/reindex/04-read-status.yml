@@ -1,0 +1,27 @@
+info:
+  name: read durable reindex status and coverage
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex/{{reindexRunId}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{reindexAdminToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("run status reports pinned and indexed identities separately", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.id).to.equal(bru.getVar("reindexRunId"));
+          expect(["Pending","Running","Completed"]).to.include(data.status);
+          expect(data.running_catalog_content_hash).to.be.a("string");
+          if (data.status === "Completed") {
+            expect(data.indexed_content_hash).to.equal(data.content_hash);
+            expect(data.lexical_row_count).to.equal(data.capability_count + data.query_count);
+            expect(data.embedded_row_count).to.be.at.most(data.lexical_row_count);
+            expect(data.restart_required).to.equal(data.indexed_content_hash !== data.running_catalog_content_hash);
+          }
+        });

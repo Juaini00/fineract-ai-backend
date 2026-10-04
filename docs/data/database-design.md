@@ -90,7 +90,7 @@ Ini **bukan** daftar yang boleh dilupakan — ia persis kelas masalah yang membu
 
 ## 3. Inventaris tabel
 
-23 tabel dalam enam kelompok.
+24 tabel dalam enam kelompok.
 
 ```
 AUTH & CONFIG            CHAT                     JOB
@@ -106,6 +106,7 @@ KLARIFIKASI              DATA                     PENDUKUNG
                                                     knowledge_catalog_versions
                                                     knowledge_index
                                                     exchange_rates
+                                                    catalog_reindex_runs
 ```
 
 ### ERD (relasi utama)
@@ -249,6 +250,12 @@ Index: UNIQUE di atas · `(catalog_version_id)` · `(source_type, source_id)` ·
 Immutable; koreksi = baris baru. Lookup exact-match; bila banyak baris untuk tanggal sama, ambil `captured_at` **terbaru** dan **rekam `exchange_rate_id` terpilih**. **Tidak ada** fungsi "kurs terdekat".
 Index: UNIQUE di atas · `(from_currency_code, to_currency_code, rate_type, effective_date DESC)`.
 
+### 4.23 `catalog_reindex_runs` (FIN-160)
+`id` PK · `status` NOT NULL CHECK IN (`Pending`,`Running`,`Completed`,`Failed`,`Abandoned`) · `rebuild_embeddings` NOT NULL · `requested_by_user_id` **tanpa FK** (operator, bukan rantai session) · `catalog_version_id` FK `knowledge_catalog_versions` **NO ACTION** · `content_hash` NOT NULL · `running_content_hash` (hash proses yang mengajukan, untuk `restart_required`) · hitungan `capability_count`/`query_count`/`dataset_definition_count`/`resolver_shape_count`/`lexical_row_count`/`embedded_row_count`/`processed_row_count`/`finding_error_count`/`finding_warning_count` (semua `>= 0`) · `error_code` · `created_at`/`started_at`/`finished_at`.
+CHECK: `finished_at` hanya terisi pada status terminal (`Completed`/`Failed`/`Abandoned`), `NULL` selama `Pending`/`Running`.
+Serialisasi lintas proses memakai **`pg_advisory_lock`** (bukan baris ini); tabel ini adalah bukti durable, bukan mekanisme kunci itu sendiri. Maksimal satu baris `Pending`/`Running` — **partial unique index** `(true) WHERE status IN ('Pending','Running')`.
+Index: `(created_at DESC, id DESC)` · partial unique di atas.
+
 ---
 
 ## 5. Matriks referential action (wajib diperiksa saat menambah FK — I2)
@@ -269,6 +276,7 @@ Index: UNIQUE di atas · `(from_currency_code, to_currency_code, rate_type, effe
 | **`audit_events.*`** | **tanpa FK** | I8 — audit hidup lebih lama; `SET NULL` dilarang karena itu UPDATE |
 | **`idempotency_keys.target_job_id`** | **tanpa FK** | punya TTL sendiri, tidak ikut CASCADE session |
 | `knowledge_index.catalog_version_id` | CASCADE | tetapi versi yang dirujuk audit/plan tidak pernah dihapus (aturan retensi) |
+| `catalog_reindex_runs.catalog_version_id → knowledge_catalog_versions` | NO ACTION | versi tetap ada walau run-nya lama; audit `catalog_reindex_completed` sudah merekam id yang sama |
 
 ---
 

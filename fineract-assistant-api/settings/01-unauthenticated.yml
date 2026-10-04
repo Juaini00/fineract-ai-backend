@@ -1,0 +1,16 @@
+info:
+  name: settings require authentication
+  type: http
+  seq: 1
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("privileged audit metadata rejects missing bearer", function () {
+          expect(res.getStatus()).to.equal(401);
+          expect(res.getBody().error.code).to.equal("UNAUTHORIZED");
+          expect(res.getBody().data).to.equal(null);
+        });

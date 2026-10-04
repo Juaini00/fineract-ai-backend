@@ -1193,4 +1193,138 @@ seolah sudah ada:
 - Klarifikasi bertahap (form kedua sesudah slot pertama terjawab).
 - OpenAPI/JSON Schema formal.
 
+## 10. Settings (admin)
+
+Seluruh endpoint `/settings/*` memerlukan `Authorization: Bearer` **dan**
+`role = admin` pada session yang masih aktif — keduanya diperiksa ulang
+langsung terhadap `users`/`auth_sessions` pada setiap request (I7), bukan
+dari klaim token. Non-admin atau session yang sudah dicabut menerima `403`.
+Permukaan ini adalah inspeksi operasional atas mekanisme yang sudah ada;
+ia tidak mengklaim penyelesaian FIN-102 (observability penuh).
+
+### `GET /settings/models`
+
+Snapshot provider/model generation yang dikonfigurasi (bukan dikonfirmasi
+tersambung) beserta status implementasi tiap peran model:
+
+```json
+{
+  "generation": { "provider": "deepseek", "model": "deepseek-chat",
+    "configuration_source": "startup_environment", "operational": false,
+    "implementation": "not_integrated", "connection_checked": false },
+  "planning": { "implementation": "not_integrated" },
+  "narration": { "implementation": "not_integrated" },
+  "summarization": { "implementation": "not_integrated" },
+  "embedding": { "model": "voyage-3-large", "dimensions": 1024,
+    "document_input_type": "document", "query_input_type": "query",
+    "credential_configured": true, "timeout_ms": 30000,
+    "similarity_cutoff": 0.75, "implementation": "integrated",
+    "connection_checked": false }
+}
+```
+
+`generation`/`planning`/`narration`/`summarization` tidak pernah dilaporkan
+`operational: true` sampai sebuah client benar-benar terpasang di jalur
+planner — konfigurasi `.env` bukan bukti koneksi.
+
+### `GET /settings/connections`
+
+Pemeriksaan tersambung-sekarang (bounded) untuk PostgreSQL aplikasi, Fineract
+(read-only) dan Redis; `pgvector` diperiksa dari `pg_extension` beserta
+dimensi kolom `knowledge_index.embedding` yang sebenarnya:
+
+```json
+{
+  "checked_at": "2026-10-04T04:30:00Z",
+  "app_postgresql": { "status": "ok" },
+  "fineract_postgresql": { "status": "ok", "session_default_read_only_configured": true },
+  "redis_live_coordination": { "startup_status": "live", "current_check": "live" },
+  "pgvector": { "status": "checked", "installed": true, "column_dimensions": 1024 }
+}
+```
+
+Tidak ada host, kredensial, atau connection string yang pernah dikembalikan.
+
+### `GET /settings/catalog`
+
+Hash katalog yang **sedang dipakai proses** (`running_content_hash`)
+dibedakan dari versi terindeks terbaru; `restart_required_for_latest`
+menyatakan bila keduanya berbeda. `definitions.dataset_definitions` adalah
+jumlah `knowledge/datasets/*.yaml` yang tervalidasi — **bukan** dokumen
+vector tersendiri; `index.dataset_definitions_vectorized` selalu `false`
+karena `knowledge_index.source_type` belum mengenal `dataset` (lihat
+`docs/data/database-design.md` §4.21). `coverage_proves_business_correctness`
+selalu `false`: cakupan index bukan bukti jawaban benar (L1/L1C terpisah).
+
+### `GET /settings/access`
+
+Principal, session, entitlement office scope (dibaca langsung dari Fineract
+untuk `admin_projection`), tenant, dan status PII berlaku (#15, fail-closed).
+PII mati berarti kolom identitas **ditahan**, bukan di-hash/mask.
+
+### `GET /settings/runtime`
+
+Versi aplikasi, environment, dan nilai Config/budget yang sebenarnya dipakai
+runtime (lease, heartbeat, resolver pagination, dataset/response limit,
+idempotency TTL, JWT expiry). `unimplemented_configuration` menyebut budget
+yang belum punya konsumen kode.
+
+### `GET /settings/observability`
+
+Daftar sink yang benar-benar ada (`operational_logs`, `audit_events`) versus
+yang belum (`traces_exporter`, `metrics_exporter` — FIN-102).
+
+### `GET /settings/audit` dan `GET /settings/audit/{id}`
+
+Metadata `audit_events` tersanitasi, dapat dibaca **admin manapun** lintas
+pengguna (keputusan owner) — bukan `audit_evidence`, bukan `detail_json`/
+`scope_json` mentah. Query string: `limit` (1–200, default 50),
+`before_occurred_at`+`before_id` (keyset bersama, wajib berpasangan), `from`,
+`to`, `stage`, `result`, `job_id`. `job_id` yang menggantung (audit purge, I8)
+tetap muncul apa adanya. `controlled_evidence` selalu
+`"unavailable_on_settings_api"`.
+
+### `POST /settings/catalog/reindex` → `202`
+
+```json
+{ "rebuild_embeddings": true }
+```
+
+`rebuild_embeddings` default `true` bila field dihilangkan. Memvalidasi ulang
+seluruh katalog disk (termasuk `knowledge/datasets` dan resolver shape-nya),
+mengunci maintenance lintas proses lewat `pg_advisory_lock`, lalu
+mempublikasikan ulang baris `capability`/`query` pada `knowledge_index` untuk
+versi tersebut. `rebuild_embeddings=false` mempertahankan vector yang sudah
+ada selama `retrieval_text`-nya tidak berubah (reindex leksikal murah,
+dipakai `app catalog --sync --embed`); `true` memaksa embedding ulang
+lengkap lewat provider Voyage-compatible yang terkonfigurasi.
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "b8a5...", "status": "Pending", "rebuild_embeddings": true,
+    "content_hash": "fd32...", "running_catalog_content_hash": "fd32...",
+    "restart_required": false,
+    "published_lexical_row_count": 0, "published_embedded_row_count": 0
+  },
+  "error": null
+}
+```
+
+`422 INVALID` bila katalog gagal validasi (`error.message` menyebut jumlah
+error + kode finding). `409 CONFLICT` bila maintenance lain masih berjalan
+(lock lintas-proses, termasuk dari `app catalog --sync`). Eksekusi berjalan
+di luar transaksi; kegagalan provider tidak pernah mengubah vector yang
+sudah terpublikasi — `status` menjadi `Failed` dengan `error_code` publik
+(`EMBEDDING_UNAVAILABLE`, `EMBEDDING_CONFIGURATION_INVALID`,
+`EMBEDDING_RESPONSE_INVALID`, `EMBEDDING_PROVIDER_ERROR`,
+`CATALOG_REINDEX_FAILED`; `INTERRUPTED` bila proses mati di tengah jalan).
+
+### `GET /settings/catalog/reindex/{id}` dan `GET /settings/catalog/reindex`
+
+Status satu run atau 25 run terbaru, dengan `indexed_content_hash`/
+`indexed_catalog_version_id` hanya terisi setelah `status=Completed`, serta
+`running_catalog_content_hash`/`restart_required` relatif terhadap katalog
+yang sedang dipakai proses yang menjawab request ini.
 Status lengkap: [build-order.md](../build-order.md).

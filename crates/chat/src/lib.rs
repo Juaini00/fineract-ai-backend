@@ -7,6 +7,7 @@
 //! Batas persistence: `route → service → repository → database`. `sqlx` hanya
 //! muncul di modul `repository` (dan `audit`/`settings` yang juga repository).
 
+pub mod admin;
 pub mod audit;
 pub mod catalog;
 pub mod clarification;
@@ -33,6 +34,8 @@ pub fn router(catalog: Arc<catalog::Catalog>, hub: Arc<events::Hub>) -> Router<F
         .merge(clarification::route::router())
         .merge(engine::dataset::route::router())
         .merge(events::route::router())
+        .merge(admin::route::router())
+        .merge(catalog::reindex::route::router())
         .layer(Extension(catalog))
         .layer(Extension(hub))
 }

@@ -1,0 +1,19 @@
+info:
+  name: revoked JWT cannot read settings
+  type: http
+  seq: 11
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("stateless JWT is rechecked against revoked auth session", function () {
+          expect(res.getStatus()).to.equal(403);
+          expect(res.getBody().error.code).to.equal("FORBIDDEN");
+          expect(res.getBody().data).to.equal(null);
+        });

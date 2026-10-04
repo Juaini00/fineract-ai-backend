@@ -27,6 +27,7 @@ pgdata/
 logs/
 tmp/
 .cache/
+graphify-out/
 
 # === Coverage dan profiling ===
 /coverage
@@ -51,7 +52,6 @@ desktop.ini
 # === Tooling agen AI (lokal, bukan bagian kontrak repo) ===
 CLAUDE.md
 .claude/settings.local.json
-.mcp.json
 .understand-anything
 .worktrees/
 .pi

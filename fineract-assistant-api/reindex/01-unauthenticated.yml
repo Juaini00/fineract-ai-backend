@@ -1,0 +1,16 @@
+info:
+  name: reindex status requires authentication
+  type: http
+  seq: 1
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog/reindex"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("401 envelope for missing bearer", function () {
+          expect(res.getStatus()).to.equal(401);
+          expect(res.getBody().success).to.equal(false);
+          expect(res.getBody().error.code).to.equal("UNAUTHORIZED");
+        });

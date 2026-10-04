@@ -58,6 +58,25 @@ impl Notifier {
         matches!(self, Self::Live(_))
     }
 
+    /// Probe the application's live notifier without changing its state.
+    /// A missing/disabled client is not represented as a successful network check.
+    pub async fn ping(&self) -> &'static str {
+        let Self::Live(manager) = self else {
+            return self.status();
+        };
+        commit_isolation::guard(ExternalCall::Redis);
+        let mut manager = manager.clone();
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            redis::cmd("PING").query_async::<String>(&mut manager),
+        )
+        .await
+        {
+            Ok(Ok(reply)) if reply == "PONG" => "live",
+            _ => "unavailable",
+        }
+    }
+
     /// Pancarkan notifikasi. Kegagalan **tidak** dinaikkan sebagai error:
     /// notifikasi bukan sumber kebenaran, dan subscriber yang kehilangannya
     /// tetap menemukan event itu lewat PostgreSQL. Yang dilarang adalah
@@ -89,7 +108,5 @@ pub async fn subscriber(url: &str) -> anyhow::Result<redis::aio::PubSub> {
 }
 
 async fn connect(url: &str) -> anyhow::Result<ConnectionManager> {
-    Ok(redis::Client::open(url)?
-        .get_connection_manager()
-        .await?)
+    Ok(redis::Client::open(url)?.get_connection_manager().await?)
 }

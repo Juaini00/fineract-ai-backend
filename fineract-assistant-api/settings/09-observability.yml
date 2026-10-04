@@ -1,0 +1,21 @@
+info:
+  name: inspect implemented observability sinks
+  type: http
+  seq: 9
+http:
+  method: get
+  url: "{{baseUrl}}/settings/observability"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("traces and metrics are not fabricated", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.sinks.map((x) => x.kind)).to.include("audit_events");
+          expect(data.traces_exporter).to.equal("not_implemented");
+          expect(data.metrics_exporter).to.equal("not_implemented");
+        });

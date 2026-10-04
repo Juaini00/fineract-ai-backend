@@ -1,0 +1,24 @@
+info:
+  name: inspect running catalog identity
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/settings/catalog"
+  headers:
+    - name: authorization
+      value: "Bearer {{settingsToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("running catalog exposes actual hash and index evidence", function () {
+          expect(res.getStatus()).to.equal(200);
+          const data = res.getBody().data;
+          expect(data.running_content_hash).to.match(/^[0-9a-f]{64}$/);
+          expect(data.catalog_version_id).to.be.a("string");
+          expect(data.definitions.capabilities).to.be.greaterThan(0);
+          expect(data.index.total).to.be.at.least(data.index.embedded);
+          expect(data.index.dataset_definitions_vectorized).to.equal(false);
+          expect(data.coverage_proves_business_correctness).to.equal(false);
+        });

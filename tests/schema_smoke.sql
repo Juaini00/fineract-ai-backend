@@ -11,7 +11,7 @@
 BEGIN;
 
 -- ============================================================
--- T1. Seluruh 23 tabel ada
+-- T1. Seluruh 24 tabel ada
 -- ============================================================
 DO $$
 DECLARE n INT;
@@ -22,8 +22,8 @@ BEGIN
     WHERE table_schema = 'public'
       AND table_type = 'BASE TABLE'
       AND table_name <> '_sqlx_migrations';
-    IF n <> 23 THEN
-        RAISE EXCEPTION 'T1 GAGAL: ada % tabel, seharusnya 23', n;
+    IF n <> 24 THEN
+        RAISE EXCEPTION 'T1 GAGAL: ada % tabel, seharusnya 24', n;
     END IF;
 END $$;
 

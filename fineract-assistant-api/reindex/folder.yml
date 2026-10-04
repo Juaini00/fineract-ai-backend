@@ -1,0 +1,6 @@
+info:
+  name: reindex
+  seq: 9
+  description: |
+    Admin catalog maintenance: login, durable admission, status, history and authorization.
+    Run with worker enabled. Provider edge scenarios require the controlled provider noted in FIN-160 report.
