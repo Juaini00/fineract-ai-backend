@@ -1,0 +1,33 @@
+id: loan.loan_writeoff
+database: fineract
+sql_file: queries/loan/loan_writeoff.sql
+data_areas: [loans_reschedule_recovery, client_foundation, group_center_foundation]
+tables: [m_loan, m_code_value, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: writtenoffon_date, type: date, sensitivity: public_business }
+  - { name: writeoff_reason, type: string, sensitivity: public_business }
+  - { name: principal_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: total_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [loan_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: balances_read_not_recomputed
+    rule: written-off amounts must be read from m_loan's own *_derived columns directly, never recomputed from schedule or transactions (LOAN-8 rule).
+  - id: writtenoff_filter_present
+    rule: SQL must filter to loans with writtenoffon_date is not null.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

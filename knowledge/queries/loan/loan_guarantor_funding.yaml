@@ -1,0 +1,38 @@
+id: loan.loan_guarantor_funding
+database: fineract
+sql_file: queries/loan/loan_guarantor_funding.sql
+data_areas: [loans_collateral_guarantor, client_foundation, group_center_foundation]
+tables: [m_guarantor_funding_details, m_guarantor, m_guarantor_transaction, m_portfolio_account_associations, m_savings_account, m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: guarantor_funding_id, type: bigint, sensitivity: public_business }
+  - { name: guarantor_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: guarantor_savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: amount_released_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_remaining_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_transfered_derived, type: decimal, sensitivity: public_business }
+  - { name: status_enum, type: bigint, sensitivity: public_business }
+  - { name: status_label, type: string, sensitivity: public_business }
+  - { name: funding_currency_code, type: string, sensitivity: public_business }
+  - { name: guarantor_transaction_count, type: bigint, sensitivity: public_business }
+grain: [guarantor_funding_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: balances_read_not_recomputed
+    rule: amount_released_derived/amount_remaining_derived/amount_transfered_derived must be read directly, never recomputed from m_guarantor_transaction.
+  - id: transaction_count_is_scalar
+    rule: guarantor_transaction_count must come from a scalar subquery, never a join that would fan the funding row out.
+  - id: funding_currency_from_associated_savings
+    rule: funding_currency_code is the currency of m_portfolio_account_associations.linked_savings_account_id for a guarantor association (association_type_enum = 2, Apache Fineract GuarantorWritePlatformServiceJpaRepositoryIImpl); NULL when no such association exists, never the loan currency.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

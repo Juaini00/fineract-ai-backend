@@ -1,0 +1,37 @@
+info:
+  name: FIN-108 loan_collateral answer
+  type: http
+  seq: 182
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_collateralJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_collateral", document);
+          test("FIN-108 LOAN-10: current_master_collateral_value is the current master-rate formula, labelled as such", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            for (const r of rows) {
+              const expected = Math.round((Number(r.quantity) * Number(r.base_price) * Number(r.pct_to_base) / 100) * 100) / 100;
+              expect(Number(r.current_master_collateral_value)).to.equal(expected);
+              expect(r).to.not.have.property("total_collateral_value");
+            }
+          });
+          test("FIN-108 LOAN-10: collateral value carries the collateral master's own currency, not the loan's", function () {
+            const rows = answers.answerRows(document).rows;
+            for (const r of rows) {
+              expect(r.collateral_currency_code).to.be.a("string").and.have.lengthOf(3);
+              expect(r.loan_currency_code).to.be.a("string").and.have.lengthOf(3);
+            }
+            // Local master rows are USD while every pledged loan is AED: the two must not be collapsed.
+            expect(rows.some((r) => r.collateral_currency_code !== r.loan_currency_code)).to.equal(true);
+          });
+        }

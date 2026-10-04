@@ -484,17 +484,14 @@ mod tests {
         }
     }
 
-    /// OVR-6.6 (FIN-140/FIN-153) — subjek domain deferred/gap (loan, tax,
-    /// accounting, audit, share, client address/loan/share roster,
-    /// group/center di luar savings) dikenali lintas bahasa, tanpa menanam
-    /// istilah di Rust.
+    /// OVR-6.6 (FIN-140/FIN-153) — subjek domain deferred/gap (tax,
+    /// accounting, audit, share, client address/share roster, group/center
+    /// di luar savings) dikenali lintas bahasa, tanpa menanam istilah di
+    /// Rust.
     #[test]
     fn deferred_domain_subjects_are_recognized() {
         let deferred = deferred_domains();
         for text in [
-            "Show loan disbursement details.",
-            "Tampilkan detail pencairan pinjaman ini.",
-            "Berapa jumlah pinjaman yang dicairkan bulan ini?",
             "Berapa pajak yang terkumpul bulan ini?",
             "What is the tax rate for this account?",
             "Show journal entries for this month.",
@@ -552,30 +549,28 @@ mod tests {
         }
     }
 
-    /// FIN-109: approved product masters contain the uncontracted word
-    /// `loan`; the shielded subject is answered while loan facts stay guarded.
+    /// FIN-109: approved product masters (tax components) contain the
+    /// uncontracted word `tax`; the shielded subject is answered while tax
+    /// facts stay guarded.
     #[test]
-    fn approved_product_master_shields_loan_without_unguarding_loan_facts() {
+    fn approved_product_master_shields_tax_without_unguarding_tax_facts() {
         let deferred = deferred_domains();
         for text in [
-            "Show the loan product master list.",
-            "Tampilkan semua produk pinjaman termasuk yang belum dipakai.",
+            "List tax component configurations and their current percentages.",
+            "Tampilkan konfigurasi komponen pajak dan persentase saat ini.",
         ] {
             assert!(deferred.find(text).is_none(), "{text}");
         }
         for text in [
-            "Show loan disbursement details.",
-            "Tampilkan detail pencairan pinjaman ini.",
+            "Berapa pajak yang terkumpul bulan ini?",
+            "What is the tax rate for this account?",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
         }
     }
 
-    /// FIN-108: loan identity/lifecycle/terms (LOAN-1..3), schedule (LOAN-5),
-    /// transactions with allocation (LOAN-6), charges (LOAN-7), balances
-    /// (LOAN-8) and arrears (LOAN-9) are now approved; only the remaining
-    /// loan subjects (disbursement, collateral/guarantor,
-    /// reschedule/write-off, D15 balances) stay gap.
+    /// FIN-108: approved loan subjects are answered, never refused by the
+    /// deferred/gap guard.
     #[test]
     fn fin_108_approved_loan_subjects_no_longer_trigger_the_deferred_guard() {
         let deferred = deferred_domains();
@@ -587,14 +582,13 @@ mod tests {
             "Show loan charges.",
             "Show outstanding loan balances.",
             "Show the loan arrears for this account.",
+            "Show loan disbursement details.",
+            "Tampilkan detail pencairan pinjaman ini.",
+            "Show the loan guarantor for this account.",
+            "Show reschedule requests for loans in my offices.",
+            "Show written-off loans in my offices.",
         ] {
             assert!(deferred.find(text).is_none(), "{text}");
-        }
-        for text in [
-            "Show loan disbursement details.",
-            "Show the loan guarantor for this account.",
-        ] {
-            assert!(deferred.find(text).is_some(), "{text}");
         }
     }
 
@@ -683,8 +677,8 @@ mod tests {
         let deferred = deferred_domains();
 
         let gap = deferred
-            .find("Show loan disbursement details.")
-            .expect("loan disbursement cocok");
+            .find("Berapa pajak yang terkumpul bulan ini?")
+            .expect("tax cocok");
         assert_eq!(gap.source, "domain_gap");
 
         let group_gap = deferred

@@ -1034,3 +1034,94 @@ join to `m_loan_repayment_schedule`/`m_loan_transaction` (LOAN-8 rule).
 The locked `answers` stage additionally passed the three new FIN-108 slice 3
 chains (loan_charges, loan_balances, loan_arrears) — see
 `fineract-assistant-api/answers/loans/`.
+
+## 14. FIN-108 slice 4 / LOAN-4, 10..12 — disbursement, collateral/guarantor, reschedule/terms-change/write-off/recovery, D15 balance tables
+
+### 14.1 Production vs independent SQL (Fineract, all offices `{1,2,3,4,5,6,8,9}`, limit 100)
+
+Production = `queries/loan/<id>.sql` with `$1`/`$2` bound; oracle =
+`tests/answers/<id>.sql` (separately written: `UNION` scope instead of
+`COALESCE`, scalar subqueries/`NOT EXISTS` instead of joins, pre-aggregated
+mapping + `LEFT JOIN` for terms change). Equal = identical JSON row arrays.
+
+| Capability | Production rows | Oracle rows | Equal |
+| --- | --- | --- | --- |
+| `loan_disbursement` | 100 (limit; 116 loans in source) | 100 | yes |
+| `loan_disbursement_tranches` | 0 | 0 | yes |
+| `loan_collateral` | 12 | 12 | yes |
+| `loan_guarantor` | 1 | 1 | yes |
+| `loan_guarantor_funding` | 0 | 0 | yes |
+| `loan_reschedule` | 6 | 6 | yes |
+| `loan_terms_change` | 6 | 6 | yes |
+| `loan_writeoff` | 0 | 0 | yes |
+| `loan_recovery` | 0 | 0 | yes |
+| `loan_capitalized_income_balance` | 0 | 0 | yes |
+| `loan_buy_down_fee_balance` | 0 | 0 | yes |
+
+Production values: 74 of 116 loans have `net_disbursal_amount` ≠
+`approved_principal` (e.g. loan 1: 5000.00 approved, 4950.00 net).
+Collateral: all 12 pledges use master rows in USD (`m_collateral_management.currency`
+→ `m_currency.id` 148) on AED loans — the two currencies differ, so
+`collateral_currency_code` and `loan_currency_code` are both returned; loan 13:
+5 × 2000.00 × 50% = 5000.00 USD, total 163000.00 USD over 12 pledges, at the
+CURRENT master rate (Fineract keeps no historic pledged valuation). Guarantor:
+1 row, `type_enum = 3` external, names `pii`. Reschedule: 6 requests (4
+pending, 2 approved). Terms change: 6 variations (5 `due_date`, 1
+`extend_repayment_period`), every one mapped exactly once — so the unmapped and
+duplicate-mapping cases have no production example. Tranche, guarantor
+funding/transaction, write-off, recovery and both D15 tables have **0 rows**
+in this deployment: there is no production positive evidence for them.
+
+The first slice-4 attempt read LOAN-12 from `m_loan` flags
+(`loan_capitalized_balances`, 116 rows of `false`/0) and presented that and
+the zero-row tables as proof. That capability is removed; D15 is now read from
+the two tables `dataset-scope-decisions.md:188` names.
+
+### 14.2 Positive behaviour — read-only fixture (a test, not evidence)
+
+Fineract is never written. A throwaway scratch database
+`fin108_fixture_scratch` (same host, separate database) received a schema-only
+copy (`pg_dump -s`) of the 15 tables the queries read, with FK/CHECK/NOT NULL
+relaxed so minimal rows could be inserted. The **unmodified** production SQL
+files ran via `PREPARE q AS <file>; EXECUTE q('{1}', 100)` and the ordered
+output was diffed against hand-written expectations. Scope: office 1 in
+scope, office 2 out; L1 (client office 1, USD), L2 (client office 2, USD),
+L3 (group-only office 1, EUR).
+
+| Capability | Fixture cases | Expected = actual |
+| --- | --- | --- |
+| `loan_disbursement_tranches` | ids 11/12 same date (tie-break by id), 13 reversed (kept, `is_reversed=t`), 14 out of scope, 15 group-office path EUR | 11, 12, 13, 15 — yes |
+| `loan_guarantor_funding` | f1 guarantor association (type 2) to GBP savings, 3 transactions (1 reversed); f2 association type 1 (not guarantor); f3 out of scope | f1: savings 1, GBP, count 2, one row; f2: savings NULL, currency NULL, count 0 — yes |
+| `loan_writeoff` | L1 written off (reason "Bad debt", 400/30/15/5, total 450), L2 out of scope | one row L1 USD — yes |
+| `loan_recovery` | 101 type 8 (120.00), 102 type 8 reversed, 103 office 2, 104 type 2 | only 101, USD — yes |
+| `loan_terms_change` | 21 mapped once, 22 unmapped interest pause, 23 mapped twice (502, 503), 24 out of scope | 22 (request NULL, count 0), 21 (501, 1), 23 (502, 2), one row each — yes |
+| `loan_capitalized_income_balance` | b1 open, b2 `is_deleted` (tx not reversed), b3 closed, b4 tx reversed (not deleted), b5 out of scope, b6 group path EUR charged off 250 | b1, b3 (`is_closed=t`), b6 — yes |
+| `loan_buy_down_fee_balance` | 1 open (adj 25, unrecognized 125), 2 `is_deleted`, 3 closed EUR, 4 tx reversed | 1, 3 — yes |
+
+Mutation check (same fixture, production SQL weakened in a copy): old
+`INNER JOIN` mapping (drops 22, duplicates 23), no `association_type_enum = 2`
+guard (f2 gains USD), no `is_deleted` filter, no `is_reversed` filter (cap
+income and buy-down separately), no recovery reversal filter, no tranche id
+tie-break — **6/6 detected**. Semantics of `is_deleted`/`is_closed` from Apache
+Fineract source: `LoanAdjustmentServiceImpl` sets `deleted` when the
+capitalized-income/buy-down-fee transaction is reversed;
+`Loan{CapitalizedIncome,BuyDownFee}AmortizationProcessingServiceImpl` set
+`closed` when amortization finishes (and `charged_off_amount` at charge-off).
+Funding association per `GuarantorWritePlatformServiceJpaRepositoryIImpl`
+(`associateSavingsAccount(loan, savings, GUARANTOR_ACCOUNT_ASSOCIATION=2)` →
+`linked_savings_account_id`). The scratch database and scripts were removed
+after the run; no permanent test was kept (the project allows no DB-backed
+Rust test, and the HTTP chains below cover the production path).
+
+### 14.3 HTTP
+
+Locked runs on port 3308, worktree database: `answers/loans` with
+`ANSWERS_ORACLE_PREFIX=loan` (21 loan oracles) — every slice-4 capability has
+an English and an Indonesian chain (`*-id-*`, the capability's own Indonesian
+example) asserting the same capability, parameters, columns and rows as the
+oracle. The OVR-6.6 full-chain control moved from `policy-deferred-loan-*`
+(LOAN-4 is answered now) to `policy-deferred-tax-full-chain-*` (still-gap
+`tax`), run alone with its prerequisites (`engine/login.yml`,
+`engine/policy-session.yml`). Final run: engine selection 8/8 requests, 7/7
+tests; `answers/loans` 131/131 requests, 184/184 tests; OVR-6.7 zero
+violations.

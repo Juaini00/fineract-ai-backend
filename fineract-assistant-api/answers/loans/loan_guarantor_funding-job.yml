@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_guarantor_funding job
+  type: http
+  seq: 201
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_guarantor_fundingKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_guarantor_fundingSession}}", "request_text": "Show guarantor funding holds for loans in my offices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_guarantor_fundingKey", "fin108-loan_guarantor_funding-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_guarantor_fundingJob", res.getBody().data.job_id);

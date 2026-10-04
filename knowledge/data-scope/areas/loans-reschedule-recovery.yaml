@@ -1,0 +1,30 @@
+id: loans_reschedule_recovery
+status: included_mvp_domain
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs: [LOAN-11]
+description: >-
+  Recorded reschedule requests, recorded terms-change rows (whether or not a
+  reschedule applied them),
+  write-off and recovery, each evidence-backed and never inferred from
+  balance deltas (LOAN-11), FIN-108 slice 4. Disbursement and collateral/
+  guarantor have their own areas.
+included_tables:
+  - m_loan
+  - m_loan_reschedule_request
+  - m_loan_reschedule_request_term_variations_mapping
+  - m_loan_term_variations
+  - m_loan_transaction
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [loan]
+default_rules:
+  - A reschedule request (loan.loan_reschedule) and the recorded terms-change rows (loan.loan_terms_change) are distinct grains; they are never merged into one row per loan. A term variation with no reschedule mapping is still a recorded terms change and is returned (loan_reschedule_request_id NULL).
+  - Write-off amounts are read from m_loan's own *_derived columns directly, never recomputed from schedule or transactions (LOAN-8 rule).
+  - Write-off and recovery amounts are in the owning loan's currency (currency_code per row).
+  - Recovery is m_loan_transaction filtered to transaction_type_enum = 8 (recovery_repayment); reversed recovery transactions are excluded by default so they never count toward cash totals (mirrors LOAN-6).
+  - No reschedule/write-off/recovery fact may be inferred from a balance delta; each must trace to its own recorded row.
+checks:
+  - id: office_scope_required
+    rule: every approved query binds authorized office_ids through the owning loan's client or group office path, except loan.loan_recovery which binds m_loan_transaction.office_id directly (LOAN-6 path).
+  - id: reversed_excluded_by_default
+    rule: loan.loan_recovery must filter is_reversed = false unless explicitly analyzing reversals.

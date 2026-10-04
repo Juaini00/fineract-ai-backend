@@ -1,0 +1,22 @@
+info:
+  name: FIN-108 loan_reschedule (ID) session
+  type: http
+  seq: 215
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-108 loan_reschedule (ID)" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin108loan_rescheduleIdSession", res.getBody().data.id);

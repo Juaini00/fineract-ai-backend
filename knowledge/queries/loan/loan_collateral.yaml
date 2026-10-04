@@ -1,0 +1,38 @@
+id: loan.loan_collateral
+database: fineract
+sql_file: queries/loan/loan_collateral.sql
+data_areas: [loans_collateral_guarantor, products_master, client_foundation, group_center_foundation]
+tables: [m_currency, m_loan_collateral_management, m_loan, m_client_collateral_management, m_collateral_management, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_collateral_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: quantity, type: decimal, sensitivity: public_business }
+  - { name: is_released, type: boolean, sensitivity: public_business }
+  - { name: collateral_type_id, type: bigint, sensitivity: public_business }
+  - { name: collateral_type_name, type: string, sensitivity: public_business }
+  - { name: quality, type: string, sensitivity: public_business }
+  - { name: base_price, type: decimal, sensitivity: public_business }
+  - { name: pct_to_base, type: decimal, sensitivity: public_business }
+  - { name: current_master_collateral_value, type: decimal, sensitivity: public_business }
+  - { name: collateral_currency_code, type: string, sensitivity: public_business }
+  - { name: loan_currency_code, type: string, sensitivity: public_business }
+grain: [loan_collateral_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: no_guarantor_fanout
+    rule: this query must not be joined to m_guarantor; collateral and guarantor stay distinct result sets (LOAN-10).
+  - id: value_is_current_master_formula
+    rule: current_master_collateral_value is quantity * base_price * pct_to_base / 100 at the collateral master's CURRENT rate -- labelled as such, never presented as the recorded value at pledge time.
+  - id: collateral_currency_is_master_currency
+    rule: collateral_currency_code comes from m_collateral_management.currency (FK to m_currency.id); it is never assumed to equal the loan currency, which is returned separately as loan_currency_code.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

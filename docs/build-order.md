@@ -1800,6 +1800,59 @@ reindex, additive ops tooling outside the L0–L8 ladder):
   reports them `not_implemented`, not simulated), FIN-101 (final identity/
   permission model), FIN-105 (tunable runtime budgets). This ticket exposes
   existing mechanisms truthfully; it does not close any of those three.
+Update after FIN-108 slice 4 (loan disbursement, collateral/guarantor,
+reschedule/terms-change/write-off/recovery, D15 balance tables — LOAN-4,
+10..12):
+
+- Eleven Mode-1 capabilities: `loan_disbursement`, `loan_disbursement_tranches`
+  (LOAN-4, loan grain and tranche grain as separate result sets; tranches
+  carry currency, a reversed flag and an id tie-break); `loan_collateral`,
+  `loan_guarantor`, `loan_guarantor_funding` (LOAN-10, never joined;
+  collateral value is a current-master-rate computation in the collateral
+  master's own currency beside the loan currency; funding currency comes from
+  the guarantor-held savings account via `m_portfolio_account_associations`
+  type 2, NULL when absent); `loan_reschedule`, `loan_terms_change`,
+  `loan_writeoff`, `loan_recovery` (LOAN-11; terms change includes variations
+  no reschedule request maps, read through scalar subqueries so the mapping
+  never fans out; write-off/recovery carry currency, recovery excludes
+  reversals); `loan_capitalized_income_balance`, `loan_buy_down_fee_balance`
+  (LOAN-12/D15, one capability per table named by
+  dataset-scope-decisions.md:188, reversed/`is_deleted` records excluded,
+  `is_closed` labelled, currency per row).
+- Correction of the first slice-4 attempt (never shipped): it read LOAN-12
+  from `m_loan` flags only (`loan_capitalized_balances`, removed), its
+  collateral/tranche/funding outputs had no currency, `loan_terms_change`
+  INNER JOINed the reschedule mapping (dropping unmapped variations), the
+  tranche order had no tie-break, it rewrote contract columns of
+  `dataset-inventory.md` (reverted — only Capability/Confidence/Status are
+  tracking columns), and it called empty-table results "proven". Its
+  re-pinned incidental status test (`LOAN-12` inherited) is deleted, not
+  re-pinned.
+- Four data areas replace the gap area `loans`: `loans_disbursement`,
+  `loans_collateral_guarantor`, `loans_reschedule_recovery`,
+  `loans_capitalized_balances`; `loans` left `uncontracted_areas` and
+  `gap_areas`; `reporting-scope.yaml` also gains `loans_charges_balances`
+  (missed in slice 3).
+- Evidence split, stated as such: real production rows exist for
+  disbursement (116 loans, 74 with net ≠ approved), collateral (12, USD master
+  vs AED loans), guarantor (1), reschedule (6) and terms change (6, all
+  mapped). Tranche, guarantor funding/transaction, write-off, recovery and
+  both D15 tables have 0 rows in this deployment: their positive behaviour is
+  proven only by a throwaway read-only fixture (separate scratch database,
+  schema-only copy, unmodified production SQL via PREPARE/EXECUTE with bound
+  parameters, 7/7 expected outputs, 6/6 mutants detected) — a test of the
+  query, not production evidence. See `knowledge/VERIFICATION.md` §14.
+- LOAN-4/10/11/12 moved `gap` → `inherited` in `dataset-inventory.md` §5 with
+  that evidence split recorded in the Confidence column.
+- OVR-6.6 full-chain control `policy-deferred-loan-*` → `policy-deferred-tax-full-chain-*`
+  (still-gap `tax` domain; assertions unchanged).
+- `scripts/integration-test.sh`: a sub-path argument (`answers/loans`,
+  `engine/login.yml`) runs only that part in its top-level folder's stage;
+  bare folder names unchanged. `scripts/answer-expectations.sh`:
+  optional `ANSWERS_ORACLE_PREFIX` limits oracle generation (default: all).
+- FIN-108 slice 4 ships with this commit (LOAN-1..12 all `inherited`; FIN-108
+  closes). L1C stays open; FIN-154/155 re-proof still waits for the full
+  catalog; §5.1 unchanged (no numbered acceptance scenario is tied to LOAN-*).
 
 ### 5.1 Scenario coverage
 

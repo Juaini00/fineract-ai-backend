@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_reschedule job
+  type: http
+  seq: 211
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_rescheduleKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_rescheduleSession}}", "request_text": "Show reschedule requests for loans in my offices."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_rescheduleKey", "fin108-loan_reschedule-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_rescheduleJob", res.getBody().data.job_id);

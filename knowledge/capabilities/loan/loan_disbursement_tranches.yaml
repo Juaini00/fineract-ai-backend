@@ -1,0 +1,35 @@
+id: loan_disbursement_tranches
+status: approved_mvp
+domain: loan
+display_name: Loan Disbursement Tranches
+description: >-
+  Per-tranche planned versus actual disbursement rows for staged (multi-
+  tranche) loan disbursement, in the loan's currency, reversed tranches
+  flagged, kept separate from the loan-grain loan_disbursement capability so a
+  staged loan's tranches are never fanned out against it (LOAN-4). Zero rows on
+  this deployment (single-disbursement loans only); query behaviour proven by
+  a read-only fixture, not by production data.
+data_areas: [loans_disbursement]
+required_api_capability: loan_disbursement_tranches
+query_id: loan.loan_disbursement_tranches
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_disbursement_tranche, grouping: none, output: list, pii: none }
+examples:
+  - Show the disbursement tranches for staged loans in my offices.
+  - Tampilkan tahap pencairan pinjaman bertahap.
+supported_intents:
+  - list per-tranche planned vs actual disbursement rows for staged loans
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

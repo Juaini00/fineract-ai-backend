@@ -1,0 +1,39 @@
+id: loan.loan_capitalized_income_balance
+database: fineract
+sql_file: queries/loan/loan_capitalized_income_balance.sql
+data_areas: [loans_capitalized_balances, client_foundation, group_center_foundation]
+tables: [m_loan_capitalized_income_balance, m_loan, m_loan_transaction, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: balance_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: source_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: source_transaction_date, type: date, sensitivity: public_business }
+  - { name: balance_date, type: date, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: amount_adjustment, type: decimal, sensitivity: public_business }
+  - { name: unrecognized_amount, type: decimal, sensitivity: public_business }
+  - { name: charged_off_amount, type: decimal, sensitivity: public_business }
+  - { name: is_closed, type: boolean, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [balance_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: reads_named_balance_table
+    rule: rows come from m_loan_capitalized_income_balance itself (D15, dataset-scope-decisions.md:188), never from m_loan flags or balance deltas.
+  - id: reversed_source_excluded
+    rule: records with is_deleted = true (source transaction reversed, per Apache Fineract LoanAdjustmentServiceImpl) and records whose source transaction is_reversed are excluded.
+  - id: no_cross_balance_fanout
+    rule: this query must not join the other D15 balance table; each table is its own grain.
+  - id: currency_per_row
+    rule: every row carries the owning loan's currency_code.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

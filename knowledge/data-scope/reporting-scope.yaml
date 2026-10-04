@@ -16,13 +16,17 @@ included_areas:
   - products_master
   - loans_identity
   - loans_servicing
+  - loans_charges_balances
+  - loans_disbursement
+  - loans_collateral_guarantor
+  - loans_reschedule_recovery
+  - loans_capitalized_balances
   - savings_transactions
 conditional_areas:
   - group_center_foundation
 secondary_areas:
   - savings_charges_fees
 gap_areas:
-  - loans
   - accounting_gl
   - tax
   - source_audit

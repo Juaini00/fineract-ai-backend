@@ -1,0 +1,35 @@
+info:
+  name: "OVR-6.6 domain deferred (tax, ID, full chain) — job"
+  type: http
+  seq: 38.93
+  description: |
+    Padanan Indonesia dari subjek yang masih gap -- pajak terkumpul per
+    periode (SAV-9/FDRD-5, domain `tax`), bukan lagi disbursement pinjaman
+    (LOAN-4, sudah Answered sejak FIN-108 slice 4). Memakai kalimat yang
+    sama dengan policy-deferred-tax-id-job.yml yang sudah terbukti terpicu
+    domain_gap, bukan terjemahan baru yang belum teruji.
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{engineToken}}"
+    - name: Idempotency-Key
+      value: "{{policy_deferred_taxfc_id_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{policySession}}", "request_text": "Berapa pajak yang terkumpul bulan ini?", "office_ids": [] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("policy_deferred_taxfc_id_key", "fin108-deferred-taxfc-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        test("202 — permintaan diterima; penolakannya keputusan Engine, bukan intake", function () {
+          expect(res.getStatus()).to.equal(202);
+        });
+        bru.setVar("policy_deferred_taxfc_id_job", res.getBody().data.job_id);

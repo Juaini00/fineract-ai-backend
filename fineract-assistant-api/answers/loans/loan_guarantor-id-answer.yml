@@ -1,0 +1,19 @@
+info:
+  name: FIN-108 loan_guarantor (ID) answer
+  type: http
+  seq: 197
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_guarantorIdJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        // Indonesian phrasing must retrieve the same capability and answer as the English chain.
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          answers.check(test, expect, "loan_guarantor", res.getBody().data);
+        }

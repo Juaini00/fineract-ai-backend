@@ -1,0 +1,33 @@
+id: loan.loan_reschedule
+database: fineract
+sql_file: queries/loan/loan_reschedule.sql
+data_areas: [loans_reschedule_recovery, client_foundation, group_center_foundation]
+tables: [m_loan_reschedule_request, m_loan, m_code_value, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: reschedule_request_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: status_enum, type: bigint, sensitivity: public_business }
+  - { name: status, type: string, sensitivity: public_business }
+  - { name: reschedule_from_date, type: date, sensitivity: public_business }
+  - { name: reschedule_from_installment, type: bigint, sensitivity: public_business }
+  - { name: recalculate_interest, type: boolean, sensitivity: public_business }
+  - { name: reschedule_reason, type: string, sensitivity: public_business }
+  - { name: submitted_on_date, type: date, sensitivity: public_business }
+  - { name: approved_on_date, type: date, sensitivity: public_business }
+  - { name: rejected_on_date, type: date, sensitivity: public_business }
+grain: [reschedule_request_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: evidence_backed
+    rule: reschedule rows come only from m_loan_reschedule_request; never inferred from m_loan.rescheduledon_date alone or from balance deltas.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_terms_change (ID) job
+  type: http
+  seq: 226
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_terms_changeIdKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_terms_changeIdSession}}", "request_text": "Tampilkan perubahan persyaratan pinjaman akibat penjadwalan ulang."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_terms_changeIdKey", "fin108-loan_terms_change-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_terms_changeIdJob", res.getBody().data.job_id);

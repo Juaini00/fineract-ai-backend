@@ -2,7 +2,6 @@ id: uncontracted_areas
 status: mixed_group
 source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
 inventory_refs:
-  - LOAN-1
   - D12
   - SAV-9
   - D09
@@ -11,13 +10,16 @@ description: >-
   Group wrapper over areas with no approved capability. Two different
   dispositions, not one — the old MVP "deferred" label conflated them:
   `custom_datatables` is deferred to deployment onboarding (D10, per-tenant
-  schema); `loans`, `accounting_gl`, `tax`, and `source_audit` are agreed
-  baseline scope with no approved Mode-1 capability yet (`gap` —
-  dataset-inventory.md LOAN-1..12, D12, SAV-9/PROD-10, D09).
-  `audit_users_operations` (user/role/permission administration) is neither —
-  it is excluded (D15) and intentionally not a member here.
+  schema); `accounting_gl`, `tax`, and `source_audit` are agreed baseline
+  scope with no approved Mode-1 capability yet (`gap` — dataset-inventory.md
+  D12, SAV-9/PROD-10, D09). `loans` left this group when LOAN-4, 10..12
+  (the last gap rows in domain D — Loan) moved to `inherited` (FIN-108 slice
+  4); the gap area `loans` is retired, its tables now live under
+  `loans_disbursement`, `loans_collateral_guarantor`,
+  `loans_reschedule_recovery` and `loans_capitalized_balances`. `audit_users_operations` (user/role/permission
+  administration) is neither — it is excluded (D15) and intentionally not a
+  member here.
 members:
-  - loans
   - accounting_gl
   - tax
   - custom_datatables

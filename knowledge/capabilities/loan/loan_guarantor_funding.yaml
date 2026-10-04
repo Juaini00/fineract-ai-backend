@@ -1,0 +1,36 @@
+id: loan_guarantor_funding
+status: approved_mvp
+domain: loan
+display_name: Loan Guarantor Funding
+description: >-
+  Guarantor self-guarantee funding held on a guarantor savings account: amount
+  held, released, remaining and transferred (Fineract's own derived columns),
+  fund status, the held savings account and its currency (NULL when no
+  guarantor association is recorded, never the loan currency), and how many
+  non-reversed guarantor transactions settled it (LOAN-10). Zero rows on this
+  deployment; query behaviour proven by a read-only fixture, not by production
+  data.
+data_areas: [loans_collateral_guarantor]
+required_api_capability: loan_guarantor_funding
+query_id: loan.loan_guarantor_funding
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_guarantor_funding, grouping: none, output: list, pii: none }
+examples:
+  - Show guarantor funding holds for loans in my offices.
+  - Tampilkan dana jaminan penjamin untuk pinjaman ini.
+supported_intents:
+  - list guarantor self-guarantee funding holds and settlement count, distinct from collateral/guarantor identity
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

@@ -1,0 +1,35 @@
+info:
+  name: FIN-108 loan_disbursement answer
+  type: http
+  seq: 162
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin108loan_disbursementJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_disbursement", document);
+          test("FIN-108 loan_disbursement: verified answer", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-108 LOAN-4: planned and actual disbursement fields stay distinct", function () {
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            for (const r of rows) {
+              expect(r).to.have.property("expected_disbursedon_date");
+              expect(r).to.have.property("disbursedon_date");
+              expect(r).to.have.property("approved_principal");
+              expect(r).to.have.property("net_disbursal_amount");
+              expect(Number(r.tranche_count)).to.be.at.least(0);
+            }
+          });
+        }

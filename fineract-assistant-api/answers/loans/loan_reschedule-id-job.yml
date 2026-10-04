@@ -1,0 +1,27 @@
+info:
+  name: FIN-108 loan_reschedule (ID) job
+  type: http
+  seq: 216
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+    - name: Idempotency-Key
+      value: "{{fin108loan_rescheduleIdKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin108loan_rescheduleIdSession}}", "request_text": "Tampilkan permintaan penjadwalan ulang pinjaman ini."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin108loan_rescheduleIdKey", "fin108-loan_reschedule-id-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin108loan_rescheduleIdJob", res.getBody().data.job_id);

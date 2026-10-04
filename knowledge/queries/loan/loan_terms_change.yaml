@@ -1,0 +1,37 @@
+id: loan.loan_terms_change
+database: fineract
+sql_file: queries/loan/loan_terms_change.sql
+data_areas: [loans_reschedule_recovery, client_foundation, group_center_foundation]
+tables: [m_loan_term_variations, m_loan_reschedule_request_term_variations_mapping, m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: term_variation_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: loan_reschedule_request_id, type: bigint, sensitivity: public_business }
+  - { name: reschedule_mapping_count, type: bigint, sensitivity: public_business }
+  - { name: term_type, type: bigint, sensitivity: public_business }
+  - { name: term_type_label, type: string, sensitivity: public_business }
+  - { name: applicable_date, type: date, sensitivity: public_business }
+  - { name: decimal_value, type: decimal, sensitivity: public_business }
+  - { name: date_value, type: date, sensitivity: public_business }
+  - { name: is_specific_to_installment, type: boolean, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [term_variation_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: evidence_backed
+    rule: term-change rows come only from m_loan_term_variations, including variations no reschedule request maps (loan_reschedule_request_id NULL); never inferred from schedule or balance deltas.
+  - id: mapping_never_fans_out
+    rule: the reschedule mapping is read through scalar subqueries (MIN request id + mapping count), so one variation is always exactly one row.
+  - id: distinct_from_reschedule_request
+    rule: this query is a separate grain from loan.loan_reschedule (one reschedule request can map to multiple term variation rows); they must not be merged into one row per loan.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

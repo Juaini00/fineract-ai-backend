@@ -1,0 +1,33 @@
+id: loan_disbursement
+status: approved_mvp
+domain: loan
+display_name: Loan Disbursement
+description: >-
+  Planned versus actual disbursement per loan account, including the approved
+  principal against the net amount actually disbursed and how many staged
+  tranches the loan has (LOAN-4).
+data_areas: [loans_disbursement]
+required_api_capability: loan_disbursement
+query_id: loan.loan_disbursement
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_disbursement, grouping: none, output: list, pii: none }
+examples:
+  - Show loan disbursement details.
+  - List planned vs actual disbursement amounts for loans in my offices.
+  - Tampilkan detail pencairan pinjaman ini.
+supported_intents:
+  - list planned vs actual disbursement date/amount per loan, with staged tranche count
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

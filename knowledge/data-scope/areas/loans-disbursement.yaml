@@ -1,0 +1,23 @@
+id: loans_disbursement
+status: included_mvp_domain
+source_doc: docs/data/dataset-inventory.md#5-domain-d--loan
+inventory_refs: [LOAN-4]
+description: >-
+  Planned versus actual loan disbursement, at both loan grain and the
+  staged-tranche grain, FIN-108 slice 4. Collateral/guarantor and
+  reschedule/write-off/recovery have their own areas.
+included_tables:
+  - m_loan
+  - m_loan_disbursement_detail
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [loan]
+default_rules:
+  - Planned (expected_disbursedon_date, approved_principal) and actual (disbursedon_date, net_disbursal_amount) stay distinct fields, never merged.
+  - A staged loan's tranche rows (loan.loan_disbursement_tranches) are a separate grain from the loan-grain loan.loan_disbursement capability; the two are never joined into one fanned-out row set.
+  - Tranche rows carry the loan's currency_code and are ordered loan_id, expected_disburse_date, disbursement_detail_id; a reversed tranche stays visible with is_reversed = true.
+checks:
+  - id: office_scope_required
+    rule: every approved query binds authorized office_ids through the owning loan's client or group office path.
+  - id: no_tranche_fanout
+    rule: loan.loan_disbursement must use a scalar subquery for tranche_count, never a join to m_loan_disbursement_detail.

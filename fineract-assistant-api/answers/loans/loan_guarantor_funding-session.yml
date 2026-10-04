@@ -1,0 +1,22 @@
+info:
+  name: FIN-108 loan_guarantor_funding session
+  type: http
+  seq: 200
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-108 loan_guarantor_funding" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin108loan_guarantor_fundingSession", res.getBody().data.id);

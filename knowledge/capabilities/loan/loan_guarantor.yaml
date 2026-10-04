@@ -1,0 +1,34 @@
+id: loan_guarantor
+status: approved_mvp
+domain: loan
+display_name: Loan Guarantor
+description: >-
+  Guarantor identity and type per loan (customer, staff, external, or an
+  existing-entity guarantor, per Apache Fineract's own classification), kept
+  distinct from collateral (loan_collateral) -- never conflated into one list
+  (LOAN-10). Guarantor name is PII, gated by the existing global PII switch.
+data_areas: [loans_collateral_guarantor]
+required_api_capability: loan_guarantor
+query_id: loan.loan_guarantor
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan_guarantor, grouping: none, output: list, pii: conditional }
+examples:
+  - List guarantors for loans in my authorized offices.
+  - Show the guarantor on this loan.
+  - Tampilkan penjamin pinjaman ini.
+supported_intents:
+  - list guarantor identity/type per loan, distinct from collateral
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: conditional, allowed_fields: [firstname, lastname] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500
