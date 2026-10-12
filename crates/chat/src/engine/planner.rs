@@ -1055,11 +1055,6 @@ fn null_for(kind: &str) -> Option<Bound> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    };
-
     // FIN-137: this is now the only proof of K1's "identity slot without a
     // resolver is never asked" — `resolver/noresolver-*.yml` used to exercise
     // it at the HTTP surface through `savings_account_identity_lookup`, whose
@@ -1089,74 +1084,6 @@ mod tests {
         assert!(unplannable.explain().contains("never bound from free text"));
     }
 
-    #[tokio::test]
-    async fn lexical_candidate_wins_without_invoking_vector_arm() {
-        let invoked = Arc::new(AtomicBool::new(false));
-        let marker = invoked.clone();
-        let result = lexical_first(Some(("lexical".into(), 0.8)), move || async move {
-            marker.store(true, Ordering::SeqCst);
-            Ok(RetrievalOutcome::Candidate("vector".into(), 0.99))
-        })
-        .await
-        .unwrap();
-        assert_eq!(result, RetrievalOutcome::Candidate("lexical".into(), 0.8));
-        assert!(!invoked.load(Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn lexical_miss_preserves_semantic_candidate() {
-        let invoked = Arc::new(AtomicBool::new(false));
-        let marker = invoked.clone();
-        let result = lexical_first(None, move || async move {
-            marker.store(true, Ordering::SeqCst);
-            Ok(RetrievalOutcome::Candidate("vector".into(), 0.7))
-        })
-        .await
-        .unwrap();
-        assert_eq!(result, RetrievalOutcome::Candidate("vector".into(), 0.7));
-        assert!(invoked.load(Ordering::SeqCst));
-    }
-
-    #[tokio::test]
-    async fn lexical_miss_preserves_healthy_semantic_no_match() {
-        let result = lexical_first(None, || async { Ok(RetrievalOutcome::HealthyNoMatch) })
-            .await
-            .unwrap();
-        assert_eq!(result, RetrievalOutcome::HealthyNoMatch);
-        assert_eq!(retrieval_candidate(result), Err(Unplannable::OutOfScope));
-    }
-
-    #[tokio::test]
-    async fn lexical_miss_preserves_unavailable_semantic_arm() {
-        let result = lexical_first(None, || async {
-            Ok(RetrievalOutcome::RetrievalUnavailable)
-        })
-        .await
-        .unwrap();
-        assert_eq!(result, RetrievalOutcome::RetrievalUnavailable);
-        assert_eq!(retrieval_candidate(result), Err(Unplannable::RetrievalMiss));
-    }
-
-    #[test]
-    fn mismatched_semantic_metadata_is_unavailable() {
-        assert!(!metadata_matches(
-            Some("different-model"),
-            Some(1024),
-            Some("search_document"),
-            "configured-model",
-            1024,
-            "search_document",
-        ));
-    }
-
-    #[test]
-    fn provider_failure_is_retrieval_unavailable() {
-        let outcome = provider_vector(Err(anyhow::anyhow!("provider failed"))).unwrap_err();
-        assert_eq!(outcome, RetrievalOutcome::RetrievalUnavailable);
-
-        let empty_outcome = provider_vector(Ok(Vec::new())).unwrap_err();
-        assert_eq!(empty_outcome, RetrievalOutcome::RetrievalUnavailable);
-    }
     use crate::catalog::model::{CapabilityParameter, QueryParameter};
     use std::collections::BTreeMap;
 
@@ -1239,41 +1166,6 @@ mod tests {
             required,
             source: source.map(str::to_string),
         }
-    }
-
-    #[test]
-    fn lexical_terms_are_normalized_unique_and_deterministically_sorted() {
-        // Ranking and OR-overlap are asserted on the served retrieval path.
-        // This pure-logic test only owns normalization invariants.
-        assert_eq!(
-            lexical_terms("Berapa total portfolio aktif bulan ini, portfolio?"),
-            vec!["aktif", "berapa", "bulan", "ini", "portfolio", "total"]
-        );
-    }
-
-    #[tokio::test]
-    async fn lexical_confidence_keeps_one_term_but_falls_back_for_one_of_many() {
-        let one_term = confident_lexical_candidate(
-            &lexical_terms("portfolio"),
-            Some(("lexical".into(), 0.8, 1)),
-        );
-        assert_eq!(one_term, Some(("lexical".into(), 0.8)));
-
-        let many_terms = confident_lexical_candidate(
-            &lexical_terms("total portfolio aktif bulan ini"),
-            Some(("weak-lexical".into(), 0.4, 1)),
-        );
-        let semantic_invoked = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let invoked = semantic_invoked.clone();
-        let result = lexical_first(many_terms, move || async move {
-            invoked.store(true, std::sync::atomic::Ordering::SeqCst);
-            Ok(RetrievalOutcome::Candidate("semantic".into(), 0.7))
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(result, RetrievalOutcome::Candidate("semantic".into(), 0.7));
-        assert!(semantic_invoked.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]

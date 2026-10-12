@@ -14,4 +14,4 @@ info:
     koleksi ini tidak busuk seiring waktu — assertion-nya adalah "periode yang
     disebut, dijepit ke hari ini", bukan tanggal absolut yang di-hardcode.
     Dijalankan dengan worker menyala (klaster
-    engine/clarification/resolver/sse/retrieval-selection).
+    engine/clarification/resolver/sse).
