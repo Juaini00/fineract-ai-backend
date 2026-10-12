@@ -2,7 +2,7 @@
 #
 # Integration test lewat Bruno CLI.
 #
-# Tahap utama ditambah dua tahap retrieval dengan alasan yang mengikat:
+# Tahap-tahap dan alasannya yang mengikat:
 #
 #   1. `health`, `auth`, `chat` dijalankan dengan WORKER_ENABLED=false. Folder
 #      `chat` menguji semantik PENERIMAAN — job tetap `Queued`, satu job
@@ -38,22 +38,6 @@
 #      `worker-error` (FIN-141) memakai seam LOCAL_WORKER_ERROR_BEFORE_ADMISSION:
 #      setiap klaim berakhir error sebelum admisi; heartbeat wajib berhenti dan
 #      klaim ulang tidak boleh menggeser deadline TTL.
-#   8. `retrieval-unavailable` menjalankan worker dengan embedding dimatikan;
-#      `retrieval-vector` dan `retrieval-healthy` hanya berjalan bila API key
-#      tersedia. Sebelum menyalakan app untuk kedua tahap ini, runner sendiri
-#      yang menegakkan prasyarat "versi katalog sudah memiliki embedding
-#      lengkap" (FIN-149): setiap perubahan `knowledge/` melahirkan versi
-#      katalog baru lewat `catalog::prepare` saat app start, dan versi baru itu
-#      tidak pernah punya vector sampai seseorang menjalankan backfill — tanpa
-#      langkah ini kedua tahap gagal deterministik dengan `retrieval_miss`
-#      setiap kali `knowledge/` berubah. Runner menjalankan
-#      `app catalog --sync --embed --no-probe` (backfill, di dalam lock Bruno)
-#      lalu memverifikasi lewat `psql` bahwa versi aktif (content_hash checkout
-#      ini) benar-benar nol baris `embedding IS NULL` sebelum start_app —
-#      gagal keras bila tidak. Backfill ini aman dijalankan berulang: sejak
-#      FIN-149, `upsert_version` tidak lagi menulis ulang `knowledge_index`
-#      untuk versi yang content_hash-nya sudah tercatat, jadi run kedua tidak
-#      membuang embedding yang baru saja dihitung.
 #
 # Setelah tahap terakhir, log app seluruh tahap diperiksa untuk penanda
 # `commit_isolation_violation` (OVR-6.7, I1 — crates/core/src/commit_isolation.rs):
@@ -82,8 +66,8 @@ PORT="${PORT:-3107}"
 BASE_URL="http://127.0.0.1:$PORT"
 LOG="${LOG:-/tmp/jarvis-integration.log}"
 
-# Muat `.env` ke runner agar gate retrieval-healthy melihat konfigurasi yang
-# sama dengan aplikasi, bukan hanya environment proses pemanggil.
+# Muat `.env` ke runner agar tahap Bruno melihat konfigurasi yang sama dengan
+# aplikasi, bukan hanya environment proses pemanggil.
 if [ -f "$ROOT/.env" ]; then
     set -a
     # shellcheck disable=SC1091
@@ -109,13 +93,10 @@ fi
 if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
-    RETRIEVAL_UNAVAILABLE_FOLDERS=()
     DATASET_CAPPED_FOLDERS=()
     ANSWERS_FOLDERS=()
     REDIS_DOWN_FOLDERS=()
     CRASH_FOLDERS=()
-    RETRIEVAL_HEALTHY_FOLDERS=()
-    RETRIEVAL_SELECTION_FOLDERS=()
     for folder in "$@"; do
         # A sub-path (`answers/loans`, `engine/login.yml`) runs only that part
         # of a folder, in the stage of its top-level folder: a scoped run after
@@ -131,12 +112,6 @@ if [ "$#" -gt 0 ]; then
             CRASH_FOLDERS+=("$folder")
         elif [ "$folder" = "dataset-capped" ]; then
             DATASET_CAPPED_FOLDERS+=("$folder")
-        elif [ "$folder" = "retrieval-unavailable" ]; then
-            RETRIEVAL_UNAVAILABLE_FOLDERS+=("$folder")
-        elif [ "$folder" = "retrieval-vector" ] || [ "$folder" = "retrieval-healthy" ]; then
-            RETRIEVAL_HEALTHY_FOLDERS+=("$folder")
-        elif [ "$folder" = "retrieval-selection" ]; then
-            RETRIEVAL_SELECTION_FOLDERS+=("$folder")
         elif [ "$top" = "engine" ] || [ "$folder" = "clarification" ] || [ "$folder" = "resolver" ] || [ "$folder" = "sse" ] || [ "$folder" = "params" ]; then
             ENGINE_FOLDERS+=("$folder")
         else
@@ -150,9 +125,6 @@ else
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)
     CRASH_FOLDERS=(crash-recovery crash-exhausted crash-expired crash-cancelled worker-error)
-    RETRIEVAL_UNAVAILABLE_FOLDERS=(retrieval-unavailable)
-    RETRIEVAL_HEALTHY_FOLDERS=(retrieval-vector retrieval-healthy)
-    RETRIEVAL_SELECTION_FOLDERS=(retrieval-selection)
 fi
 
 command -v bru >/dev/null || {
@@ -174,7 +146,6 @@ cargo build -p app --quiet
 echo "==> memeriksa katalog"
 CATALOG_CHECK_OUTPUT="$("$ROOT/target/debug/app" catalog)"
 echo "$CATALOG_CHECK_OUTPUT"
-CONTENT_HASH="$(echo "$CATALOG_CHECK_OUTPUT" | sed -n 's/^content_hash *: //p')"
 
 APP_PID=""
 
@@ -259,7 +230,7 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
     # request berikutnya membacanya.
     # FIN-146 — engine/ dan resolver/ sekarang memuat request yang poll lewat
     # lib/poll.js (setTimeout); sandbox quickjs default tidak mengenal
-    # setTimeout, sama seperti FIN-138 (retrieval-*) dan crash-*/answers/redis-down.
+    # setTimeout, sama seperti crash-*/answers/redis-down.
     BRU_SANDBOX=developer run_folders 1500 "${ENGINE_FOLDERS[@]}"
 
     # Tahap 3 — SSE tanpa notifikasi sama sekali. Assertion-nya sama; yang
@@ -272,16 +243,6 @@ if [ "${#ENGINE_FOLDERS[@]}" -gt 0 ]; then
             run_folders 1500 sse
         fi
     done
-fi
-
-if [ "${#RETRIEVAL_SELECTION_FOLDERS[@]}" -gt 0 ]; then
-    stop_app
-    start_app true
-    echo "==> bru run ${RETRIEVAL_SELECTION_FOLDERS[*]} (worker menyala)"
-    # FIN-145 — response.yml di sini menunggu lewat lib/poll.js (setTimeout);
-    # sandbox quickjs default tidak mengenal setTimeout, sama seperti
-    # crash-*/answers/redis-down/retrieval-unavailable/retrieval-healthy.
-    BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_SELECTION_FOLDERS[@]}"
 fi
 
 if [ "${#DATASET_CAPPED_FOLDERS[@]}" -gt 0 ]; then
@@ -342,45 +303,6 @@ if [ "${#CRASH_FOLDERS[@]}" -gt 0 ]; then
         echo "==> bru run $folder (${seam[*]})"
         BRU_SANDBOX=developer run_folders 500 "$folder"
     done
-fi
-
-if [ "${#RETRIEVAL_UNAVAILABLE_FOLDERS[@]}" -gt 0 ]; then
-    stop_app
-    start_app true EMBEDDING_API_KEY=
-    echo "==> bru run retrieval-unavailable (embedding sengaja dinonaktifkan)"
-    # FIN-138 — response.yml poll lewat lib/poll.js (setTimeout); sandbox
-    # quickjs default tidak mengenal setTimeout, sama seperti crash-*/answers/redis-down.
-    BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_UNAVAILABLE_FOLDERS[@]}"
-fi
-
-if [ "${#RETRIEVAL_HEALTHY_FOLDERS[@]}" -gt 0 ]; then
-    stop_app
-    if [ -n "${EMBEDDING_API_KEY:-}" ]; then
-        # FIN-149 — prasyarat tahap ini adalah "versi katalog aktif sudah
-        # punya embedding lengkap", bukan sekadar API key terisi. Sebuah
-        # perubahan `knowledge/` melahirkan versi baru tanpa satu pun vector;
-        # tanpa backfill di sini, retrieval-healthy gagal deterministik
-        # dengan retrieval_miss setiap kali knowledge berubah.
-        echo "==> backfill embedding untuk versi katalog aktif ($CONTENT_HASH)"
-        "$ROOT/target/debug/app" catalog --sync --embed --no-probe
-        NULL_EMBEDDINGS="$(psql -X -A -t -v ON_ERROR_STOP=1 -d "$APP_DATABASE_URL" -c \
-            "SELECT count(*) FROM knowledge_index i
-             JOIN knowledge_catalog_versions v ON v.id = i.catalog_version_id
-             WHERE v.content_hash = '$CONTENT_HASH' AND i.embedding IS NULL")"
-        if [ "$NULL_EMBEDDINGS" != "0" ]; then
-            echo "retrieval-healthy: versi katalog $CONTENT_HASH masih punya $NULL_EMBEDDINGS baris embedding NULL setelah backfill" >&2
-            exit 1
-        fi
-        echo "==> backfill selesai: 0 baris embedding NULL pada versi aktif"
-
-        start_app true
-        echo "==> bru run retrieval-healthy (embedding terkonfigurasi dan terindeks)"
-        # FIN-138 — lihat catatan sandbox di atas: response.yml di sini menunggu
-        # panggilan embedding eksternal lewat lib/poll.js (setTimeout).
-        BRU_SANDBOX=developer run_folders 1500 "${RETRIEVAL_HEALTHY_FOLDERS[@]}"
-    else
-        echo "==> retrieval-healthy dilewati: EMBEDDING_API_KEY kosong; bukti out_of_scope tetap pending"
-    fi
 fi
 
 # OVR-6.7 — nol pelanggaran isolasi commit di seluruh tahap yang dijalankan.

@@ -55,6 +55,7 @@ Recorded on 2026-09-08: [Engine lifecycle](architecture/engine.md), [clarificati
 | --- | --- |
 | `product/prd.md` | Product scope, supported analysis, user journeys, success criteria |
 | `product/2026-09-09-dataset-scope-decisions.md` | Agreed domain scope, historical/currency requirements, additional resources, evidence limits and discussion handoff |
+| `product/2026-10-12-wrenai-reference-proposals.md` | Proposals only (not agreed): ideas from a WrenAI review — verified-question reuse, non-data intent classes, memory confirmation provenance, semantic-layer authoring, Mode 2 compiler guardrails |
 | `architecture/overview.md` | Component boundaries and the single execution flow |
 | `architecture/engine.md` | State machines, scheduling, clarification, re-plan, cancellation and recovery |
 | `architecture/tech-stack.md` | Selected libraries, versions, responsibilities, limitations and rationale |

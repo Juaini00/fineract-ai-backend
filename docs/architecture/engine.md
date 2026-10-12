@@ -3,16 +3,19 @@
 Status: agreed lifecycle direction and clarification/transport integration,
 recorded 2026-09-08; transition matrix, lease/fencing and recovery added later.
 
-> **Status implementasi (2026-09-15).** Sudah berjalan: klaim/lease/fencing
-> (T2), reaper (T11), plan deterministik (T3), eksekusi capability (T4), commit
-> response (T7), klarifikasi (T5/T6), skip (T8), `job.resumed`. **Belum**:
-> re-plan dan `plan_version` > 1, plan multi-node dan fan-in, reuse output
-> lintas plan, dan D4 (kesegaran katalog pada batas verifikasi–eksekusi).
-> Lihat [build-order.md](../build-order.md).
+> **Status implementasi (2026-09-15, dikoreksi 2026-10-12).** Sudah berjalan:
+> klaim/lease/fencing (T2), reaper (T11), eksekusi capability (T4), commit
+> response (T7), klarifikasi (T5/T6), skip (T8), `job.resumed`. Tahap **plan
+> (T3) saat ini diisi pencocokan leksikal/vector — itu pengganti sementara,
+> bukan desain**: perencana adalah LLM, Engine memverifikasi
+> ([build-order.md](../build-order.md) "Correction 2026-10-12", FIN-161).
+> **Belum**: planner LLM, re-plan dan `plan_version` > 1, plan multi-node dan
+> fan-in, reuse output lintas plan, dan D4 (kesegaran katalog pada batas
+> verifikasi–eksekusi).
 
 ## One owner
 
-One Engine owns context assembly, planning, verification, node scheduling, deterministic composition, response assembly and persistence. Job API handlers accept/read commands and delegate. Executors and LLM clients never introduce separate orchestration loops.
+One Engine owns context assembly, planning, verification, node scheduling, deterministic composition, response assembly and persistence. The LLM is the planner (it understands the request, selects the capability, binds slots and proposes the plan); the Engine verifies every model output before execution and never lets the model write SQL or decide authorization. Job API handlers accept/read commands and delegate. Executors and LLM clients never introduce separate orchestration loops.
 
 ```text
 authenticate/validate → persist accepted job → acquire work
