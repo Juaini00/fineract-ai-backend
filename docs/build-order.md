@@ -10,6 +10,44 @@ Replaces `status.md`, deleted 2026-09-15.
 
 ---
 
+## Correction 2026-10-12 — the LLM is the planner (owner decision)
+
+The docs assign planning to the LLM ([README](README.md) "LLMs plan within
+contracts", [PRD §4](product/prd.md#4-one-engine) "The LLM selects within
+structured contracts", [overview](architecture/overview.md) step 5 "LLM
+planning"). The planner was nevertheless built as lexical + vector matching
+(`engine/planner.rs`), because no document defined the planner's input, output
+or the role of retrieval (Rule 4 gap, filled by invention). The ladder then
+turned that stand-in into a gate (old L2 "retrieval finds the capability"), and
+the work that followed — lexical scoring, per-phrase catalog wording, regex
+parameter parsing — was manual mapping of Indonesian phrasings, which has no end
+and produced false `Unsupported` answers (§6.5).
+
+Binding from now on:
+
+1. **The LLM is the brain, not a layer.** For every request it understands the
+   question, selects an approved capability, binds slot values and proposes the
+   plan. The Engine verifies every output (catalog version, authorization, scope,
+   budget, static checks) before anything executes, owns execution, and never lets
+   the model write SQL or decide authorization.
+2. **Retrieval is a candidate shortlist for the model, not the decider.**
+3. **No LLM = no planning.** An unavailable model ends the job with an explicit
+   outcome. There is no silent fallback to string matching.
+4. **Unchanged:** K5 (clarification is triggered by resolver cardinality after a
+   bounded probe, never by the model's guess; [carry-over K5](migration/carry-over.md));
+   date phrases are resolved by the declared calendar contract; capabilities stay
+   approved-only; narration stays additive and fallback never calls the model
+   (RESP-8.6).
+5. **Open — owner decision, Linear FIN-162:** the planner's output shape, the
+   Engine's static verification, failure outcomes, and the model/provider. Nothing
+   here specifies them; do not invent them.
+
+Consequences recorded elsewhere in this file: L2 is redefined as the LLM planner
+(epic FIN-161); every earlier L2 proof (FIN-40/41/42, tuning FIN-136/142/148/151,
+re-proof FIN-154) measured the stand-in and **does not count**; the L4 🧪 claim
+is scoped to the deterministic planner and is re-run in FIN-155 behind FIN-161.
+Old-premise tickets were cancelled in Linear on this date.
+
 ## Why `status.md` was deleted
 
 `status.md` answered the question "what is **running**?". That question looks
@@ -196,29 +234,30 @@ is still open — that is FIN-109 onward — so L1C itself does not move above �
 **Order inside L1C** is the `blocks` relations on FIN-107's children: FIN-152
 inventory → FIN-153 knowledge alignment → FIN-109 products → loan / FD-RD /
 share / savings → client, linking resources, GL, provisioning, audit →
-cross-domain (completeness, history, branch attribution, currency) → FIN-154
-retrieval re-proof → FIN-155 answers re-proof.
+cross-domain (completeness, history, branch attribution, currency) → FIN-155
+answers re-proof, which also waits on the LLM planner (FIN-161).
 
-### L2 — Retrieval finds the capability that exists
+### L2 — The LLM planner
 
-**Goal**: a user's question reaches the capability the system actually has.
-**Owning docs**: [architecture/tech-stack.md](architecture/tech-stack.md) ·
-[migration/carry-over.md](migration/carry-over.md) #7
-**Prerequisites**: L1, L1C — retrieval can only be proven against the catalog it
-searches. Every L2 proof so far (FIN-40/41/42, tuning FIN-136/142/148) was
-measured on the 49 carried-over capabilities; it is re-proven over the full
-catalog in FIN-154 once L1C's domains exist.
-**Done when**: an Indonesian-language question whose capability exists finds it,
-and "we failed to find it" is reported differently from "it is out of scope"
-(see §6.5).
+**Goal**: the LLM understands the user's question, selects the approved
+capability that exists, binds its slots and proposes the plan; the Engine
+verifies it. Linear epic FIN-161.
+**Owning docs**: [architecture/engine.md](architecture/engine.md) ·
+[architecture/overview.md](architecture/overview.md) step 5 ·
+[architecture/tech-stack.md](architecture/tech-stack.md) · planner contract
+(open, FIN-162).
+**Prerequisites**: L1 for the existing capabilities. Breadth over the full
+catalog arrives with L1C; the planner is proven on existing capabilities first
+and re-proven over the full catalog in FIN-155.
+**Done when**: an Indonesian-language question whose capability exists is planned
+correctly by the LLM and passes Engine verification; "the model could not decide"
+is reported differently from "out of scope" (§6.5); an unavailable model ends the
+job with the contracted explicit outcome.
 
-**Status**: ⬜
-**Note**: all catalog prose is in English while the product serves Indonesian
-users. `"berapa total portfolio aktif bulan ini"` produces **0 lexical matches**
-even though the word `portfolio` appears in 4 catalog entries. The embedding arm
-does not exist — `knowledge_index.embedding vector(1024)` is populated on 0 of
-192 rows. Vector creation itself is not specified in the docs because it was
-already correct (Rule 4).
+**Status**: ⬜ — no LLM call exists on the plan path. The earlier L2 work
+(lexical matching, vector fallback, phrase tuning) was a stand-in for this layer
+and is not evidence for it; the embedding index it built remains useful as the
+candidate shortlist.
 
 ### L3 — Dataset handles and chunks
 
@@ -287,9 +326,10 @@ deviates (§6.1), nothing reads memory back, the summary is never computed, and
 
 ### L8 — Everything above
 
-Additive LLM narration, multi-node plans with fan-in (including scenario
-OVR-6.2, moved here from L4 — §5.1), analytical contracts (Mode 2), final
-security model, observability, OpenAPI.
+LLM narration (additive, evidence-grounded; the planner itself is L2, not L8),
+multi-node plans with fan-in (including scenario OVR-6.2, moved here from L4 —
+§5.1), analytical contracts (Mode 2), final security model, observability,
+OpenAPI.
 **Prerequisites**: L7.
 **Status**: ⬜ — **do not touch** until L1–L7 are ✅.
 
@@ -310,16 +350,17 @@ Several agents at once is **allowed**, as long as no one skips a prerequisite.
 Lane D should be **done first and finished before the others start**: without the
 scenario map, lanes A, B and C have no way to prove they are done.
 
-L2 waits for L1 and L1C. L4 waits for L1, L1C and L3. L7 waits for all of them.
+L2 waits for L1 (breadth from L1C). L4 waits for L1, L1C, L2 and L3. L7 waits for all of them.
 
 **Priority since 2026-09-26 (owner decision): lane E comes first.** A system
 cannot return correct answers for the agreed scope while its catalog covers four
 of ~20 domains, so completing the catalog precedes further testing of anything
 that consumes it. Concretely:
 
-- **Frozen until L1C closes:** retrieval tuning and catalog-wording fixes
-  (FIN-151 is `Bloked` and folded into FIN-154), new L4 answer-correctness
-  claims, and new L7/L8 work (FIN-9, FIN-12 and FIN-106 are blocked by FIN-155).
+- **Frozen until L1C closes:** new L4 answer-correctness claims and new L7/L8
+  work (FIN-9, FIN-12 and FIN-106 are blocked by FIN-155). Retrieval tuning and
+  per-phrase catalog-wording fixes are **not frozen but abolished** (2026-10-12
+  correction): phrasing is the planner's job (FIN-161).
 - **May continue** because it does not depend on catalog breadth: L0 SSE
   tickets already in progress, L3, L5, L6.
 - No Bruno run is part of this re-ordering; the runner scripts are being
@@ -334,7 +375,7 @@ that consumes it. Concretely:
 | L0 Foundation | 🔨 | — |
 | L1 Correct catalog | 🧪 | L0 🔨 |
 | L1C Catalog coverage | ⬜ | L1 🧪 |
-| L2 Retrieval | 🧪 | L1 🧪, L1C ⬜ |
+| L2 LLM planner | ⬜ | L1 🧪 (L1C ⬜ for breadth) |
 | L3 Datasets | 🧪 | L0 🔨 |
 | L4 Correct answers | 🧪 | L1 🧪, L1C ⬜, L3 🧪 |
 | L5 Response shape | 🧪 | L0 🔨 |
@@ -385,6 +426,9 @@ this cycle. Besides L1 (🧪), no other layer reaches 🧪 or ✅: the ceiling i
 capped by unfinished prerequisites and by scenarios that still lack a test.
 
 Update after L2 (FIN-40/41/42/7, PR #10–#12, #14) and FIN-43 (PR #16):
+
+> **Superseded 2026-10-12** — this update measured the lexical/vector stand-in,
+> not the LLM planner; see "Correction 2026-10-12". Kept as history only.
 
 - **L2 ⬜ → 🧪.** The §3 gate holds at the HTTP surface: an Indonesian question
   whose capability exists finds it (lexical arm, FIN-40), a held-out Indonesian
@@ -807,6 +851,8 @@ Update after FIN-141 (OVR-6.4 recovery bugs):
 
 Update after FIN-136 (L2 lexical scoring bug):
 
+> **Superseded 2026-10-12** — lexical-scorer tuning (FIN-136, cancelled); history only.
+
 - **Found:** `planner::best_capability`'s lexical arm ranked candidates by raw
   `overlap.matched_terms` (a bag-of-words count with `to_tsquery('simple', …)`,
   no stopword removal) before `ts_rank_cd`. Two failure shapes: (1) generic
@@ -1029,6 +1075,8 @@ loan/tax/accounting route):
 
 Update after FIN-142 (catalog-wording residual left open by FIN-136) and
 FIN-145 (retrieval-selection poll flake, same class as FIN-138):
+
+> **Superseded 2026-10-12** — per-phrase catalog wording (FIN-142, cancelled); history only.
 
 - **FIN-142 found:** the FIN-136 "known residual" above —
   `savings_withdrawal_monthly_breakdown`'s own example "Show savings
@@ -1338,6 +1386,8 @@ deterministically red after any `knowledge/` change):
   (test-harness fix, not a new capability).
 
 Update after FIN-148 (terse Indonesian ranking phrase left open by FIN-142):
+
+> **Superseded 2026-10-12** — per-phrase catalog wording (FIN-148, cancelled); history only.
 
 - **FIN-148 found:** the residual FIN-142 flagged for the owner —
   "Peringkat penarikan tabungan terbesar tiap bulan." selecting
@@ -1794,8 +1844,8 @@ reindex, additive ops tooling outside the L0–L8 ladder):
 - No LLM integration was added: `/settings/models` reports the configured
   `LLM_PROVIDER`/`LLM_MODEL` as `implementation: "not_integrated"`,
   `operational: false` for generation/planning/narration/summarization —
-  consistent with the planner staying fully deterministic (no LLM call
-  exists on the plan/compose path today).
+  which was true then and is **not** the design: planning belongs to the LLM
+  (Correction 2026-10-12; FIN-161).
 - Not in scope: FIN-102 (traces/metrics exporters — `/settings/observability`
   reports them `not_implemented`, not simulated), FIN-101 (final identity/
   permission model), FIN-105 (tunable runtime budgets). This ticket exposes
@@ -1965,6 +2015,11 @@ failure. A dashboard colouring by `outcome` will show 32 false errors.
 
 "Out of scope" and "we failed to find a capability we actually have" look
 identical in the data and in the UI. They must be separated.
+
+> Correction 2026-10-12: `no_capability_matched` is a symptom of the lexical
+> stand-in, not a product category. Under the LLM planner the cases become: model
+> abstained, model output failed Engine verification, model unavailable, or
+> genuinely out of scope — each with its own outcome (contract open, FIN-162).
 
 ### 6.6 DS-8.2 / DS-8.4 could not be proven at the HTTP surface — RESOLVED
 

@@ -25,7 +25,7 @@ Read-only source credentials/pools are separate from the writable application da
 
 ## Engine and model integration
 
-Rig is the accepted preferred LLM client. It does not own Jarvis scheduling, memory policy, re-plan, authorization or durable execution. Each model call is bounded, validated and audited by the Engine. Native structured-output support is provider/version-dependent; runtime schema and semantic validation remain mandatory.
+Rig is the accepted preferred LLM client. The LLM is the system's planner and is required for every request: when the model is unavailable the job ends with an explicit outcome (no silent fallback to string matching). Rig does not own Jarvis scheduling, memory policy, re-plan, authorization or durable execution. Each model call is bounded, validated and audited by the Engine. Native structured-output support is provider/version-dependent; runtime schema and semantic validation remain mandatory. Interim development model: the local `LLM_MODEL` configured in `.env` (owner decision 2026-10-12, cost); the planner's output shape must stay robust for a small model — see FIN-162.
 
 Petgraph is available as a graph-validation/topological utility where needed; it is not the scheduler or ledger. Tokio task/concurrency primitives execute admitted work. PostgreSQL holds durable status. No separate agent/workflow framework is selected to introduce another loop.
 
@@ -39,7 +39,7 @@ YAML analytical/dataset contracts and approved SQL assets remain the authoring s
 
 PostgreSQL-backed chunked retained datasets were recommended as an initial option; physical storage, retention and capacity evidence are not yet final. This document must not imply unlimited result storage in PostgreSQL or a mandatory object-storage service.
 
-The existing pgvector/Voyage retrieval assets are carry-over candidates. Final retrieval behavior, embedding provider/model and fallback/error policy need a contract review; they are not a second execution route.
+The existing pgvector/Voyage retrieval assets are carry-over candidates and serve as the **candidate shortlist** for the LLM planner; retrieval does not decide the capability. Embedding provider/model and fallback/error policy still need a contract review; retrieval is not a second execution route.
 
 ## Dashboard integration
 

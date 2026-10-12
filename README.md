@@ -6,11 +6,12 @@ Asisten analisis data berbahasa alami di atas core perbankan Apache Fineract. Ad
 
 > **Status: menjawab pertanyaan nyata, dengan progres yang dapat di-stream.**
 > Fondasi, autentikasi, session, penerimaan job (T1), validator katalog, siklus
-> hidup job (T2/T7/T11), planner deterministik (T3), eksekusi capability ke
-> Fineract (T4), klarifikasi bertipe (T5/T6), resolver opsi untuk slot identitas,
-> skip (T8), dan SSE dengan replay dari cursor sudah berjalan dan terverifikasi
-> terhadap data nyata. Dataset berchunk, memori session, dan integrasi LLM belum
-> ada.
+> hidup job (T2/T7/T11), eksekusi capability ke Fineract (T4), klarifikasi bertipe
+> (T5/T6), resolver opsi untuk slot identitas, skip (T8), dan SSE dengan replay
+> dari cursor sudah berjalan dan terverifikasi terhadap data nyata. Tahap plan
+> (T3) saat ini masih pencocokan leksikal/vector sebagai **pengganti sementara**;
+> perencana yang dikontrakkan adalah LLM (epik FIN-161) dan belum ada. Dataset
+> berchunk, memori session, dan integrasi LLM belum ada.
 >
 > **Urutan pengerjaan dan gerbang kelulusan: [docs/build-order.md](docs/build-order.md).**
 > Untuk integrasi frontend: [docs/contracts/api-reference.md](docs/contracts/api-reference.md).
