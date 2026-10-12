@@ -38,9 +38,15 @@ Binding from now on:
    date phrases are resolved by the declared calendar contract; capabilities stay
    approved-only; narration stays additive and fallback never calls the model
    (RESP-8.6).
-5. **Open — owner decision, Linear FIN-162:** the planner's output shape, the
-   Engine's static verification, failure outcomes, and the model/provider. Nothing
-   here specifies them; do not invent them.
+5. **Resolved — owner decision, Linear FIN-162 (2026-10-12):** the
+   [planner contract](architecture/engine.md#llm-planner-contract-fin-162)
+   uses a compact typed graph with grounded slots; the Engine expands/verifies
+   execution details. Planning failures retain `Failed`/`OperationalFailure`
+   with distinct reason codes, never become unsupported scope from a retrieval
+   miss, and never invoke a deterministic selection fallback. The current local
+   development model/provider remains selected in
+   [tech-stack](architecture/tech-stack.md#development-provider-and-structured-output).
+   This is a contract decision, not proof that the LLM planner is built.
 
 Consequences recorded elsewhere in this file: L2 is redefined as the LLM planner
 (epic FIN-161); every earlier L2 proof (FIN-40/41/42, tuning FIN-136/142/148/151,
@@ -244,15 +250,19 @@ capability that exists, binds its slots and proposes the plan; the Engine
 verifies it. Linear epic FIN-161.
 **Owning docs**: [architecture/engine.md](architecture/engine.md) ·
 [architecture/overview.md](architecture/overview.md) step 5 ·
-[architecture/tech-stack.md](architecture/tech-stack.md) · planner contract
-(open, FIN-162).
+[architecture/tech-stack.md](architecture/tech-stack.md) ·
+[planner contract and acceptance scenarios](architecture/engine.md#llm-planner-contract-fin-162)
+(owner-approved FIN-162).
 **Prerequisites**: L1 for the existing capabilities. Breadth over the full
 catalog arrives with L1C; the planner is proven on existing capabilities first
 and re-proven over the full catalog in FIN-155.
-**Done when**: an Indonesian-language question whose capability exists is planned
-correctly by the LLM and passes Engine verification; "the model could not decide"
-is reported differently from "out of scope" (§6.5); an unavailable model ends the
-job with the contracted explicit outcome.
+**Done when**: `PLN-1`–`PLN-9` pass at the surfaces named in
+[engine.md](architecture/engine.md#planner-acceptance-scenarios): a real LLM
+selects/binds an existing capability through Engine verification; retrieval
+does not decide; static checks prevent invalid execution; unavailable,
+invalid-output, abstention and no-fit states differ from unsupported scope;
+K5, audit, budgets and commit isolation hold. Multi-node scheduling remains
+the L8 `OVR-6.2` gate.
 
 **Status**: ⬜ — no LLM call exists on the plan path. The earlier L2 work
 (lexical matching, vector fallback, phrase tuning) was a stand-in for this layer
@@ -1904,6 +1914,26 @@ reschedule/terms-change/write-off/recovery, D15 balance tables — LOAN-4,
   closes). L1C stays open; FIN-154/155 re-proof still waits for the full
   catalog; §5.1 unchanged (no numbered acceptance scenario is tied to LOAN-*).
 
+Update after FIN-162 (owner-approved planner contract, 2026-10-12):
+
+- The output contract is a compact versioned typed graph. The Engine derives
+  execution details, validates source quotes/spans and slot types, resolves
+  calendar expressions and verifies catalog, graph, authorization, policy and
+  budgets before T3. Approved resolver cardinality/completeness still owns K5.
+- The current MLX/BitNet 2B development model is retained. A provider smoke
+  round-tripped, but JSON-object mode returned fenced JSON; this is evidence
+  of reachability only, not schema enforcement or a working planner.
+- Planning failures use the existing lifecycle/outcome matrix with distinct
+  `planner_unavailable`, `planner_output_invalid`, `planner_abstained` and
+  `planner_no_fit` codes. No new top-level outcome or schema migration is
+  authorized by this contract.
+- Planner scenarios `PLN-1`–`PLN-9` are named in the owning Engine contract. None is proven by
+  contract publication or the provider smoke. **L2 stays ⬜**; the existing
+  lexical/vector stand-in remains nonconforming. FIN-163 owns client wiring.
+- Only documentation/acceptance-inventory checks are appropriate for this
+  contract change. No full Rust or Bruno suite was run; implementation must
+  prove the named scenarios with targeted real-planner and failure-path runs.
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -1912,19 +1942,20 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest run — **36 of 59 scenarios have a test**:
+Latest inventory run (FIN-162) — **36 of 68 scenarios have a test**:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
+| `PLN-` | [architecture/engine.md](architecture/engine.md#planner-acceptance-scenarios) | 9 | 0 | L2 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 (OVR-6.2 → L8) |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **59** | **36** | |
+| | **Total** | **68** | **36** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification
@@ -1938,8 +1969,8 @@ test actually proves its scenario, and RESP-8.7/8.9 in particular prove
 composition logic that no live path emitted until FIN-65/61/63 — both are now
 proven at HTTP as well.
 
-**The count is 59, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).**
-One ID was given per scenario as the document actually writes it — one bullet or
+**The original corpus had 59 IDs, not the 86 stated in [§1](#rule-1--done-means-acceptance-scenarios-not-green-tests).** FIN-162 adds nine planner IDs, making the current total **68**.
+For that original corpus, one ID was given per scenario as the document actually writes it — one bullet or
 one numbered item. The 86 in §1 appears to count the clauses inside compound
 bullets (`"Radio and searchable select yield identical single-choice semantics;
 checkbox false is not missing."` is one bullet, two claims). Splitting those into
@@ -1948,9 +1979,10 @@ been left untouched: correcting its table is the repository owner's decision.
 The discrepancy is a difference in counting, not a missing scenario — no
 scenario present in the eight documents is unmapped.
 
-L1 and L2 own no acceptance scenario of their own: their gate is the four rules
-in `knowledge/CARRY-OVER.md` and §6.5, not a numbered list. L1C's gate is the
-formal inventory plus the per-domain verification in §3.
+L1 owns no numbered acceptance scenario: its gate is the four rules in
+`knowledge/CARRY-OVER.md`. L2 now owns `PLN-1`–`PLN-9` in the Engine planner
+contract (FIN-162), replacing the old unnumbered retrieval gate. L1C's gate
+remains the formal inventory plus per-domain verification in §3.
 
 ---
 

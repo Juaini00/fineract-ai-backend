@@ -25,11 +25,33 @@ Read-only source credentials/pools are separate from the writable application da
 
 ## Engine and model integration
 
-Rig is the accepted preferred LLM client. The LLM is the system's planner and is required for every request: when the model is unavailable the job ends with an explicit outcome (no silent fallback to string matching). Rig does not own Jarvis scheduling, memory policy, re-plan, authorization or durable execution. Each model call is bounded, validated and audited by the Engine. Native structured-output support is provider/version-dependent; runtime schema and semantic validation remain mandatory. Interim development model: the local `LLM_MODEL` configured in `.env` (owner decision 2026-10-12, cost); the planner's output shape must stay robust for a small model — see FIN-162.
+Rig is the accepted preferred LLM client. The LLM proposes the plan for every admissible analysis request; existing authorization/read-only/policy preflight remains Engine-owned. Rig does not own scheduling, memory policy, re-plan, authorization or durable execution. Every call is bounded, validated and audited outside commit transactions. The owner-approved [FIN-162 contract](engine.md#llm-planner-contract-fin-162) requires a compact typed graph with grounded slots, explicit abstention/no-fit, Engine verification and distinct failure codes under the existing lifecycle/outcome matrix; no silent capability-selection fallback is permitted.
 
 Petgraph is available as a graph-validation/topological utility where needed; it is not the scheduler or ledger. Tokio task/concurrency primitives execute admitted work. PostgreSQL holds durable status. No separate agent/workflow framework is selected to introduce another loop.
 
-Reqwest is available for HTTP integration or a narrow provider feature gap. A parallel direct-provider implementation is not required unless the chosen Rig/provider combination cannot satisfy a concrete contract. Provider/model, tokenizer/counting strategy, structured-output compatibility and exact versions remain blocking selections.
+Reqwest remains available only for a concrete Rig/provider feature gap, not a parallel orchestration/client stack. FIN-163 wires the selected OpenAI-compatible local generation endpoint through Rig and proves bounded calls, config, usage/audit and failure settlement. Exact compatible dependency versions and token-accounting implementation are validated/pinned there; they cannot weaken schema validation or shared job budgets.
+
+### Development provider and structured output
+
+The interim cost-conscious selection remains the local `LLM_*` configuration
+(owner decision 2026-10-12): `LLM_PROVIDER=mlx-local`,
+`LLM_MODEL=mlx-community/bitnet-b1.58-2B-4T`, and
+`LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:8090/v1/chat/completions`.
+These identify the current development target, not hard-coded production
+defaults. Provider/model/endpoint changes come from explicit configuration and
+are recorded per call; no automatic hosted-provider or deterministic-planner
+fallback is selected. Timeout, input/output limits and retries use `LLM_*`
+settings under the Engine's absolute shared budgets.
+
+Native JSON/schema output support must be checked against the actual provider
+and model. A real smoke call on 2026-10-12 reached the configured model, but
+`response_format={"type":"json_object"}` returned Markdown-fenced JSON even for
+a one-field object. Reachability is proven; constrained JSON/schema enforcement
+and planner accuracy are not. The client must not strip fences or accept a
+best-effort object as a verified plan. The Engine validates the closed versioned
+output, permits bounded correction, and settles invalid output explicitly.
+Keeping the small model is conditional on the named planner acceptance
+scenarios, not on configuration or a successful generation request.
 
 ## Data and catalog
 
@@ -39,7 +61,7 @@ YAML analytical/dataset contracts and approved SQL assets remain the authoring s
 
 PostgreSQL-backed chunked retained datasets were recommended as an initial option; physical storage, retention and capacity evidence are not yet final. This document must not imply unlimited result storage in PostgreSQL or a mandatory object-storage service.
 
-The existing pgvector/Voyage retrieval assets are carry-over candidates and serve as the **candidate shortlist** for the LLM planner; retrieval does not decide the capability. Embedding provider/model and fallback/error policy still need a contract review; retrieval is not a second execution route.
+The existing pgvector/Voyage retrieval assets may supply a bounded candidate shortlist to the LLM under [the planner input contract](engine.md#input-and-retrieval). Lexical/vector scores do not select capabilities, decide identity clarification or classify empty/failed retrieval as unsupported scope. The Engine records the candidate catalog version/hash and retrieval diagnostics. Retrieval is not a second execution route and never replaces a failed generation call. This contract does not retune embedding models, ranking or catalog wording.
 
 ## Dashboard integration
 
@@ -51,7 +73,7 @@ TanStack Table, chart libraries, json-render and AI SDK UI were discussed as opt
 
 Before implementation, record exact compatible versions, required features and toolchain in an approved version matrix, then pin resolved dependencies through Cargo.lock when scaffolding is authorized. Old Cargo.toml declarations are reference evidence, not proof of compatibility for the new backend.
 
-Outstanding selections: model/provider, YAML/SQL parser, schema/API publication tooling, observability exporter/storage, physical dataset storage, deployment resources, concrete budgets/retention and acceptance tooling. Existing Bruno scenarios are carry-over candidates; no test files are imported yet.
+The interim development generation provider/model is selected above; production deployment selection remains explicit rather than an automatic fallback. Token accounting, native structured-output compatibility and exact Rig/provider versions are implementation gates for FIN-163. The broader outstanding deployment/observability/storage selections remain outside FIN-162; publishing this planner contract does not claim those mechanisms are built.
 
 ## References
 
