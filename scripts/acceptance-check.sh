@@ -24,12 +24,13 @@ cd "$ROOT"
 python3 - <<'PY'
 import os, re, sys
 
-ID_RE = re.compile(r'\b(CLR|RESP|AC|API|SSE|DS|OVR|MEM)-\d+(?:\.\d+)?\b')
+ID_RE = re.compile(r'\b(CLR|RESP|AC|API|SSE|DS|OVR|MEM|PLN)-\d+(?:\.\d+)?\b')
 
 # Prefix → lapisan pemilik, menurut docs/build-order.md §3.
 OWNER = {
     'API':  ['L0'],
     'SSE':  ['L0'],
+    'PLN':  ['L2'],
     'DS':   ['L3'],
     'OVR':  ['L4'],
     'RESP': ['L5', 'L6'],
