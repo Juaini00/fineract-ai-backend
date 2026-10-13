@@ -12,11 +12,13 @@ runtime:
   scripts:
     - type: tests
       code: |
-        test("LLM configuration is not represented as integrated", function () {
+        test("Unobserved generation availability is not claimed and no selection fallback exists", function () {
           expect(res.getStatus()).to.equal(200);
           const data = res.getBody().data;
-          expect(data.generation.operational).to.equal(false);
-          expect(data.generation.implementation).to.equal("not_integrated");
+          if (!data.generation.connection_checked) {
+            expect(data.generation.operational).to.equal(false);
+          }
+          expect(data.planning.deterministic_selection_fallback).to.equal(false);
           expect(data.narration.implementation).to.equal("not_integrated");
           expect(data.embedding.dimensions).to.be.a("number");
           expect(JSON.stringify(data)).to.not.match(/api_key|base_url|chat_completions_url|password/i);

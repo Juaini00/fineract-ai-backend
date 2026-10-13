@@ -1,0 +1,49 @@
+info:
+  name: planner response and direct SQL
+  type: http
+  seq: 5
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{plannerJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const document = res.getBody().data;
+        const failure = bru.getEnvVar("plannerExpectedFailure");
+        test("FIN-163: public response is explicit and sanitized", function () {
+          expect(res.getStatus()).to.equal(200);
+          if (failure) {
+            expect(document.kind).to.equal("limitation");
+            expect(document.outcome).to.equal("OperationalFailure");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.completeness_reason).to.equal(failure);
+            expect(document.blocks_json.some(block => block.block_id === failure)).to.equal(true);
+            expect(document.evidence_json).to.deep.equal({});
+          } else {
+            expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_deposit_total");
+            const notes = document.blocks_json.filter(block => block.type === "note");
+            const slots = notes.flatMap(block => block.auto_bound_slots || []);
+            for (const field of ["from_date", "to_date"]) {
+              const slot = slots.find(slot => slot.field_id === field);
+              expect(slot, field + " must disclose grounded calendar binding").to.exist;
+              const span = slot.label.match(/bytes \[(\d+), (\d+)\) \('(.+)'\)/);
+              expect(span, "source quote and computed span must be disclosed").to.not.equal(null);
+              const original = "Total setoran tabungan bulan ini";
+              expect(original.slice(Number(span[1]), Number(span[2]))).to.equal(span[3]);
+              expect(span[3]).to.include("bulan ini");
+            }
+          }
+          expect(JSON.stringify(document.blocks_json)).to.not.match(/api_key|chat_completions_url|Traceback|Bearer /i);
+        });
+        if (!failure) {
+          const answers = require("./lib/answers.js");
+          answers.check(test, expect, "savings_deposit_total", document);
+          test("PLN-1: real Indonesian planner selects approved capability, grounds date quotes and agrees with direct SQL", function () {
+            expect(document.evidence_json.lineage[0].query_id).to.equal("savings.deposit_total");
+            expect(document.evidence_json.lineage[0].catalog_content_hash).to.match(/^[0-9a-f]{64}$/);
+          });
+        }

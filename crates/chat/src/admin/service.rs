@@ -34,15 +34,21 @@ async fn principal(foundation: &Foundation, user: &AuthUser) -> Result<Principal
     .ok_or(ApiError::Forbidden)
 }
 
-pub async fn models(
-    foundation: &Foundation,
-    provider: Option<&str>,
-    model: Option<&str>,
-) -> Result<Value, ApiError> {
+pub async fn models(foundation: &Foundation) -> Result<Value, ApiError> {
     let c = foundation.config();
+    let mut generation = foundation.generation().settings();
+    generation["provider"] = json!(c.llm_provider);
+    generation["model"] = json!(c.llm_model);
+    generation["configuration_source"] = json!("startup_environment");
+    generation["timeout_ms"] = json!(c.llm_timeout_ms);
+    generation["max_retries"] = json!(c.llm_max_retries);
+    generation["max_input_tokens"] = json!(c.llm_max_input_tokens);
+    generation["max_output_tokens"] = json!(c.llm_max_output_tokens);
     Ok(json!({
-        "generation": { "provider": provider, "model": model, "configuration_source": "startup_environment", "operational": false, "implementation": "not_integrated", "connection_checked": false },
-        "planning": { "implementation": "not_integrated" },
+        "generation": generation,
+        "planning": { "implementation": "integrated", "client": "rig",
+            "prompt_version": crate::engine::llm::PROMPT_VERSION, "schema_version": 1,
+            "execution": "single_capability", "deterministic_selection_fallback": false },
         "narration": { "implementation": "not_integrated" },
         "summarization": { "implementation": "not_integrated" },
         "embedding": { "model": c.embedding_model, "dimensions": c.embedding_dimensions,
@@ -228,6 +234,12 @@ pub fn runtime(foundation: &Foundation) -> Value {
             "reaper_interval_secs": c.reaper_interval_secs,
             "job_ttl_running_secs": c.job_ttl_running_secs,
             "node_attempt_cap_uncertain": c.node_attempt_cap,
+            "llm_timeout_ms": c.llm_timeout_ms,
+            "llm_max_retries": c.llm_max_retries,
+            "llm_max_input_tokens": c.llm_max_input_tokens,
+            "llm_max_output_tokens": c.llm_max_output_tokens,
+            "budget_max_model_calls": c.budget_max_model_calls,
+            "budget_max_tokens": c.budget_max_tokens,
             "clarification_wait_limit_secs": c.clarification_wait_limit_secs,
             "resolver_page_size": c.resolver_page_size,
             "resolver_page_size_max": c.resolver_page_size_max,
@@ -249,7 +261,7 @@ pub fn runtime(foundation: &Foundation) -> Value {
             "jwt_access_token_expiry_seconds": c.jwt_access_token_expiry_seconds,
             "jwt_refresh_token_expiry_seconds": c.jwt_refresh_token_expiry_seconds
         },
-        "unimplemented_configuration": ["generation_llm_budget", "generation_llm_retry", "response_retention", "model_call_concurrency"]
+        "unimplemented_configuration": ["response_retention", "model_call_concurrency"]
     })
 }
 

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::{
     config::Config,
     db::{AppDb, FineractDb},
+    generation::GenerationClient,
     redis::Notifier,
 };
 
@@ -18,6 +19,7 @@ struct Inner {
     app_db: AppDb,
     fineract_db: FineractDb,
     notifier: Notifier,
+    generation: GenerationClient,
 }
 
 impl Foundation {
@@ -28,12 +30,14 @@ impl Foundation {
         let app_db = AppDb::connect(&config).await?;
         let fineract_db = FineractDb::connect(&config)?;
         let notifier = Notifier::connect(&config).await;
+        let generation = GenerationClient::new(&config)?;
 
         Ok(Self(Arc::new(Inner {
             config,
             app_db,
             fineract_db,
             notifier,
+            generation,
         })))
     }
 
@@ -51,5 +55,9 @@ impl Foundation {
 
     pub fn notifier(&self) -> &Notifier {
         &self.0.notifier
+    }
+
+    pub fn generation(&self) -> &GenerationClient {
+        &self.0.generation
     }
 }

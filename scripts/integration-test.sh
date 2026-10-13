@@ -90,6 +90,8 @@ if [ -n "${LOCAL_CRASH_AFTER_EXTERNAL_CALL+x}" ] || [ -n "${LOCAL_WORKER_ERROR_B
     exit 1
 fi
 
+PLANNER_FOLDERS=()
+
 if [ "$#" -gt 0 ]; then
     INTAKE_FOLDERS=()
     ENGINE_FOLDERS=()
@@ -102,6 +104,10 @@ if [ "$#" -gt 0 ]; then
         # of a folder, in the stage of its top-level folder: a scoped run after
         # a narrow change. A bare folder name keeps its default behaviour.
         top="${folder%%/*}"
+        if [ "$top" = "planner" ] || [[ "$top" == planner-* ]]; then
+            PLANNER_FOLDERS+=("$folder")
+            continue
+        fi
         if [ "$top" = "answers" ]; then
             ANSWERS_FOLDERS+=("$folder")
         elif [ "$folder" = "redis-down" ]; then
@@ -125,6 +131,7 @@ else
     ANSWERS_FOLDERS=(answers)
     REDIS_DOWN_FOLDERS=(redis-down)
     CRASH_FOLDERS=(crash-recovery crash-exhausted crash-expired crash-cancelled worker-error)
+    PLANNER_FOLDERS=(planner planner-unavailable planner-invalid planner-repair planner-no-fit planner-budget)
 fi
 
 command -v bru >/dev/null || {
@@ -148,6 +155,7 @@ CATALOG_CHECK_OUTPUT="$("$ROOT/target/debug/app" catalog)"
 echo "$CATALOG_CHECK_OUTPUT"
 
 APP_PID=""
+PROVIDER_PID=""
 
 stop_app() {
     [ -n "$APP_PID" ] || return 0
@@ -163,6 +171,10 @@ cleanup() {
         return
     fi
     stop_app
+    if [ -n "$PROVIDER_PID" ]; then
+        kill -TERM "$PROVIDER_PID" 2>/dev/null || true
+        wait "$PROVIDER_PID" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
@@ -199,14 +211,22 @@ start_app() {  # $1 = nilai WORKER_ENABLED, sisanya = VAR=nilai tambahan
 run_folders() {  # $1 = jeda ms, sisanya = folder
     local delay="$1"
     shift
+    local extra=()
+    if [ "${BRU_ENVIRONMENT:-local}" = "planner-manual" ]; then
+        extra+=(--env-var "manualPlannerRequest=${MANUAL_PLANNER_REQUEST:-Total setoran tabungan bulan ini}")
+    fi
     # Subshell: `bru` harus dijalankan dari direktori koleksi, tetapi app dibaca
     # dengan path katalog relatif terhadap root repo — cwd tidak boleh bocor ke
     # tahap berikutnya.
     (
         cd "$COLLECTION"
         bru run "$@" -r \
-            --env local \
+            --env "${BRU_ENVIRONMENT:-local}" \
             --env-var "baseUrl=$BASE_URL" \
+            --env-var "plannerMode=${PLANNER_MODE:-real}" \
+            --env-var "plannerExpectedFailure=${PLANNER_EXPECTED_FAILURE:-}" \
+            --env-var "plannerExpectedAttempts=${PLANNER_EXPECTED_ATTEMPTS:-0}" \
+            "${extra[@]}" \
             --disable-cookies \
             --delay "$delay" \
             ${BRU_SANDBOX:+--sandbox "$BRU_SANDBOX"} \
@@ -303,6 +323,79 @@ if [ "${#CRASH_FOLDERS[@]}" -gt 0 ]; then
         echo "==> bru run $folder (${seam[*]})"
         BRU_SANDBOX=developer run_folders 500 "$folder"
     done
+fi
+
+if [ "${#PLANNER_FOLDERS[@]}" -gt 0 ]; then
+for folder in "${PLANNER_FOLDERS[@]}"; do
+    stop_app
+    PLANNER_MODE="${folder%%/*}"
+    PLANNER_EXPECTED_FAILURE=""
+    PLANNER_EXPECTED_ATTEMPTS=0
+    BRU_ENVIRONMENT=local
+    case "$PLANNER_MODE" in
+        planner-manual-success)
+            BRU_ENVIRONMENT=planner-manual
+            ANSWERS_ORACLE_PREFIX=savings_deposit_total "$ROOT/scripts/answer-expectations.sh"
+            start_app true LLM_CHAT_COMPLETIONS_URL="${PLANNER_PROVIDER_URL:-$LLM_CHAT_COMPLETIONS_URL}" \
+                LLM_PROVIDER="${PLANNER_PROVIDER:-$LLM_PROVIDER}" LLM_MODEL="${PLANNER_MODEL:-$LLM_MODEL}"
+            target="$folder"
+            ;;
+        planner-manual-unavailable)
+            BRU_ENVIRONMENT=planner-manual
+            start_app true LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:1/v1/chat/completions \
+                LLM_MAX_RETRIES=0 LLM_TIMEOUT_MS=500
+            target="$folder"
+            ;;
+        planner)
+            ANSWERS_ORACLE_PREFIX=savings_deposit_total "$ROOT/scripts/answer-expectations.sh"
+            start_app true LLM_CHAT_COMPLETIONS_URL="${PLANNER_PROVIDER_URL:-$LLM_CHAT_COMPLETIONS_URL}" \
+                LLM_PROVIDER="${PLANNER_PROVIDER:-$LLM_PROVIDER}" LLM_MODEL="${PLANNER_MODEL:-$LLM_MODEL}"
+            target="$folder"
+            ;;
+        planner-unavailable)
+            PLANNER_EXPECTED_FAILURE=planner_unavailable
+            PLANNER_EXPECTED_ATTEMPTS=2
+            start_app true LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:1/v1/chat/completions LLM_MAX_RETRIES=1 LLM_TIMEOUT_MS=500
+            target=planner
+            ;;
+        planner-invalid | planner-repair | planner-no-fit | planner-budget)
+            provider_port=$((PORT + 10000))
+            if lsof -nP -iTCP:"$provider_port" -sTCP:LISTEN >/dev/null 2>&1; then
+                echo "Planner fixture port $provider_port is already occupied" >&2
+                exit 1
+            fi
+            mode=invalid
+            PLANNER_EXPECTED_FAILURE=planner_output_invalid
+            PLANNER_EXPECTED_ATTEMPTS=2
+            extra=(LLM_MAX_RETRIES=1)
+            case "$PLANNER_MODE" in
+                planner-repair) mode=repair; PLANNER_EXPECTED_FAILURE=planner_abstained ;;
+                planner-no-fit) mode=no-fit; PLANNER_EXPECTED_FAILURE=planner_no_fit; PLANNER_EXPECTED_ATTEMPTS=1 ;;
+                planner-budget) extra=(LLM_MAX_RETRIES=1 BUDGET_MAX_MODEL_CALLS=1); PLANNER_EXPECTED_ATTEMPTS=1 ;;
+            esac
+            python3 "$ROOT/tests/planner_provider.py" --port "$provider_port" --mode "$mode" &
+            PROVIDER_PID=$!
+            ready=false
+            for attempt in $(seq 1 40); do
+                if curl -fsS "http://127.0.0.1:$provider_port/" >/dev/null 2>&1; then ready=true; break; fi
+                sleep 0.1
+            done
+            [ "$ready" = true ] || { echo "Planner provider fixture did not start" >&2; exit 1; }
+            start_app true LLM_PROVIDER=planner-test-fixture LLM_MODEL=planner-test-fixture \
+                LLM_CHAT_COMPLETIONS_URL="http://127.0.0.1:$provider_port/v1/chat/completions" \
+                "${extra[@]}"
+            target=planner
+            ;;
+        *) echo "Unknown planner stage $PLANNER_MODE" >&2; exit 1 ;;
+    esac
+    BRU_SANDBOX=developer run_folders 500 "$target"
+    stop_app
+    if [ -n "$PROVIDER_PID" ]; then
+        kill -TERM "$PROVIDER_PID"
+        wait "$PROVIDER_PID" 2>/dev/null || true
+        PROVIDER_PID=""
+    fi
+done
 fi
 
 # OVR-6.7 — nol pelanggaran isolasi commit di seluruh tahap yang dijalankan.

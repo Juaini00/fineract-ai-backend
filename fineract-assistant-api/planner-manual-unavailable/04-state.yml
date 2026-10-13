@@ -1,0 +1,34 @@
+info:
+  name: manual planner terminal snapshot
+  type: http
+  seq: 4
+http:
+  method: get
+  url: '{{baseUrl}}/chat/jobs/{{manualPlannerJob}}'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: 'const poll = require("./lib/poll.js");
+
+      if (!(await poll.awaitJob(bru, req, res, job => poll.TERMINAL.includes(job.lifecycle)))) return;
+
+      const job = res.getBody().data;
+
+      test("PLN-4: provider outage has explicit failed snapshot", () => {
+
+      expect(res.getStatus()).to.equal(200);
+
+      expect(job.lifecycle).to.equal("Failed");
+
+      expect(job.outcome).to.equal("OperationalFailure");
+
+      expect(job.completeness).to.equal("Unknown");
+
+      expect(job.failure_code).to.equal("planner_unavailable");
+
+      expect(job.plan_version).to.equal(null);
+
+      });'

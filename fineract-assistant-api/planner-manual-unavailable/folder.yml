@@ -1,0 +1,8 @@
+info:
+  name: planner-manual-unavailable
+  seq: 100
+docs: |
+  The locked runner starts a dedicated worker-enabled app with a closed local
+  provider port, LLM_MAX_RETRIES=0 and LLM_TIMEOUT_MS=500. The shared model server
+  is not stopped or changed. This chain checks explicit unavailability without
+  a source execution plan; it is not a general retry or model-accuracy suite.

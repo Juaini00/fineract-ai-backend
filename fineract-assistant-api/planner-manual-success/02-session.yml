@@ -1,0 +1,21 @@
+info:
+  name: manual planner session
+  type: http
+  seq: 2
+http:
+  method: post
+  url: '{{baseUrl}}/chat/sessions'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+  - name: content-type
+    value: application/json
+  body:
+    type: json
+    data: '{"title":"FIN-163 manual planner proof"}'
+runtime:
+  scripts:
+  - type: tests
+    code: 'test("session created", () => expect(res.getStatus()).to.equal(201));
+
+      bru.setVar("manualPlannerSession", res.getBody().data.id);'

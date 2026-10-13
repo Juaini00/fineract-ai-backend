@@ -1,0 +1,30 @@
+info:
+  name: manual planner audit
+  type: http
+  seq: 6
+http:
+  method: get
+  url: '{{baseUrl}}/settings/audit?job_id={{manualPlannerJob}}&limit=200'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: |
+      const events = res.getBody().data.events;
+      const admitted = events.filter(e => e.action === "planner.call_admitted");
+      const finished = events.filter(e => e.action === "planner.call_finished");
+      test("FIN-163: model attempts are correlated and bounded", () => {
+        expect(res.getStatus()).to.equal(200);
+        expect(admitted.length).to.be.within(1, 4);
+        expect(finished.length).to.equal(admitted.length);
+        for (const event of finished) {
+          expect(admitted.some(a => a.model_call_id === event.model_call_id)).to.equal(true);
+          expect(event.job_id).to.equal(bru.getVar("manualPlannerJob"));
+          expect(event.catalog_content_hash).to.match(/^[0-9a-f]{64}$/);
+        }
+      });
+      test("FIN-163: successful generation is audited", () => {
+        expect(finished.some(e => e.result === "ok")).to.equal(true);
+      });

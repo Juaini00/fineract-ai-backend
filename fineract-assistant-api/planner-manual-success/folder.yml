@@ -1,0 +1,10 @@
+info:
+  name: planner-manual-success
+  seq: 99
+docs: |
+  Requires a worker-enabled app with the real configured Qwen provider.
+  The locked runner supplies the Indonesian PLN-1 request and refreshes only
+  the deposit-total direct-SQL oracle. The standalone environment's English
+  default checks FIN-163 behavior but does not prove the Indonesian scenario.
+  Run this chain only when its planner behavior changes; login and session
+  requests are prerequisites, not a separate authentication regression suite.

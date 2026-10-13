@@ -26,6 +26,29 @@ pub enum AppEnv {
 /// Konfigurasi aplikasi yang sudah tervalidasi.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub llm_provider: String,
+    #[serde(default)]
+    pub llm_model: String,
+    #[serde(default)]
+    pub llm_chat_completions_url: String,
+    #[serde(default)]
+    pub llm_api_key: Option<String>,
+    #[serde(default = "default_llm_timeout_ms")]
+    pub llm_timeout_ms: u64,
+    #[serde(default = "default_llm_max_retries")]
+    pub llm_max_retries: u32,
+    #[serde(default = "default_llm_max_input_tokens")]
+    pub llm_max_input_tokens: u64,
+    #[serde(default = "default_llm_max_output_tokens")]
+    pub llm_max_output_tokens: u64,
+    #[serde(default = "default_llm_temperature")]
+    pub llm_temperature: f64,
+    #[serde(default = "default_budget_max_model_calls")]
+    pub budget_max_model_calls: i32,
+    #[serde(default = "default_budget_max_tokens")]
+    pub budget_max_tokens: i64,
+
     // ---- Aplikasi ----
     #[serde(default = "default_app_env")]
     pub app_env: AppEnv,
@@ -278,6 +301,51 @@ impl Config {
     }
 
     fn validate(&self) -> anyhow::Result<()> {
+        if self.llm_timeout_ms == 0
+            || self.llm_max_input_tokens == 0
+            || self.llm_max_output_tokens == 0
+            || self.budget_max_model_calls <= 0
+            || self.budget_max_tokens <= 0
+            || self.llm_max_retries >= i32::MAX as u32
+            || self
+                .llm_max_input_tokens
+                .checked_add(self.llm_max_output_tokens)
+                .is_none_or(|tokens| tokens > i64::MAX as u64)
+            || !self.llm_temperature.is_finite()
+            || !(0.0..=2.0).contains(&self.llm_temperature)
+        {
+            anyhow::bail!(
+                "LLM_* and BUDGET_* limits must be positive, representable integers; temperature must be in [0, 2]"
+            );
+        }
+        for (name, value) in [
+            ("LLM_PROVIDER", &self.llm_provider),
+            ("LLM_MODEL", &self.llm_model),
+        ] {
+            if value.len() > 128
+                || !value
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-/".contains(&b))
+            {
+                anyhow::bail!("{name} contains invalid characters");
+            }
+        }
+        if !self.llm_chat_completions_url.is_empty() {
+            let url = reqwest::Url::parse(&self.llm_chat_completions_url).map_err(|_| {
+                anyhow::anyhow!("LLM_CHAT_COMPLETIONS_URL must be an absolute HTTP URL")
+            })?;
+            if !matches!(url.scheme(), "http" | "https")
+                || !url.path().ends_with("/chat/completions")
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                anyhow::bail!(
+                    "LLM_CHAT_COMPLETIONS_URL must end in /chat/completions without credentials, query or fragment"
+                );
+            }
+        }
         // Dua pool berbeda hak akses (overview §2). URL identik berarti pool
         // "read-only" sebenarnya memegang kredensial writable.
         if self.app_database_url == self.fineract_database_url {
@@ -424,6 +492,28 @@ impl Config {
     }
 }
 
+fn default_llm_timeout_ms() -> u64 {
+    30_000
+}
+fn default_llm_max_retries() -> u32 {
+    3
+}
+fn default_llm_max_input_tokens() -> u64 {
+    16_000
+}
+fn default_llm_max_output_tokens() -> u64 {
+    2_000
+}
+fn default_llm_temperature() -> f64 {
+    0.1
+}
+fn default_budget_max_model_calls() -> i32 {
+    12
+}
+fn default_budget_max_tokens() -> i64 {
+    250_000
+}
+
 fn default_app_env() -> AppEnv {
     AppEnv::Local
 }
@@ -557,6 +647,39 @@ fn default_refresh_cookie_path() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn llm_limits_reject_zero_overflow_and_unsafe_endpoints() {
+        for (key, value) in [
+            ("llm_timeout_ms", "0"),
+            ("llm_max_input_tokens", "0"),
+            ("llm_max_output_tokens", "0"),
+            ("budget_max_model_calls", "0"),
+            ("budget_max_tokens", "-1"),
+            ("llm_temperature", "3"),
+            (
+                "llm_chat_completions_url",
+                "https://secret@example.com/v1/chat/completions",
+            ),
+            (
+                "llm_chat_completions_url",
+                "https://example.com/v1/chat/completions?api_key=secret",
+            ),
+            ("llm_chat_completions_url", "file:///chat/completions"),
+            ("llm_max_input_tokens", "9223372036854775807"),
+        ] {
+            let mut entries = minimal();
+            entries.push((key, value.to_owned()));
+            assert!(build(entries).is_err(), "{key} must be rejected");
+        }
+    }
+
+    #[test]
+    fn shared_model_cap_can_be_stricter_than_retry_allowance() {
+        let mut entries = minimal();
+        entries.push(("budget_max_model_calls", "1".to_owned()));
+        entries.push(("llm_max_retries", "3".to_owned()));
+        assert_eq!(build(entries).unwrap().budget_max_model_calls, 1);
+    }
 
     /// Set minimal yang sah; test memodifikasi salinannya.
     fn minimal() -> Vec<(&'static str, String)> {

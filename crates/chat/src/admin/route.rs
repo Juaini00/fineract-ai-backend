@@ -17,31 +17,7 @@ use super::{
 };
 use crate::catalog::Catalog;
 
-#[derive(Clone)]
-struct ModelSnapshot {
-    provider: Option<String>,
-    model: Option<String>,
-}
-
-fn safe_name(key: &str) -> Option<String> {
-    let value = std::env::var(key).ok()?;
-    let value = value.trim();
-    if value.is_empty()
-        || value.len() > 128
-        || !value
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || b"._-/".contains(&c))
-    {
-        return None;
-    }
-    Some(value.to_owned())
-}
-
 pub fn router() -> Router<Foundation> {
-    let snapshot = ModelSnapshot {
-        provider: safe_name("LLM_PROVIDER"),
-        model: safe_name("LLM_MODEL"),
-    };
     Router::new()
         .route("/settings/models", get(models))
         .route("/settings/connections", get(connections))
@@ -51,18 +27,14 @@ pub fn router() -> Router<Foundation> {
         .route("/settings/audit", get(audit_page))
         .route("/settings/audit/{id}", get(audit_event))
         .route("/settings/observability", get(observability))
-        .layer(Extension(snapshot))
 }
 
 async fn models(
     State(f): State<Foundation>,
     user: AuthUser,
-    Extension(snapshot): Extension<ModelSnapshot>,
 ) -> Result<Json<Envelope<Value>>, ApiError> {
     service::require_admin(&f, &user).await?;
-    Ok(Json(Envelope::ok(
-        service::models(&f, snapshot.provider.as_deref(), snapshot.model.as_deref()).await?,
-    )))
+    Ok(Json(Envelope::ok(service::models(&f).await?)))
 }
 
 async fn connections(

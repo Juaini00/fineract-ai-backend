@@ -1,13 +1,14 @@
 //! Engine: klaim job, lease/fencing, recovery, dan penyelesaian.
 //!
-//! Satu Engine memiliki orchestration end-to-end. Planner, eksekusi node, dan
-//! klarifikasi belum ada — lihat [`worker`] untuk arti penyelesaian saat ini.
+//! Satu Engine memiliki orchestration end-to-end.
 
 pub mod compose;
 pub mod dataset;
 pub mod executor;
 pub mod memory;
 pub mod param_parse;
+pub mod llm;
+pub mod proposal;
 pub mod planner;
 pub mod reaper;
 pub mod repository;
