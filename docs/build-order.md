@@ -264,10 +264,10 @@ invalid-output, abstention and no-fit states differ from unsupported scope;
 K5, audit, budgets and commit isolation hold. Multi-node scheduling remains
 the L8 `OVR-6.2` gate.
 
-**Status**: ⬜ — no LLM call exists on the plan path. The earlier L2 work
-(lexical matching, vector fallback, phrase tuning) was a stand-in for this layer
-and is not evidence for it; the embedding index it built remains useful as the
-candidate shortlist.
+**Status**: 🔨 — Rig generation is wired on the plan path with bounded,
+audited calls and strict proposal rejection. FIN-163 now has a targeted real
+planner round-trip and provider-outage proof. This proves one supported
+request and the unavailable-provider path, not complete L2 conformance.
 
 ### L3 — Dataset handles and chunks
 
@@ -385,7 +385,7 @@ that consumes it. Concretely:
 | L0 Foundation | 🔨 | — |
 | L1 Correct catalog | 🧪 | L0 🔨 |
 | L1C Catalog coverage | ⬜ | L1 🧪 |
-| L2 LLM planner | ⬜ | L1 🧪 (L1C ⬜ for breadth) |
+| L2 LLM planner | 🔨 | L1 🧪 (L1C ⬜ for breadth); real positive proof remains incomplete |
 | L3 Datasets | 🧪 | L0 🔨 |
 | L4 Correct answers | 🧪 | L1 🧪, L1C ⬜, L3 🧪 |
 | L5 Response shape | 🧪 | L0 🔨 |
@@ -1934,6 +1934,98 @@ Update after FIN-162 (owner-approved planner contract, 2026-10-12):
   contract change. No full Rust or Bruno suite was run; implementation must
   prove the named scenarios with targeted real-planner and failure-path runs.
 
+FIN-163 working-branch evidence (not published or closed):
+
+- `foundation::config` consumes generation settings; Rig 0.40.0 owns the
+  OpenAI-compatible call. Text messages are serialized as strings because
+  the live llama.cpp Qwen template reports `supports_typed_content=false`.
+  Request text is separate from candidate/context data. No Reqwest client
+  fallback or deterministic capability-selection fallback was added.
+- The Engine parses the closed compact proposal, checks source quotes/UTF-8
+  spans and approved single-capability admission, and settles the four
+  planner failure codes explicitly. Multi-node scheduling remains L8.
+- Migration `20261012000000_planner_attempts.sql` preserves per-snapshot
+  repair counts across lease recovery. Absolute model/token counters stay
+  on `chat_jobs`; unknown usage retains the admission reservation.
+- Targeted pure logic: proposal parser (3), verifier (4), config boundaries
+  (2) passed. The schema smoke passed after applying the migration.
+  Targeted core/chat clippy passed before the final text-message/context
+  serialization changes; no full Rust suite was run.
+- Locked negative stages `planner-unavailable`, `planner-invalid`,
+  `planner-repair`, `planner-no-fit`, `planner-budget` passed 40/40 tests
+  in the recorded run, with no commit-isolation violation. These results
+  predate the final message serialization changes; they are not a claim
+  of a complete final regression run.
+- The real `planner` chain remains failing. Latest inspected job
+  `3d9d74f5-5821-4b19-b936-a7f6444362dc` exhausted four attempts, each
+  audited with observed usage and `source_quote_not_found`; no verified
+  plan was admitted. PLN-1 is not proven. Do not weaken the golden
+  capability/grounding assertions or strip/fix model output to close this.
+- The current live server advertises
+  `qwen3-4b-instruct-2507-q4_k_m`. The owner supplies
+  `LLM_PROVIDER=llamacpp-local`; prior diagnostic process overrides used
+  the inaccurate label `llama-local`. Local `.env` is not overwritten.
+  FIN-163 remains In Progress, without a commit/PR or closure.
+
+FIN-163 continuation after standalone model evaluation (unverified):
+
+- Removed checkout-local Rust build artifacts with `cargo clean` before
+  continuing development; no source or global Cargo dependency cache was
+  removed.
+- The Engine now supplies a closed native JSON schema for the version-1
+  proposal, including all four slot variants. Rig uses `json_schema` without a
+  JSON-object downgrade. The strict parser and admission verifier remain the
+  authority; grammar support is not semantic conformance.
+- `planner-v2` adds complete grounded-slot examples and explicit rules for
+  unspecified dates, accepted bindings, integer types and repeated quotes.
+  This is a new integration prompt, not a measured improvement or a claim that
+  either standalone experiment prompt was adopted unchanged.
+- New `planner-manual-success` and `planner-manual-unavailable` Bruno chains
+  are prepared with the `planner-manual` environment. The English default is
+  not a PLN-1 proof; that scenario still requires its Indonesian request,
+  concrete calendar bindings and matching direct-SQL evidence.
+- Owner explicitly deferred testing during this continuation. No compile,
+  Rust tests, backend startup or Bruno execution has verified these changes.
+  FIN-163 remains In Progress, PLN-1 remains unproven, and the existing
+  pre-change evidence must not be reported as validation of this revision.
+
+FIN-163 targeted verification after owner authorization:
+
+- One locked run built `app` with development debug information and
+  incremental compilation disabled. Rebuilt `target/` occupies 1.8 GB,
+  compared with 8.6 GB before cleanup. No full Rust/Bruno suite or standalone
+  model benchmark was repeated.
+- Added runner selection for the two new manual folders; the database guard
+  and per-database lock remain mandatory. The success stage supplies
+  `Total setoran tabungan bulan ini` and refreshes only the deposit-total SQL
+  oracle. The unavailable stage uses a closed local port, a 500 ms timeout and
+  zero retries.
+- `planner-manual-success`: 12/12 checks passed. Job
+  `f1720ba6-0b1c-406d-b57a-851cef3cc61b` settled
+  `Completed`/`Empty`/`Complete`, admitted plan version 1, and selected
+  `savings_deposit_total`. Date-source spans, concrete date bindings
+  (2026-10-01 through 2026-10-13), office scope and result agreed with the
+  independently computed SQL. The population was empty; this run is not
+  evidence for nonzero monetary arithmetic.
+- The successful job made two audited attempts: the first timed out after
+  30,027 ms; the second completed in 26,522 ms. Its observed model was
+  `qwen3.5-4b`, prompt `planner-v2`, with 3,033 input and 80 output tokens.
+  Usage for the timed-out attempt remains unknown/reserved. A successful
+  retry is not first-pass model success or a reason to waive timeout budgets.
+- `planner-manual-unavailable`: 7/7 checks passed. Job
+  `a6c213b8-c3fe-4409-b4bb-3cde7897a895` settled
+  `Failed`/`OperationalFailure`/`Unknown` with `planner_unavailable`.
+  A separate read-only inspection confirmed the matching durable
+  `job.failed` event, zero plans, zero node runs and zero promoted memory.
+- The run reported zero `commit_isolation_violation` markers. Snapshot
+  polling waited for the one submitted job; it did not repeat the scenario
+  or submit additional analytical requests.
+- Evidence supports PLN-1 for this empty-result request, PLN-4, and the
+  correlated-call/usage portion of PLN-9. Other planner scenarios and the
+  full regression gate were not exercised. FIN-163 remains In Progress
+  without a commit, PR, CI result or closure.
+
+
 ### 5.1 Scenario coverage
 
 Every acceptance scenario now carries a stable ID, added in place without
@@ -1942,20 +2034,20 @@ them from `docs/`, collects the IDs named by tests (Bruno `.yml` and Rust), and
 fails when a layer marked ✅ in the table above still has a scenario without a
 test.
 
-Latest inventory run (FIN-162) — **36 of 68 scenarios have a test**:
+Latest inventory run (FIN-163 working branch) — **41 of 68 scenarios have a test**, not necessarily a passing or complete conformance proof:
 
 | Prefix | Document | Scenarios | With a test | Owning layer |
 | --- | --- | --- | --- | --- |
 | `API-` | [contracts/api.md](contracts/api.md) | 6 | 6 | L0 |
 | `SSE-` | [contracts/sse.md](contracts/sse.md) | 8 | 8 | L0 |
-| `PLN-` | [architecture/engine.md](architecture/engine.md#planner-acceptance-scenarios) | 9 | 0 | L2 |
+| `PLN-` | [architecture/engine.md](architecture/engine.md#planner-acceptance-scenarios) | 9 | 5 | L2 |
 | `DS-` | [data/dataset-lifecycle.md](data/dataset-lifecycle.md) | 6 | 6 | L3 |
 | `OVR-` | [architecture/overview.md](architecture/overview.md) | 7 | 6 | L4 (OVR-6.2 → L8) |
 | `RESP-` | [contracts/responses.md](contracts/responses.md) | 10 | 10 | L5, L6 |
 | `CLR-` | [contracts/clarifications.md](contracts/clarifications.md) | 8 | 0 | L7 |
 | `MEM-` | [architecture/memory-context.md](architecture/memory-context.md) | 7 | 0 | L7 |
 | `AC-` | [data/analytical-contracts.md](data/analytical-contracts.md) | 7 | 0 | L8 |
-| | **Total** | **68** | **36** | |
+| | **Total** | **68** | **41** | |
 
 API and SSE tests are Bruno requests (PR #1). SSE-5..8 each carry a test but
 their tickets (FIN-25..28) stay In Progress — e.g. SSE-5's second clarification

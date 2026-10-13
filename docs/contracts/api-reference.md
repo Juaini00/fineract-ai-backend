@@ -348,6 +348,45 @@ Kombinasi yang dilarang (dan tidak akan pernah dikirim): `Empty`/`NotFound`
 dengan `Partial`; `SkippedByUser` dengan `Complete`; lifecycle nonterminal
 dengan `outcome` terisi.
 
+#### Planner failures (FIN-163)
+
+Admissible analysis requests now use the configured Rig generation client.
+Retrieval supplies candidate contracts, not the execution decision. Before an
+analytical source node runs, planner failures settle as `Failed`,
+`OperationalFailure`, `Unknown`, with the same `failure_code` in the snapshot,
+durable `job.failed` event, limitation response and terminal audit:
+
+| `failure_code` | Cause |
+| --- | --- |
+| `planner_unavailable` | Missing generation configuration, provider failure, timeout or exhausted transient retries |
+| `planner_output_invalid` | Invalid JSON/schema after bounded repair, rejected static proposal or exhausted planning budget |
+| `planner_abstained` | Valid model `abstain`; no repair or identity form |
+| `planner_no_fit` | Valid model `no_fit`, or no usable candidate shortlist; not proof of unsupported product scope |
+
+There is no lexical/vector capability-selection fallback. Fenced JSON,
+duplicate keys, unknown fields, unsupported tags and ungrounded slot quotes are
+not admitted as executable plans. Relative dates are resolved by the Engine
+under the existing UTC calendar; model proposals identify verbatim request
+quotes and occurrences, while the Engine computes their UTF-8 spans. The
+current execution path admits one approved capability; multi-node scheduling
+remains outside this integration.
+
+Generation requests use native `json_schema` mode with the closed version-1
+proposal shape supplied by the Engine. Provider grammar support does not
+replace duplicate-key rejection, decision/node consistency, catalog validation,
+source grounding or authorization checks. A provider that rejects schema mode
+follows the existing failure path; the client does not downgrade to
+`json_object`. Prompt revisions are exposed through `planning.prompt_version`
+and recorded in attempt audit metadata.
+
+Every external attempt is bounded by `LLM_TIMEOUT_MS`, job expiry,
+`LLM_MAX_RETRIES` and the absolute job call/token budgets. Call admission and
+token reservation commit before generation; observed usage is reconciled in
+a separate fenced commit. Missing usage retains the reservation. Repair counts
+survive lease recovery and do not reset the absolute job budgets. Model
+credentials, prompts, raw model output and SQL are not public diagnostics.
+
+
 `completeness_reason` pada dokumen `analysis` bernilai
 `curated_query:<query_id>` saat jawabannya utuh. Bila `limit` capability
 dideklarasikan `unbounded` tanpa `defaults.default_limit` tetapi punya cap
@@ -1204,15 +1243,21 @@ ia tidak mengklaim penyelesaian FIN-102 (observability penuh).
 
 ### `GET /settings/models`
 
-Snapshot provider/model generation yang dikonfigurasi (bukan dikonfirmasi
-tersambung) beserta status implementasi tiap peran model:
+Snapshot client generation yang terpasang beserta observasi panggilan terakhir
+di proses ini. Konfigurasi saja tidak menyatakan provider tersambung:
 
 ```json
 {
-  "generation": { "provider": "deepseek", "model": "deepseek-chat",
-    "configuration_source": "startup_environment", "operational": false,
-    "implementation": "not_integrated", "connection_checked": false },
-  "planning": { "implementation": "not_integrated" },
+  "generation": { "provider": "llamacpp-local",
+    "model": "qwen3-4b-instruct-2507-q4_k_m",
+    "configuration_source": "startup_environment", "configured": true,
+    "operational": false, "implementation": "integrated",
+    "connection_checked": false, "proposal_verified": false,
+    "timeout_ms": 30000, "max_retries": 3,
+    "max_input_tokens": 16000, "max_output_tokens": 2000 },
+  "planning": { "implementation": "integrated", "client": "rig",
+    "prompt_version": "planner-v2", "schema_version": 1,
+    "execution": "single_capability", "deterministic_selection_fallback": false },
   "narration": { "implementation": "not_integrated" },
   "summarization": { "implementation": "not_integrated" },
   "embedding": { "model": "voyage-3-large", "dimensions": 1024,
@@ -1223,9 +1268,12 @@ tersambung) beserta status implementasi tiap peran model:
 }
 ```
 
-`generation`/`planning`/`narration`/`summarization` tidak pernah dilaporkan
-`operational: true` sampai sebuah client benar-benar terpasang di jalur
-planner — konfigurasi `.env` bukan bukti koneksi.
+`connection_checked` menjadi `true` setelah panggilan generation; `operational`
+mencerminkan apakah panggilan terakhir menerima completion, bukan apakah output
+model lolos verifikasi atau apakah provider sehat sekarang. `proposal_verified`
+menandai bahwa proses ini pernah memverifikasi proposal `planned`. Observasi ini
+direset saat proses aplikasi dimulai ulang. Narasi dan summary tetap
+`not_integrated`; koneksi embedding tidak diuji oleh endpoint ini.
 
 ### `GET /settings/connections`
 

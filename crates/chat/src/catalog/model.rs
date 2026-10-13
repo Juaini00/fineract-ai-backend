@@ -27,6 +27,8 @@ pub struct Capability {
     #[serde(default)]
     pub supported_intents: Vec<String>,
     #[serde(default)]
+    pub unsupported_intents: Vec<String>,
+    #[serde(default)]
     pub parameters: BTreeMap<String, CapabilityParameter>,
     #[serde(default)]
     pub request_shape: Option<RequestShape>,
@@ -76,8 +78,16 @@ pub struct ProbeRef {
     pub output_slot: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct RequestShape {
+    #[serde(default)]
+    pub operation: Option<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub grouping: Option<String>,
+    #[serde(default)]
+    pub output: Option<String>,
     /// `none` berarti capability berjanji tidak mengeluarkan kolom PII.
     #[serde(default)]
     pub pii: Option<String>,
@@ -322,8 +332,14 @@ pub struct DomainConcept {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum IntentRef {
-    Ref { phrase: String, inventory_ref: String },
-    Exempt { phrase: String, exempt: String },
+    Ref {
+        phrase: String,
+        inventory_ref: String,
+    },
+    Exempt {
+        phrase: String,
+        exempt: String,
+    },
 }
 
 impl IntentRef {

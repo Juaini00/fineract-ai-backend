@@ -1,0 +1,30 @@
+info:
+  name: manual planner result
+  type: http
+  seq: 5
+http:
+  method: get
+  url: '{{baseUrl}}/chat/jobs/{{manualPlannerJob}}/response'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: |
+      const document = res.getBody().data;
+      test("FIN-163: capability and grounded date bindings are disclosed", () => {
+        expect(res.getStatus()).to.equal(200);
+        expect(document.evidence_json.lineage[0].capability_id).to.equal("savings_deposit_total");
+        const slots = document.blocks_json.filter(b => b.type === "note").flatMap(b => b.auto_bound_slots || []);
+        const original = bru.getEnvVar("manualPlannerRequest");
+        const bytes = Buffer.from(original, "utf8");
+        for (const key of ["from_date", "to_date"]) {
+          const slot = slots.find(s => s.field_id === key);
+          expect(slot, key + " binding must be disclosed").to.exist;
+          const span = slot.label.match(/bytes \[(\d+), (\d+)\) \('(.+)'\)/);
+          expect(span, "request source span").to.not.equal(null);
+          expect(bytes.subarray(Number(span[1]), Number(span[2])).toString("utf8")).to.equal(span[3]);
+        }
+      });
+      require("./lib/answers.js").check(test, expect, "savings_deposit_total", document);

@@ -39,6 +39,7 @@ pub enum ExternalCall {
     Fineract,
     Embedding,
     Redis,
+    Generation,
 }
 
 impl ExternalCall {
@@ -47,6 +48,7 @@ impl ExternalCall {
             Self::Fineract => "fineract",
             Self::Embedding => "embedding",
             Self::Redis => "redis",
+            Self::Generation => "generation",
         }
     }
 }

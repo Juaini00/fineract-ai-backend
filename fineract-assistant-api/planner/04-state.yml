@@ -1,0 +1,34 @@
+info:
+  name: planner terminal snapshot
+  type: http
+  seq: 4
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{plannerJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (!(await poll.awaitJob(bru, req, res, job => poll.TERMINAL.includes(job.lifecycle)))) return;
+        const job = res.getBody().data;
+        const failure = bru.getEnvVar("plannerExpectedFailure");
+        test("FIN-163: durable lifecycle/outcome/completeness and no invalid admitted plan", function () {
+          expect(res.getStatus()).to.equal(200);
+          if (failure) {
+            expect(job.lifecycle).to.equal("Failed");
+            expect(job.outcome).to.equal("OperationalFailure");
+            expect(job.completeness).to.equal("Unknown");
+            expect(job.failure_code).to.equal(failure);
+            expect(job.plan_version).to.equal(null);
+          } else {
+            expect(job.lifecycle).to.equal("Completed");
+            expect(["Answered", "Empty"]).to.include(job.outcome);
+            expect(job.completeness).to.equal("Complete");
+            expect(job.plan_version).to.equal(1);
+          }
+        });
+        bru.setVar("plannerLastSequence", job.last_event_sequence);

@@ -10,6 +10,7 @@ pub mod db;
 pub mod embedding;
 pub mod envelope;
 pub mod error;
+pub mod generation;
 pub mod redis;
 pub mod state;
 pub mod telemetry;

@@ -1,0 +1,35 @@
+info:
+  name: planner attempt and terminal audit
+  type: http
+  seq: 7
+http:
+  method: get
+  url: "{{baseUrl}}/settings/audit?job_id={{plannerJob}}&limit=200"
+  headers:
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = res.getBody().data.events;
+        const admitted = events.filter(event => event.action === "planner.call_admitted");
+        const finished = events.filter(event => event.action === "planner.call_finished");
+        const failure = bru.getEnvVar("plannerExpectedFailure");
+        const attempts = Number(bru.getEnvVar("plannerExpectedAttempts"));
+        test("FIN-163: real model calls have correlated audit rows and bounded attempts", function () {
+          expect(res.getStatus()).to.equal(200);
+          if (failure) { expect(admitted.length).to.equal(attempts); }
+          else { expect(admitted.length).to.be.within(1, 4); }
+          expect(finished.length).to.equal(admitted.length);
+          for (const event of finished) {
+            expect(admitted.some(a => a.model_call_id === event.model_call_id)).to.equal(true);
+            expect(event.job_id).to.equal(bru.getVar("plannerJob"));
+            expect(event.duration_ms).to.be.at.least(0);
+            expect(event.catalog_content_hash).to.match(/^[0-9a-f]{64}$/);
+          }
+          if (failure) {
+            expect(events.some(event => event.stage === "source_query" || event.stage === "node_execute" || event.stage === "plan")).to.equal(false);
+            expect(events.some(event => event.action === "job.failed")).to.equal(true);
+          } else { expect(finished.some(event => event.result === "ok")).to.equal(true); }
+        });

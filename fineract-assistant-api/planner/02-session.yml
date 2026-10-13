@@ -1,0 +1,22 @@
+info:
+  name: planner session
+  type: http
+  seq: 2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+  body:
+    type: json
+    data: |
+      {"title":"FIN-163 planner {{plannerMode}}"}
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("planner session created", function () { expect(res.getStatus()).to.equal(201); });
+        bru.setVar("plannerSession", res.getBody().data.id);

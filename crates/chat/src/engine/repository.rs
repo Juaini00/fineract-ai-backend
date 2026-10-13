@@ -30,6 +30,7 @@ pub struct ClaimedJob {
     pub request_text: String,
     pub scope_json: Value,
     pub lease_token: Uuid,
+    pub business_today: chrono::NaiveDate,
 }
 
 /// T2 — klaim satu job `Queued`.
@@ -76,7 +77,8 @@ pub async fn claim_next(
              FOR UPDATE SKIP LOCKED
              LIMIT 1
          )
-         RETURNING id, session_id, owner_user_id, request_text, scope_json, lease_token",
+         RETURNING id, session_id, owner_user_id, request_text, scope_json, lease_token,
+             (started_at AT TIME ZONE 'UTC')::date AS business_today",
     )
     .bind(worker)
     .bind(lease_duration_secs as f64)
@@ -148,6 +150,189 @@ async fn was_suspended(tx: &mut Transaction<'_, Postgres>, job_id: Uuid) -> sqlx
     )
     .bind(job_id)
     .fetch_one(&mut **tx)
+    .await
+}
+
+pub async fn planner_shortlist(
+    pool: &PgPool,
+    catalog_version_id: Uuid,
+    terms: &[String],
+) -> sqlx::Result<Vec<String>> {
+    sqlx::query_scalar(
+        "WITH q AS (SELECT to_tsquery('simple', array_to_string($2::text[], ' | ')) AS terms)
+         SELECT source_id FROM knowledge_index CROSS JOIN q
+         WHERE catalog_version_id = $1 AND source_type = 'capability'
+           AND to_tsvector('simple', retrieval_text) @@ q.terms
+         ORDER BY ts_rank_cd(
+           setweight(to_tsvector('simple', coalesce(title, '')), 'A') ||
+           setweight(to_tsvector('simple', retrieval_text), 'C'), q.terms, 2) DESC, source_id
+         LIMIT 6",
+    )
+    .bind(catalog_version_id)
+    .bind(terms)
+    .fetch_all(pool)
+    .await
+}
+
+#[derive(Debug)]
+pub enum ModelAdmission {
+    Admitted {
+        call_id: Uuid,
+        expires_at: DateTime<Utc>,
+        attempt: i32,
+    },
+    BudgetExhausted,
+    Fenced,
+}
+
+pub async fn admit_model(
+    pool: &PgPool,
+    job: &ClaimedJob,
+    max_calls: i32,
+    max_tokens: i64,
+    reserved_tokens: i64,
+    planning_key: &str,
+    max_attempts: i32,
+    detail: &Value,
+) -> sqlx::Result<ModelAdmission> {
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
+    let admission = sqlx::query_as::<_, (DateTime<Utc>, i32)>(
+        "UPDATE chat_jobs SET model_call_count = model_call_count + 1,
+             token_cost = token_cost + $3, updated_at = now(),
+             planner_call_counts = jsonb_set(planner_call_counts, ARRAY[$6],
+               to_jsonb(COALESCE((planner_call_counts->>$6)::integer, 0) + 1))
+         WHERE id = $1 AND lease_token = $2 AND lifecycle = 'Running'
+           AND expires_at > now() AND cancel_requested_at IS NULL
+           AND model_call_count < $4 AND token_cost <= $5 - $3
+           AND COALESCE((planner_call_counts->>$6)::integer, 0) < $7
+         RETURNING expires_at, (planner_call_counts->>$6)::integer",
+    )
+    .bind(job.id)
+    .bind(job.lease_token)
+    .bind(reserved_tokens)
+    .bind(max_calls)
+    .bind(max_tokens)
+    .bind(planning_key)
+    .bind(max_attempts)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((expires_at, attempt)) = admission else {
+        let active = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM chat_jobs WHERE id = $1 AND lease_token = $2
+             AND lifecycle = 'Running' AND expires_at > now() AND cancel_requested_at IS NULL)",
+        )
+        .bind(job.id)
+        .bind(job.lease_token)
+        .fetch_one(&mut *tx)
+        .await?;
+        tx.rollback().await?;
+        return Ok(if active {
+            ModelAdmission::BudgetExhausted
+        } else {
+            ModelAdmission::Fenced
+        });
+    };
+    let call_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO audit_events (id, actor_kind, actor_user_id, session_id, job_id,
+          stage, action, result, model_call_id, catalog_version_id, catalog_content_hash, detail_json)
+         VALUES ($1, 'worker', $2, $3, $4, 'model_call', 'planner.call_admitted', 'deferred',
+           $5, $6, $7, jsonb_set($8, '{attempt}', to_jsonb($9::integer)))",
+    ).bind(Uuid::now_v7()).bind(job.owner_user_id).bind(job.session_id).bind(job.id)
+        .bind(call_id).bind(detail["catalog_version_id"].as_str().and_then(|s| Uuid::parse_str(s).ok()))
+        .bind(detail["catalog_content_hash"].as_str()).bind(detail).bind(attempt).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(ModelAdmission::Admitted {
+        call_id,
+        expires_at,
+        attempt,
+    })
+}
+
+pub async fn finish_model(
+    pool: &PgPool,
+    job: &ClaimedJob,
+    call_id: Uuid,
+    reserved_tokens: i64,
+    observed_tokens: Option<i64>,
+    result: &str,
+    failure_code: Option<&str>,
+    duration_ms: i64,
+    detail: &Value,
+) -> sqlx::Result<bool> {
+    let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
+    // Missing usage (including transport failure) retains the full reservation.
+    // Recovering workers therefore cannot refund an unobserved external call.
+    let charged = observed_tokens.unwrap_or(reserved_tokens);
+    let affected = sqlx::query(
+        "UPDATE chat_jobs SET token_cost = token_cost - $3 + $4, updated_at = now()
+         WHERE id = $1 AND lease_token = $2 AND lifecycle = 'Running'
+           AND expires_at > now() AND cancel_requested_at IS NULL",
+    )
+    .bind(job.id)
+    .bind(job.lease_token)
+    .bind(reserved_tokens)
+    .bind(charged)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if affected == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query(
+        "INSERT INTO audit_events (id, actor_kind, actor_user_id, session_id, job_id,
+          stage, action, result, failure_code, model_call_id, duration_ms,
+          catalog_version_id, catalog_content_hash, detail_json)
+         VALUES ($1, 'worker', $2, $3, $4, 'model_call', 'planner.call_finished',
+           $5, $6, $7, $8, $9, $10, $11)",
+    )
+    .bind(Uuid::now_v7())
+    .bind(job.owner_user_id)
+    .bind(job.session_id)
+    .bind(job.id)
+    .bind(result)
+    .bind(failure_code)
+    .bind(call_id)
+    .bind(duration_ms)
+    .bind(
+        detail["catalog_version_id"]
+            .as_str()
+            .and_then(|s| Uuid::parse_str(s).ok()),
+    )
+    .bind(detail["catalog_content_hash"].as_str())
+    .bind(detail)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn model_budget(pool: &PgPool, job: &ClaimedJob) -> sqlx::Result<Option<(i32, i64)>> {
+    sqlx::query_as(
+        "SELECT model_call_count, token_cost FROM chat_jobs
+         WHERE id = $1 AND lease_token = $2 AND lifecycle = 'Running'
+           AND expires_at > now() AND cancel_requested_at IS NULL",
+    )
+    .bind(job.id)
+    .bind(job.lease_token)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn vector_shortlist(
+    pool: &PgPool,
+    catalog_version_id: Uuid,
+    vector: Vec<f32>,
+) -> sqlx::Result<Vec<String>> {
+    sqlx::query_scalar(
+        "SELECT source_id FROM knowledge_index WHERE catalog_version_id = $1
+         AND source_type = 'capability' AND embedding IS NOT NULL
+         ORDER BY embedding <=> $2::vector, source_id LIMIT 6",
+    )
+    .bind(catalog_version_id)
+    .bind(pgvector::Vector::from(vector))
+    .fetch_all(pool)
     .await
 }
 
@@ -406,7 +591,11 @@ pub async fn settle_with_response(
     let (_window, mut tx) = foundation::commit_isolation::begin(pool).await?;
 
     let validation_status = validated.status();
-    let Validated { served: response, rejected, report } = validated;
+    let Validated {
+        served: response,
+        rejected,
+        report,
+    } = validated;
 
     // Dokumen yang ditolak menempati versi 1 dan versi yang disajikan menjadi 2.
     // Versi yang gagal TIDAK dihapus (#10): ia satu-satunya bukti tentang apa
@@ -520,7 +709,10 @@ pub async fn settle_with_response(
         &mut tx,
         job_id,
         "job.completed",
-        EventRef { response_version: Some(response_version), ..Default::default() },
+        EventRef {
+            response_version: Some(response_version),
+            ..Default::default()
+        },
         Some(serde_json::json!({
             "outcome": response.outcome,
             "completeness": response.completeness,
@@ -705,7 +897,15 @@ async fn settle_expired(pool: &PgPool, worker: &str) -> sqlx::Result<u64> {
         abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
         skip_unadmitted_attempts(&mut tx, *job_id, *session_id, FailureActor::Reaper(worker))
             .await?;
-        finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.expired", "job.expired").await?;
+        finish_sweep_row(
+            &mut tx,
+            *job_id,
+            *session_id,
+            worker,
+            "job.expired",
+            "job.expired",
+        )
+        .await?;
     }
 
     tx.commit().await?;
@@ -740,7 +940,15 @@ async fn settle_abandoned_cancelling(pool: &PgPool, worker: &str) -> sqlx::Resul
         abandon_running_attempts(&mut tx, *job_id, *session_id, worker).await?;
         skip_unadmitted_attempts(&mut tx, *job_id, *session_id, FailureActor::Reaper(worker))
             .await?;
-        finish_sweep_row(&mut tx, *job_id, *session_id, worker, "job.cancelled", "job.cancelled").await?;
+        finish_sweep_row(
+            &mut tx,
+            *job_id,
+            *session_id,
+            worker,
+            "job.cancelled",
+            "job.cancelled",
+        )
+        .await?;
     }
 
     tx.commit().await?;
@@ -1053,7 +1261,13 @@ async fn finish_sweep_row(
     event_type: &str,
     action: &str,
 ) -> sqlx::Result<()> {
-    append_event(tx, job_id, event_type, Some(serde_json::json!({ "by": "reaper" }))).await?;
+    append_event(
+        tx,
+        job_id,
+        event_type,
+        Some(serde_json::json!({ "by": "reaper" })),
+    )
+    .await?;
 
     audit::insert(
         tx,
@@ -1215,7 +1429,10 @@ pub async fn persist_plan(
         &mut tx,
         job_id,
         "job.phase_changed",
-        EventRef { plan_version: Some(plan_version), ..Default::default() },
+        EventRef {
+            plan_version: Some(plan_version),
+            ..Default::default()
+        },
         Some(serde_json::json!({ "phase": "planning", "message": "Preparing the analysis." })),
     )
     .await?;
@@ -1430,7 +1647,11 @@ pub async fn complete_node(
             session_id: Some(session_id),
             stage: "source_query",
             action: "node.completed",
-            result: if outcome.status == "Completed" { "ok" } else { "failed" },
+            result: if outcome.status == "Completed" {
+                "ok"
+            } else {
+                "failed"
+            },
             failure_code: outcome.failure_code,
             detail_json: Some(outcome.provenance_json.clone()),
             ..Default::default()

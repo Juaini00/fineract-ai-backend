@@ -11,7 +11,13 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 /// kedua tidak menimpa subscriber pertama dan tidak panic.
 pub fn init() {
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=debug,sqlx=warn"));
+        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=debug,sqlx=warn"))
+        .add_directive("rig=off".parse().expect("static tracing directive"))
+        .add_directive(
+            "rig::completions=off"
+                .parse()
+                .expect("static tracing directive"),
+        );
 
     let _ = tracing_subscriber::registry()
         .with(filter)

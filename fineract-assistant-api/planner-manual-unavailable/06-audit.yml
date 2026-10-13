@@ -1,0 +1,22 @@
+info:
+  name: manual planner audit
+  type: http
+  seq: 6
+http:
+  method: get
+  url: '{{baseUrl}}/settings/audit?job_id={{manualPlannerJob}}&limit=200'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: "const events = res.getBody().data.events;\nconst admitted = events.filter(e => e.action === \"planner.call_admitted\"\
+      );\nconst finished = events.filter(e => e.action === \"planner.call_finished\");\ntest(\"FIN-163: model attempts are\
+      \ correlated and bounded\", () => {\n  expect(res.getStatus()).to.equal(200);\n  expect(admitted.length).to.be.within(1,\
+      \ 4);\n  expect(finished.length).to.equal(admitted.length);\n  for (const event of finished) {\n    expect(admitted.some(a\
+      \ => a.model_call_id === event.model_call_id)).to.equal(true);\n    expect(event.job_id).to.equal(bru.getVar(\"manualPlannerJob\"\
+      ));\n    expect(event.catalog_content_hash).to.match(/^[0-9a-f]{64}$/);\n  }\n});\ntest(\"PLN-4: outage is audited without\
+      \ a source execution plan\", () => {\n  expect(events.some(e => e.stage === \"source_query\" || e.stage === \"node_execute\"\
+      \ || e.stage === \"plan\")).to.equal(false);\n  expect(events.some(e => e.action === \"job.failed\")).to.equal(true);\n\
+      });"

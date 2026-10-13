@@ -1,0 +1,25 @@
+info:
+  name: observed planner integration state
+  type: http
+  seq: 8
+http:
+  method: get
+  url: "{{baseUrl}}/settings/models"
+  headers:
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const data = res.getBody().data;
+        const failure = bru.getEnvVar("plannerExpectedFailure");
+        test("FIN-163: settings report wired Rig and observed generation availability, not an environment echo", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(data.planning.client).to.equal("rig");
+          expect(data.planning.deterministic_selection_fallback).to.equal(false);
+          expect(data.generation.connection_checked).to.equal(true);
+          expect(data.generation.operational).to.equal(failure !== "planner_unavailable");
+          expect(data.generation.proposal_verified).to.equal(!failure);
+          expect(JSON.stringify(data)).to.not.match(/api_key|base_url|chat_completions_url|password/i);
+        });

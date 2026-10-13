@@ -1,0 +1,18 @@
+info:
+  name: manual planner result
+  type: http
+  seq: 5
+http:
+  method: get
+  url: '{{baseUrl}}/chat/jobs/{{manualPlannerJob}}/response'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: "const document = res.getBody().data;\ntest(\"PLN-4: outage response is a limitation, never an analytical answer\"\
+      , () => {\n  expect(res.getStatus()).to.equal(200);\n  expect(document.kind).to.equal(\"limitation\");\n  expect(document.outcome).to.equal(\"\
+      OperationalFailure\");\n  expect(document.completeness).to.equal(\"Unknown\");\n  expect(document.blocks_json.some(b\
+      \ => b.block_id === \"planner_unavailable\")).to.equal(true);\n  expect(document.evidence_json).to.deep.equal({});\n\
+      });"

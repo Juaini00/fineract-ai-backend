@@ -1,0 +1,10 @@
+name: planner-manual
+variables:
+- name: baseUrl
+  value: http://127.0.0.1:3107
+- name: username
+  value: admin
+- name: password
+  value: password123
+- name: manualPlannerRequest
+  value: Show total savings deposits this month.

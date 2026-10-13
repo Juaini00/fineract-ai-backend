@@ -1,0 +1,32 @@
+info:
+  name: manual planner terminal snapshot
+  type: http
+  seq: 4
+http:
+  method: get
+  url: '{{baseUrl}}/chat/jobs/{{manualPlannerJob}}'
+  headers:
+  - name: authorization
+    value: Bearer {{manualPlannerToken}}
+runtime:
+  scripts:
+  - type: tests
+    code: 'const poll = require("./lib/poll.js");
+
+      if (!(await poll.awaitJob(bru, req, res, job => poll.TERMINAL.includes(job.lifecycle)))) return;
+
+      const job = res.getBody().data;
+
+      test("FIN-163: real planner admits a complete analytical job", () => {
+
+      expect(res.getStatus()).to.equal(200);
+
+      expect(job.lifecycle).to.equal("Completed");
+
+      expect(["Answered", "Empty"]).to.include(job.outcome);
+
+      expect(job.completeness).to.equal("Complete");
+
+      expect(job.plan_version).to.equal(1);
+
+      });'

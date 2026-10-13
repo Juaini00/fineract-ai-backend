@@ -33,8 +33,7 @@ use crate::{
     },
 };
 
-/// Satu-satunya versi plan yang dihasilkan planner deterministik. Re-plan baru
-/// relevan ketika klarifikasi atau invalidasi output ada.
+/// Multi-node scheduling and re-plan versions remain the L8 gate.
 const PLAN_VERSION: i32 = 1;
 
 /// Jalankan loop worker sampai `shutdown` dibatalkan.
@@ -324,27 +323,43 @@ async fn run_job(
                 == Some(foundation.config().fineract_tenant.as_str())
             && job.scope_json["source"].as_str() == Some("admin_projection");
 
-
-    let planned = planner::plan(
-        pool,
-        embedding,
-        foundation.config().embedding_similarity_cutoff,
+    let Some(planned) = super::llm::plan(
+        foundation,
         catalog,
         catalog_version_id,
-        &job.request_text,
+        job,
         &authorized,
         global_reference_allowed,
         !requested_offices.is_empty(),
         &supplied,
+        embedding,
     )
-    .await?;
+    .await?
+    else {
+        return Ok(false);
+    };
 
     let plan = match planned {
         Ok(plan) => plan,
-        // Parameter yang kurang dan dapat ditanyakan → tanyakan (T5), jangan
-        // tolak. Job yang sama ditangguhkan; tidak ada job pengganti. Slot
-        // identitas tanpa resolver TIDAK dapat ditanyakan (K1) dan jatuh ke arm
-        // berikutnya sebagai `Unsupported`.
+        Err(planner::Unplannable::PlannerFailure(code)) => {
+            return settle_failed_with(
+                foundation, job, code,
+                "The planner could not produce a verified plan, so this request was not answered. No source query was run.",
+            ).await;
+        }
+        Err(planner::Unplannable::InvalidSource(_)) => {
+            return settle_failed_with(
+                foundation,
+                job,
+                "planner_output_invalid",
+                "The planner could not produce grounded input values, so no source query was run.",
+            )
+            .await;
+        }
+        Err(problem @ planner::Unplannable::GlobalReferenceUnauthorized) => {
+            return settle_blocked(foundation, job, &problem.reason(), &problem.explain()).await;
+        }
+        // A grounded probe or missing required input uses the existing K5 path.
         Err(planner::Unplannable::NeedsClarification {
             capability,
             missing,
@@ -861,7 +876,7 @@ async fn open_clarification(
             .map_err(Into::into);
         }
 
-        if candidates.matched_total == 1 {
+        if candidates.matched_total == 1 && !candidates.truncated {
             let only = &candidates.items[0];
             auto_bound.push(AcceptedAnswer {
                 field_id: item.name.clone(),

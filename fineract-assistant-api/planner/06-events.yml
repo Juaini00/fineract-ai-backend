@@ -1,0 +1,30 @@
+info:
+  name: planner durable terminal event
+  type: http
+  seq: 6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{plannerJob}}/events"
+  headers:
+    - name: authorization
+      value: "Bearer {{plannerToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const events = require("./lib/poll.js").replay(res);
+        const failure = bru.getEnvVar("plannerExpectedFailure");
+        const scenario = failure === "planner_unavailable" ? "PLN-4" : failure === "planner_output_invalid" ? "PLN-5" : failure === "planner_abstained" ? "PLN-6" : failure === "planner_no_fit" ? "PLN-7" : "FIN-163";
+        test(scenario + ": terminal event agrees with snapshot; planner failure never dispatches a source node", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(events.length).to.equal(Number(bru.getVar("plannerLastSequence")));
+          events.forEach((event, i) => expect(event.sequence).to.equal(i + 1));
+          const terminal = events[events.length - 1];
+          if (failure) {
+            expect(terminal.event).to.equal("job.failed");
+            expect(terminal.failure_code).to.equal(failure);
+            expect(events.map(event => event.event)).to.not.include("node.status_changed");
+            expect(events.map(event => event.event)).to.not.include("clarification.required");
+            expect(events.map(event => event.event)).to.not.include("job.completed");
+          } else { expect(terminal.event).to.equal("job.completed"); }
+        });
