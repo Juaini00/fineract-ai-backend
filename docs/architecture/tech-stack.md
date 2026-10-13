@@ -34,8 +34,12 @@ Reqwest remains available only for a concrete Rig/provider feature gap, not a pa
 ### Development provider and structured output
 
 The interim cost-conscious selection remains the local `LLM_*` configuration
-(owner decision 2026-10-12): `LLM_PROVIDER=mlx-local`,
-`LLM_MODEL=mlx-community/bitnet-b1.58-2B-4T`, and
+(owner decision 2026-10-12, runtime and model revised 2026-10-12 and 2026-10-13):
+`LLM_PROVIDER=llamacpp-local`,
+`LLM_MODEL=qwen3.5-4b` (alias served by `llama-server` for
+`unsloth/Qwen3.5-4B-GGUF:Q4_K_M`, thinking disabled server-side with
+`--chat-template-kwargs '{"enable_thinking":false}'`, vision projector not
+loaded via `--no-mmproj`), and
 `LLM_CHAT_COMPLETIONS_URL=http://127.0.0.1:8090/v1/chat/completions`.
 These identify the current development target, not hard-coded production
 defaults. Provider/model/endpoint changes come from explicit configuration and
@@ -44,14 +48,30 @@ fallback is selected. Timeout, input/output limits and retries use `LLM_*`
 settings under the Engine's absolute shared budgets.
 
 Native JSON/schema output support must be checked against the actual provider
-and model. A real smoke call on 2026-10-12 reached the configured model, but
-`response_format={"type":"json_object"}` returned Markdown-fenced JSON even for
-a one-field object. Reachability is proven; constrained JSON/schema enforcement
-and planner accuracy are not. The client must not strip fences or accept a
+and model. The earlier `mlx-local` target was dropped on 2026-10-12:
+`mlx_lm.server` 0.32.0 does not read `response_format` at all and returned
+schema-violating output unchanged. The llama.cpp `llama-server` (Homebrew 0.6.0,
+build 11429) compiles `response_format={"type":"json_schema",…}` into a sampling
+grammar; a probe whose prompt asked the model to copy schema-violating JSON
+returned `{"schema_version":1,"decision":"abstain","confidence":"low","nodes":[]}`,
+honouring `const`, `enum`, `maxItems` and `additionalProperties:false`.
+Shape enforcement is proven for that probe; planner accuracy is not. The grammar
+guarantees form, not correctness: the client must not strip fences or accept a
 best-effort object as a verified plan. The Engine validates the closed versioned
 output, permits bounded correction, and settles invalid output explicitly.
 Keeping the small model is conditional on the named planner acceptance
 scenarios, not on configuration or a successful generation request.
+
+Development memory budget for the local model is ~4 GB (5 GB ceiling) on the
+development machine (MacBook Air M4, 16 GB). Measured with `-c 8192`: 790 MB
+process footprint plus a 2.7 GB memory-mapped model file (~3.5 GB peak),
+~26 tokens/s generation. On a 14-question Indonesian routing probe over 13 real
+capabilities (3 must-abstain), Qwen3.5-4B scored 13/14 versus 12/14 for the
+previous `Qwen3-4B-Instruct-2507`, which confused deposit with withdrawal
+capabilities; this is an indicative probe, not planner acceptance. A 10k-token
+prompt took ~39 s to prefill on a 4B model, so `LLM_TIMEOUT_MS=30000` is not
+sufficient for large contexts on local hardware; context budgets or the timeout
+must be set accordingly before the planner depends on it.
 
 ## Data and catalog
 
