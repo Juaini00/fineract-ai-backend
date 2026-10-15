@@ -166,14 +166,12 @@ impl GenerationClient {
                     })
                 });
                 let observed = response.raw_response.usage.is_some()
-                    && (response.usage.total_tokens > 0 || response.usage.input_tokens > 0 || response.usage.output_tokens > 0);
+                    && (response.usage.total_tokens > 0
+                        || response.usage.input_tokens > 0
+                        || response.usage.output_tokens > 0);
                 let complete = response.raw_response.choices.len() == 1
                     && response.raw_response.choices[0].finish_reason == "stop";
-                let mut parts = response.choice.into_iter();
-                let (text, only_text) = match (parts.next(), parts.next()) {
-                    (Some(AssistantContent::Text(content)), None) => (content.text, true),
-                    _ => (String::new(), false),
-                };
+                let (text, only_text) = answer_text(response.choice);
                 Ok(Generated {
                     text,
                     model: response.raw_response.model,
@@ -208,5 +206,39 @@ impl GenerationClient {
                 Err(GenerationFailure { retryable: true })
             }
         }
+    }
+}
+
+/// Reasoning-capable providers return hidden reasoning in a separate
+/// `reasoning_content` field, which Rig exposes as a Reasoning part. It is never
+/// the answer: drop it, then require exactly one Text part.
+fn answer_text(choice: impl IntoIterator<Item = AssistantContent>) -> (String, bool) {
+    let mut parts = choice
+        .into_iter()
+        .filter(|part| !matches!(part, AssistantContent::Reasoning(_)));
+    match (parts.next(), parts.next()) {
+        (Some(AssistantContent::Text(content)), None) => (content.text, true),
+        _ => (String::new(), false),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rig_core::completion::message::Reasoning;
+
+    #[test]
+    fn reasoning_part_beside_one_text_is_complete() {
+        let parts = [
+            AssistantContent::Reasoning(Reasoning::new("thinking")),
+            AssistantContent::text("{}"),
+        ];
+        assert_eq!(answer_text(parts), ("{}".to_string(), true));
+    }
+
+    #[test]
+    fn reasoning_only_or_two_texts_stay_incomplete() {
+        assert!(!answer_text([AssistantContent::Reasoning(Reasoning::new("x"))]).1);
+        assert!(!answer_text([AssistantContent::text("a"), AssistantContent::text("b")]).1);
     }
 }

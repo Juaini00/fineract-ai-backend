@@ -37,7 +37,8 @@ class Handler(BaseHTTPRequestHandler):
             "model": "planner-test-fixture",
             "system_fingerprint": None,
             "choices": [{"index": 0, "finish_reason": "stop", "logprobs": None,
-                         "message": {"role": "assistant", "content": content}}],
+                         "message": {"role": "assistant", "content": content,
+                                        "reasoning_content": "fixture hidden reasoning"}}],
         }).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
