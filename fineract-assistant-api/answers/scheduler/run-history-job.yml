@@ -1,0 +1,27 @@
+info:
+  name: FIN-124 run-history job
+  type: http
+  seq: 11
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124HistKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin124HistSession}}", "request_text": "Show the run history of a scheduled batch job April 2026 to May 2026 on the stored clock, with the successful and the failed attempts."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin124HistKey", "fin124-run-history-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin124HistJob", res.getBody().data.job_id);

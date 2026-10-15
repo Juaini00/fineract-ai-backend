@@ -1,0 +1,36 @@
+info:
+  name: FIN-124 refusal-coverage response
+  type: http
+  seq: 39.1
+  description: |
+    Original user question D, one real-model request in English: does the latest
+    successful interest-posting run prove August interest and every account current?
+    Run metadata cannot establish business-period or account coverage (XR-ASOF, D14),
+    so the answer must be an explicit unsupported/Unknown refusal, never a Complete run list.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124CoverJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("FIN-124 D: a successful run is not presented as August / all-account coverage", function () {
+            // Run metadata must never come back as a Complete answer to a coverage claim.
+            expect(document.completeness).to.not.equal("Complete");
+            expect(document.completeness).to.equal("Unknown");
+            expect(["planner_no_fit", "planner_abstained", "stored_clock_window_required"]).to.include(document.completeness_reason);
+            expect(document.blocks_json.some((b) => b.type === "table" || b.type === "metric")).to.equal(false);
+            expect(document.evidence_json.lineage || []).to.deep.equal([]);
+            if (document.completeness_reason === "planner_no_fit") {
+              const body = document.blocks_json.map((b) => b.body || "").join(" ");
+              expect(body).to.include("business period or every account");
+              expect(body).to.include("no source query was run");
+            }
+          });
+        }

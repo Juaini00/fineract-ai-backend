@@ -1,8 +1,9 @@
 -- Loan arrears/delinquency snapshot (dataset-inventory.md LOAN-9). Only
 -- present while a loan is overdue (1:1 loan). XR-ASOF: overdue_since_date_derived
 -- is the row's own as-of signal; this is a point-in-time snapshot, not
--- asserted as always-current — freshness depends on COB having run (D14,
--- still gap, no job-run join here). Office via the owning loan.
+-- asserted as always-current — freshness depends on Loan COB having closed the
+-- loans, enforced outside this SQL by the capability's `freshness` hand-off
+-- (D14: batch evidence + account-level coverage probes). Office via the owning loan.
 SELECT
     a.loan_id,
     a.principal_overdue_derived,

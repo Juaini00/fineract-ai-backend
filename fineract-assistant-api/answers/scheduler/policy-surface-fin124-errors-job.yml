@@ -1,0 +1,27 @@
+info:
+  name: FIN-124 errors-surface job
+  type: http
+  seq: 31
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124ErrKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin124RefuseSession}}", "request_text": "Show the error log and stack trace of the failed batch jobs from April 2026 to May 2026."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin124ErrKey", "fin124-refusal-errors-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin124ErrJob", res.getBody().data.job_id);

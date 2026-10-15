@@ -1,0 +1,22 @@
+info:
+  name: FIN-124 run-history options
+  type: http
+  seq: 11.2
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124HistJob}}/clarification/options?field_id=job_id&q=Apply penalty"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const page = res.getBody().data;
+        test("FIN-124 resolver publishes the job by name; one match", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(page.options).to.have.lengthOf(1);
+          expect(page.options[0].label).to.equal("Apply penalty to overdue loans");
+          expect(page.options[0].option_id).to.equal("12");
+        });
+        bru.setVar("fin124HistOption", page.options[0].option_id);

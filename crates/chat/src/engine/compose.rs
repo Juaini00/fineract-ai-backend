@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 use crate::engine::{
     dataset::Retained,
+    freshness,
     planner::{Bound, Chart, Plan},
     repository::SettledResponse,
 };
@@ -324,6 +325,35 @@ pub fn analysis(
     retained: &Retained,
     row_cap: Option<RowCapReached>,
 ) -> SettledResponse {
+    analysis_with_freshness(
+        plan,
+        rows,
+        duration_ms,
+        pii_enabled,
+        auto_bound,
+        node_run_id,
+        retained,
+        row_cap,
+        None,
+    )
+}
+
+/// [`analysis`] plus the D14 freshness claim (XR-ASOF) for a capability that
+/// declares `freshness:`. The claim travels the same path as the row cap:
+/// node ledger → dataset handle → this document; the validator recomputes it
+/// from the ledger and rejects a document that claims better.
+#[allow(clippy::too_many_arguments)]
+pub fn analysis_with_freshness(
+    plan: &Plan,
+    rows: &[Map<String, Value>],
+    duration_ms: i64,
+    pii_enabled: bool,
+    auto_bound: &[AutoBound],
+    node_run_id: Uuid,
+    retained: &Retained,
+    row_cap: Option<RowCapReached>,
+    freshness: Option<&freshness::Claim>,
+) -> SettledResponse {
     let (visible, withheld) = visible_fields(plan, pii_enabled);
     let derived_from = [from_node(node_run_id)];
     let period = period(plan);
@@ -371,6 +401,19 @@ pub fn analysis(
                 "body": "This is organization-wide master configuration, not evidence of product use or availability in any particular office.",
             }),
         ));
+    }
+
+    // D14 (owner decision): operational scheduler data is tenant-level, read on
+    // a timezone-naive clock through an explicit half-open window, and says
+    // nothing about success when no run was observed. Stated, not implied (I5).
+    if plan.operational_tenant_wide {
+        blocks.push(operational_scope_block(plan));
+    }
+
+    // D14 / XR-ASOF — the freshness claim is a block of its own, so a Partial or
+    // Unknown completeness always has a visible, structured reason beside it.
+    if let Some(claim) = freshness {
+        blocks.push(freshness_block(claim));
     }
 
     // I5 — tidak ada penghilangan senyap: kolom yang ditahan dinyatakan, bukan
@@ -534,10 +577,7 @@ pub fn analysis(
     // yang dilewati, jadi klaimnya `Complete` — kecuali row cap memotongnya.
     // Validator tetap menghitungnya ulang dari ledger lewat `derived_from`:
     // klaim ini tidak pernah menjadi kebenaran hanya karena ditulis di sini.
-    let (completeness, completeness_reason) = match row_cap {
-        Some(_) => ("Partial", ROW_CAP_REACHED.to_string()),
-        None => ("Complete", format!("curated_query:{}", plan.query_id)),
-    };
+    let (completeness, completeness_reason) = combined_completeness(plan, row_cap, freshness);
 
     SettledResponse {
         kind: "analysis",
@@ -554,6 +594,105 @@ pub fn analysis(
         ),
         blocks,
     }
+}
+
+/// The one lowered completeness claim — `(completeness, reason)` — when the row
+/// cap or the freshness claim lowers it, `None` for `Complete`. The freshness
+/// claim wins whenever present: the cap is always `Partial`, so the claim is
+/// never milder, and both limitation blocks are on the document anyway.
+///
+/// Node ledger, dataset handle and response all read THIS function, so the
+/// three can never disagree about what the claim is (D1).
+pub fn lowered_claim(
+    row_cap: Option<RowCapReached>,
+    freshness: Option<&freshness::Claim>,
+) -> Option<(&'static str, &'static str)> {
+    freshness
+        .filter(|claim| claim.completeness != "Complete")
+        .map(|claim| {
+            (
+                claim.completeness,
+                claim.reason.unwrap_or("freshness_unproven"),
+            )
+        })
+        .or(row_cap.map(|_| ("Partial", ROW_CAP_REACHED)))
+}
+
+fn combined_completeness(
+    plan: &Plan,
+    row_cap: Option<RowCapReached>,
+    freshness: Option<&freshness::Claim>,
+) -> (&'static str, String) {
+    lowered_claim(row_cap, freshness).map_or_else(
+        || ("Complete", format!("curated_query:{}", plan.query_id)),
+        |(completeness, reason)| (completeness, reason.to_string()),
+    )
+}
+
+/// Window the plan was bound to, as the explicit half-open range the SQL uses.
+fn scheduler_window(plan: &Plan) -> Option<(String, String)> {
+    let date = |name: &str| {
+        plan.parameter_names
+            .iter()
+            .zip(&plan.parameters)
+            .find_map(|(parameter, bound)| match bound {
+                Bound::Date(date) if parameter == name => Some(*date),
+                _ => None,
+            })
+    };
+    let (from, to) = (date("from_date")?, date("to_date")?);
+    Some((
+        format!("{from}T00:00:00"),
+        format!("{}T00:00:00", to.succ_opt().unwrap_or(to)),
+    ))
+}
+
+/// D14 operational-scope disclosure (owner decision, 2026-10-15).
+fn operational_scope_block(plan: &Plan) -> Value {
+    let window = scheduler_window(plan)
+        .map(|(start, end)| json!({ "start_inclusive": start, "end_exclusive": end }));
+    block(
+        "operational_scope",
+        "limitation",
+        &[],
+        json!({
+            "title": "Scheduler data scope and meaning",
+            "body": "This is tenant-wide operational scheduler data read by an administrator, not an \
+                     office-scoped fact and not evidence of any business result. Scheduler timestamps \
+                     are timezone-naive as stored; the window is applied to that stored clock with no \
+                     timezone or calendar conversion. A job with no run in the window means no run \
+                     was observed there: it does not show that the job succeeded, failed, was \
+                     skipped or never ran. Raw error text is never returned, and Jarvis never \
+                     triggers or re-runs a job.",
+            "scope_class": "operational_tenant_wide",
+            "timestamp_clock": "timezone_naive_as_stored",
+            "window": window,
+            "window_semantics": "start_inclusive_end_exclusive",
+            "absence_semantics": "no_observed_run_only",
+            "raw_errors_returned": false,
+            "write_actions": "none",
+        }),
+    )
+}
+
+/// The freshness claim as a block: `limitation` when it lowers completeness,
+/// `note` when it proves coverage. Prose carries no numerals (D3); the numbers
+/// live in the structured `facts`.
+fn freshness_block(claim: &freshness::Claim) -> Value {
+    let lowers = claim.completeness != "Complete";
+    block(
+        freshness::FRESHNESS_BLOCK_ID,
+        if lowers { "limitation" } else { "note" },
+        &[],
+        json!({
+            "title": if lowers { "Data freshness not fully proven" } else { "Data freshness proven" },
+            "body": freshness::explain(claim),
+            "completeness": claim.completeness,
+            "reason": claim.reason,
+            "evidence": claim.facts,
+            "run_status_is_not_coverage": true,
+        }),
+    )
 }
 
 /// Pisahkan kolom yang boleh tampil dari yang ditahan.
@@ -761,7 +900,7 @@ pub fn evidence(
                 "capability_id": plan.capability_id,
                 "query_id": plan.query_id,
                 "sql_file": plan.sql_file,
-                "scope_class": if plan.org_wide_reference { "org_wide_reference" } else { "office_bound" },
+                "scope_class": plan.scope_class(),
                 "catalog_version_id": plan.catalog_version_id,
                 "catalog_content_hash": plan.catalog_content_hash,
                 "as_of": as_of(plan),
@@ -789,6 +928,8 @@ mod tests {
             sql: "SELECT 1".into(),
             sql_file: "queries/savings/deposit_total.sql".into(),
             org_wide_reference: false,
+            operational_tenant_wide: false,
+            freshness: None,
             parameters: vec![
                 Bound::Date(chrono::NaiveDate::from_ymd_opt(2026, 9, 1).unwrap()),
                 Bound::OfficeIds(vec![1, 2, 3]),
@@ -1108,6 +1249,106 @@ mod tests {
         assert!(
             !response.blocks.to_string().contains(ROW_CAP_REACHED),
             "row cap yang tidak tercapai tidak boleh diungkap"
+        );
+    }
+
+    /// D14 / XR-ASOF — a freshness claim lowers the document, its reason is the
+    /// document's reason, and the validator accepts it over a `Partial` ledger
+    /// but refuses the same document claiming `Complete` (D1: never better).
+    #[test]
+    fn freshness_claim_lowers_completeness_and_cannot_be_claimed_away() {
+        use crate::engine::validate::{self, Ledger};
+        use std::collections::BTreeMap;
+
+        let claim = freshness::Claim {
+            completeness: "Partial",
+            reason: Some(freshness::BATCH_COVERAGE_INCOMPLETE),
+            facts: json!({ "coverage": { "in_scope_loans": 3, "loans_behind_cob": 2 } }),
+            queries_issued: 2,
+        };
+        let rows = [row("1.00", 1), row("2.00", 2)];
+        let lowered = analysis_with_freshness(
+            &plan(),
+            &rows,
+            5,
+            false,
+            &[],
+            node(),
+            &dataset(),
+            None,
+            Some(&claim),
+        );
+
+        assert_eq!(lowered.completeness, "Partial");
+        assert_eq!(
+            lowered.completeness_reason,
+            freshness::BATCH_COVERAGE_INCOMPLETE
+        );
+        assert_shape(&lowered.blocks);
+        let block = lowered
+            .blocks
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["block_id"] == freshness::FRESHNESS_BLOCK_ID)
+            .expect("blok freshness");
+        assert_eq!(block["type"], "limitation");
+        assert_eq!(block["run_status_is_not_coverage"], true);
+        assert_eq!(block["evidence"]["coverage"]["loans_behind_cob"], 2);
+
+        let partial_ledger = Ledger {
+            contributors: BTreeMap::from([(node().to_string(), "Partial".to_string())]),
+            ..Ledger::default()
+        };
+        assert_eq!(validate::apply(lowered, &partial_ledger).status(), "passed");
+
+        // The same rows composed WITHOUT the claim say `Complete`; over the
+        // Partial ledger the validator must refuse that.
+        let optimistic = analysis(&plan(), &rows, 5, false, &[], node(), &dataset(), None);
+        assert_eq!(optimistic.completeness, "Complete");
+        assert_ne!(
+            validate::apply(optimistic, &partial_ledger).status(),
+            "passed"
+        );
+    }
+
+    /// One function decides the claim for node, dataset and response: a weaker
+    /// claim never hides a stronger one, and `Complete` lowers nothing.
+    #[test]
+    fn lowered_claim_is_the_single_source_for_ledger_dataset_and_response() {
+        let capped = Some(RowCapReached { row_cap: 2 });
+        let partial = freshness::Claim {
+            completeness: "Partial",
+            reason: Some(freshness::BATCH_COVERAGE_INCOMPLETE),
+            facts: Value::Null,
+            queries_issued: 2,
+        };
+        let unknown = freshness::Claim {
+            completeness: "Unknown",
+            reason: Some(freshness::COB_DATE_UNAVAILABLE),
+            facts: Value::Null,
+            queries_issued: 1,
+        };
+        let complete = freshness::Claim {
+            completeness: "Complete",
+            reason: None,
+            facts: Value::Null,
+            queries_issued: 2,
+        };
+
+        assert_eq!(lowered_claim(None, None), None);
+        assert_eq!(lowered_claim(None, Some(&complete)), None);
+        assert_eq!(
+            lowered_claim(capped, Some(&complete)),
+            Some(("Partial", ROW_CAP_REACHED))
+        );
+        assert_eq!(
+            lowered_claim(capped, Some(&partial)),
+            Some(("Partial", freshness::BATCH_COVERAGE_INCOMPLETE))
+        );
+        assert_eq!(
+            lowered_claim(capped, Some(&unknown)),
+            Some(("Unknown", freshness::COB_DATE_UNAVAILABLE))
         );
     }
 

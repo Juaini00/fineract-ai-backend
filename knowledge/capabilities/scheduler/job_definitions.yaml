@@ -1,0 +1,48 @@
+id: scheduler_job_definitions
+status: approved_mvp
+domain: scheduler
+display_name: Scheduler Job Definitions and Run Observations
+description: >-
+  Fineract batch (scheduler) job definitions, one row per job — name, cron
+  schedule and active flag — with how many runs were observed in an explicit
+  window (total, success, failed, other) and each job's latest run overall
+  (start, end, status, trigger type), which is not filtered by the window.
+  A job with no run in the window is reported as no observed run: that proves
+  only that no run was observed, never that it succeeded, failed or never ran.
+  Scheduler timestamps are timezone-naive; the window is half-open
+  [from_date 00:00:00, to_date + 1 day 00:00:00) on the stored clock. A request must state its window as explicit dates on
+  the stored clock; calendar words ("last night", "semalam") and timezone names
+  are refused, never converted. Raw error
+  text is never returned. Tenant-wide operational data, not office-scoped.
+data_areas: [scheduler_ops]
+required_api_capability: scheduler_job_definitions
+query_id: scheduler.job_definitions
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: scheduler_job, grouping: none, output: list, pii: none }
+examples:
+  - Which scheduled batch jobs ran between 2026-09-01 and 2026-09-07 on the stored clock, and what is each job's latest run status?
+  - Did the Post Interest For Savings batch job run between 2026-08-01 and 2026-08-31 on the stored clock?
+  - Show the batch job definitions with their run counts from 2026-09-01 to 2026-09-08 on the stored clock.
+  - Tampilkan status job batch dari 2026-09-01 sampai 2026-09-07 pada jam tersimpan.
+supported_intents:
+  - list scheduler job definitions with run counts in an explicit window and the latest run status per job
+guards:
+  max_date_range_days: 366
+  operational_tenant_wide: true
+  pii: { returns_pii: false }
+checks:
+  - id: window_half_open
+    rule: runs are counted with start_time >= from_date and start_time < to_date + 1 day on the stored naive clock.
+  - id: latest_not_filtered
+    rule: the latest run columns come from the whole history, never from the window.
+  - id: no_raw_errors
+    rule: error_message and error_log are never selected.
+parameters:
+  from_date: { type: date, required: true }
+  to_date: { type: date, required: true }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 100

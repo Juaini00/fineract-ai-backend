@@ -1142,3 +1142,96 @@ used a deterministic test-fixture provider, not the real LLM.
 
 Limitation: AUD/EUR transactions are outside the default first page and were
 checked by SQL only; no AUD loan charge exists in this deployment.
+
+## 16. FIN-124 / D14 — scheduler job definitions, failed runs, loan_arrears freshness
+
+Two numbers side by side, two writings: production SQL in `queries/scheduler/`
+and `queries/loan/loan_cob_coverage.sql`, independent oracle in `tests/answers/`
+(`scheduler_job_failed_runs.sql`, `scheduler_job_definitions.sql`,
+`loan_arrears__freshness.sql`), compared row for row over HTTP by
+`answers/scheduler/*` and `answers/loans/loan_arrears-*.yml`. Database
+`fineract_default`, read-only (SELECT/PREPARE only, no fixture writes). HTTP
+planning used the **real** configured provider (`qwen-cloud`, `qwen3.8-flash`)
+through the Rig planner; its URL needed the `/chat/completions` suffix as a
+process-only override, `.env` untouched.
+
+| Capability / probe | Window or scope | Production (HTTP job) | Independent SQL |
+| --- | --- | --- | --- |
+| `scheduler_job_run_history` (job 12, success AND failed, via resolver) | `April 2026 to May 2026 on the stored clock` -> `[2026-04-01 00:00:00, 2026-06-01 00:00:00)` | 33 rows (`e33921c9…`, final hash `3671aaa3…`; the earlier `024a59e0…` request did not state the stored clock): 9 failed 2026-04-01..04-09 then 24 success 2026-04-10..05-03, oldest first, latest overall `success` on the last row | 33 rows identical row for row (ids, order, text timestamps, `is_job_latest_run`, latest status) |
+| `scheduler_job_failed_runs` (earlier run, knowledge hash `2d9ee04f…`, not re-run at the final hash) | `April 2026 to May 2026` -> `[2026-04-01 00:00:00, 2026-06-01 00:00:00)` | 90 rows (`bae2e8d6…`): jobs 7 = 33, 8 = 33, 42 = 15, 12 = 9; latest overall failed for 7/8/42, success for 12; 89 cron + 1 application | 90 rows, identical row for row (ids, order, text timestamps, latest status) |
+| `scheduler_job_definitions` | `December 2025 to December 2025 on the stored clock` -> `[2025-12-01 00:00:00, 2026-01-01 00:00:00)` | 44 jobs (`c5aaa101…`, final hash; an earlier attempt `d2da2a83…` ended `planner_output_invalid` — model output, nothing executed — and was re-submitted unchanged); job 36 (`Send Asynchronous Events`, every minute) 44,640 runs; job 42 (active daily) 0 runs, `no_observed_run`, latest `failed` | 44 jobs identical; job 36 = 31 x 1,440 = 44,640 (runs at exactly `2025-12-01 00:00:00` counted, at `2026-01-01 00:00:00` excluded) |
+| freshness batch probe `Loan COB` | read with `m_business_date` | `cob_date` 2026-09-07, `business_date` 2026-09-08, latest run `success` 2026-05-03T18:30:00.000 (run 307177) | identical |
+| `loan.loan_cob_coverage` (all 8 offices) | active/transfer loans | 87 in scope, 87 behind COB, oldest last-closed 2026-02-10 | 87 / 87 / 2026-02-10 |
+| calendar word on the stored clock (refusal) | `semalam (last night) on the stored clock` | rev 3 (older rule): guard `stored_clock_window_required` (`7ab9569e…`); rev 4: real model `planner_no_fit` (`ccd60f2a…`); the guard's positive-evidence rule is unit-tested | — |
+| original question D, Indonesian: latest successful interest posting proves August + every account current | `2026-08-01..2026-08-31` stored clock | `limitation` / `Unknown` / `planner_no_fit` (`963d15e5…`), explicit text that run observations + an unsupported coverage claim are not answered; no rows | — |
+| `loan_arrears` completeness (earlier hash, not re-run: no change to the capability, its SQL or `freshness.rs`) | same scope | `Partial` / `batch_coverage_incomplete` on node ledger, dataset handle and response (`8d6465fb…`; first run `cb1cdd30…`), 59 arrears rows = oracle 59 | — |
+
+Why the `loan_arrears` answer is `Partial` on this fixture while a **successful**
+Loan COB run exists: the newest run (2026-05-03) succeeded, yet every in-scope
+loan's `last_closed_business_date` is older than the COB date, so the run proves
+nothing about coverage. Counts are fixture observations only.
+
+Time semantics (verified against the Fineract source and the data, not the DB
+session or the machine): `job_run_history` timestamps are `timestamp without time
+zone`; `SchedulerJobListener.jobWasExecuted` writes `context.getFireTime()` /
+`new Date()` and `status` `success`|`failed`, `trigger_type` `cron` by default or
+`application` (`SchedulerServiceConstants`, `JobRegisterServiceImpl.executeJob`).
+Every cron-fired run in this deployment sits exactly 5 h 30 min earlier than its
+cron expression (e.g. `0 0 0 ...` stored at `18:30:00`, `0 0 22 ...` at `16:30:00`,
+all months), consistent with the tenant-timezone cron trigger
+(`fineract.tenant.timezone` default `Asia/Kolkata`) and a UTC-storing JVM
+(`-Duser.timezone=UTC`) — but `fineract_tenants.tenants.timezone_id` says
+`Asia/Beirut`, so the storage zone is **not** declared by the data. The capability
+therefore declares the clock as `timezone_naive_as_stored`, applies windows to it
+without conversion, and invents no calendar meaning. Owner decision (2026-10-15):
+**explicit stored-clock windows only** — `param_parse::stored_clock_window_issue`,
+called by the planner for every `operational_tenant_wide` query with a `from_date`,
+refuses (`stored_clock_window_required`) unless the request states the stored clock
+AND an explicit month/ISO date range (positive evidence, no word list) with no
+relative period beside it; nothing is converted or guessed.
+Zero reversed (`end < start`) and zero cross-date runs were observed.
+
+Fixture limits: no `Post Interest For Savings` (id 6), `Transfer Interest To
+Savings` (14), `Recalculate Interest For Loans` (17) or `Generate Loan Loss
+Provisioning` (19) run ever failed (coordinator evidence), so the mixed
+failed/success mechanism is shown on jobs 7, 8, 12, 42; no two failed runs share a
+`start_time`, so the `id DESC` tie-break is declared in SQL but not exercised by
+data; the `Unknown` verdicts are covered by a pure test of `freshness::assess`,
+not by this fixture. Freshness rule hardening (review): `Complete` needs the batch observed AND its latest run `success` AND zero loans behind COB; an absent run or unfamiliar status is `Unknown`, never guessed success (pure test).
+
+Other batch-sensitive analyses — investigated in Fineract source and in every
+`queries/*/*.sql`, not assumed:
+
+- Savings interest posting: `m_savings_account.interest_posted_till_date` is set to
+  the transaction date of the latest non-reversed interest-posting (or overdraft-
+  interest) transaction (`SavingsAccountSummary.updateRunningBalanceAndPivotDate`).
+  `PostInterestForSavingTasklet` / `retrieveAllSavingsDataForInterestPosting`
+  selects, on every run, ACTIVE accounts whose value is NULL or <= business date - 1.
+  So the column is a recorded fact about the last posting, not a coverage marker:
+  no transaction exists when interest is zero or no posting period ended, and being
+  "behind" is the normal state between periods. Fixture (171 active accounts): 85 monthly accounts at
+  `2026-09-01`, 43 daily at `2026-09-09`/`2026-09-10` (after the business date
+  2026-09-08), 25 never posted, 18 older. No account-level fact proves "posted through the business date",
+  so coverage is **not derivable** — and no implemented query reads a posting-
+  dependent column (`interest_posted_till_date`, `total_interest_*`,
+  `last_interest_calculation_date`), so no capability receives a freshness claim.
+  `savings_balance_summary` sums recorded `account_balance_derived`: it is not lowered.
+- Provisioning (D07): `m_provisioning_history` has 0 rows and no capability exists.
+- Columns written by Loan COB / arrears jobs (`m_loan_arrears_aging`, `last_closed_business_date`)
+  are read only by `loan_arrears` (and its coverage probe) — the one hand-off.
+- RD overdue (`total_overdue_amount`, `no_of_overdue_installments`, read by
+  `savings_deposit_maturity_by_client`) is written by `updateOverduePayments` on
+  activation/transaction/undo/adjust, not by a scheduler job: a recorded value, not a batch result.
+
+Remaining honest gaps: a question about interest-posting *freshness* is answered
+only with run observations (scheduler responses state that a run proves no business
+result) and stays a declared `gap_intent`; the `job_run_history` storage timezone is
+undeclared, so only stored-clock windows are accepted.
+
+Real-model note (2026-10-15): the scoped scheduler chains (definitions 44 = SQL 44,
+run history and failed runs row-for-row equal to independent SQL, refusals) passed on a
+second scoped run; the first run failed at the run-history form (provider timeout, then
+`static_verification_rejected`) and is retained as failed evidence. A single-month
+date-slot quote ("April 2026") was a demonstrated verifier gap and is now bound; the
+run-history `no_fit` and the uncaptured rejection are provider-reliability limits, not a
+catalog defect. This is not a claim that planning is reliable.

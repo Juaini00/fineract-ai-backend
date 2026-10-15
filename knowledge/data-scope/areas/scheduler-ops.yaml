@@ -1,0 +1,28 @@
+id: scheduler_ops
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#d14--schedulerbatch-job-runs-terbatas-plus-sinyal-freshness
+inventory_refs: [D14]
+description: >-
+  Scheduler job definitions (`job`) and run history (`job_run_history`) as a
+  bounded operational surface and a data-completeness freshness signal, plus the
+  Fineract business-date row (`m_business_date`) that anchors the freshness
+  hand-off. Tenant-wide operational data read by an authenticated admin (owner
+  decision, D14): not an office fact and not an org-wide reference master.
+  Raw `error_message` / `error_log` are never read.
+included_tables:
+  - job
+  - job_run_history
+  - m_business_date
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [scheduler]
+default_rules:
+  - Scheduler timestamps are timezone-naive; windows are explicit half-open ranges over the stored clock and no calendar or timezone meaning is invented.
+  - A window with no run proves only that no run was observed in it; it never proves success, failure or that the job never ran.
+  - A successful run never proves business-period or account coverage; coverage is proven from account-level facts or reported Partial/Unknown.
+  - Jarvis never triggers, re-runs, enables, disables or edits a job (write forbidden).
+checks:
+  - id: operational_tables_only
+    rule: Only office_scope.yaml operational_tenant_tables may be read under operational_tenant_wide.
+  - id: no_raw_error_text
+    rule: error_message, error_log and initializing_errorlog never appear in any approved query output.

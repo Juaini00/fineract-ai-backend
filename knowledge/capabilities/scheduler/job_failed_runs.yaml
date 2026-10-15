@@ -1,0 +1,46 @@
+id: scheduler_job_failed_runs
+status: approved_mvp
+domain: scheduler
+display_name: Failed Scheduler Job Runs
+description: >-
+  Failed Fineract batch (scheduler) job runs, one row per run, whose start falls
+  in an explicit window — job, start, end, status, trigger type — newest first
+  with ties broken by run id, plus the job's latest run status overall. A
+  failure stays listed even when a later run of the same job succeeded. Raw
+  error text is never returned. Scheduler timestamps are
+  timezone-naive; the window is half-open [from_date 00:00:00, to_date + 1 day
+  00:00:00) on the stored clock. A request must state its window as explicit dates on
+  the stored clock; calendar words ("last night", "semalam") and timezone names
+  are refused, never converted. Tenant-wide operational data, not
+  office-scoped; never a trigger or re-run.
+data_areas: [scheduler_ops]
+required_api_capability: scheduler_job_failed_runs
+query_id: scheduler.job_failed_runs
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: scheduler_job_run, grouping: none, output: list, pii: none }
+examples:
+  - Which scheduled batch jobs failed between 2026-04-01 and 2026-05-05 on the stored clock?
+  - List failed batch job runs from 2026-05-01 to 2026-05-04 on the stored clock.
+  - Job batch mana yang gagal dari 2026-05-01 sampai 2026-05-04 pada jam tersimpan?
+supported_intents:
+  - list failed scheduler job runs in an explicit window with the job's latest run status
+guards:
+  max_date_range_days: 366
+  operational_tenant_wide: true
+  pii: { returns_pii: false }
+checks:
+  - id: window_half_open
+    rule: runs are selected with start_time >= from_date and start_time < to_date + 1 day on the stored naive clock.
+  - id: failed_history_kept
+    rule: a failed run is listed even if a later run of the same job succeeded; the latest status is a separate column.
+  - id: no_raw_errors
+    rule: error_message and error_log are never selected.
+parameters:
+  from_date: { type: date, required: true }
+  to_date: { type: date, required: true }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 100

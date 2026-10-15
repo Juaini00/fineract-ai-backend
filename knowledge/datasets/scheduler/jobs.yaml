@@ -1,0 +1,30 @@
+---
+id: scheduler.jobs
+database: fineract
+tables:
+  - job
+entity:
+  kind: scheduler_job
+  id_field: job_id
+  label_fields: [job_name]
+  label_fallback: "Scheduler job {job_id}"
+shapes:
+  - id: job_candidates
+    role: resolver
+    expected_cardinality: many
+    row_cap: 25
+    produces:
+      - { slot: job_id, type: integer, sensitivity: public_business, cardinality: many }
+    request_shape:
+      operation: lookup
+      subject: scheduler_job
+      grouping: none
+      output: lookup
+      pii: none
+    output_fields:
+      - { name: job_id, type: bigint, sensitivity: public_business, core: true }
+      - { name: job_name, type: string, sensitivity: public_business, core: true }
+      - { name: is_active, type: boolean, sensitivity: public_business }
+    # D14: tenant-level operational data, no office path — the resolver declares
+    # no authorized_scope parameter and none is invented.
+timeout_ms: 3000

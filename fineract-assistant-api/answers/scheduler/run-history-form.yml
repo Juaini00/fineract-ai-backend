@@ -1,0 +1,42 @@
+info:
+  name: FIN-124 run-history form
+  type: http
+  seq: 11.1
+  description: |
+    The job is an identity slot (K1): the engine suspends the SAME job and asks the
+    caller to choose from the approved job list (resolver scheduler.job_candidates,
+    tenant-level, no office scope). Polls until the form is open.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124HistJob}}/clarification"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        const open = (res.getStatus() === 200 && res.getBody().data.state === "open");
+        if (!open) {
+          const key = "fin124HistFormStart";
+          const started = Number(bru.getVar(key) || 0) || Date.now();
+          bru.setVar(key, started);
+          if (Date.now() - started > 90000) throw new Error("The clarification form did not open");
+          await poll.sleep(1000);
+          bru.setNextRequest(req.getName());
+        } else {
+          const form = res.getBody().data;
+          const field = form.fields_json.find((f) => f.field_id === "job_id");
+          test("FIN-124 job slot is a single_choice from the approved job resolver (no free text)", function () {
+            expect(field, "field job_id").to.exist;
+            expect(field.type).to.equal("single_choice");
+            expect(field.resolver_ref).to.equal("scheduler.job_candidates");
+            expect(field.resolver.dataset_id).to.equal("scheduler.jobs");
+            expect(field.candidate_count).to.equal(44);
+          });
+          test("FIN-124 the window was bound from the request, only the job is asked", function () {
+            expect(form.fields_json.map((f) => f.field_id)).to.deep.equal(["job_id"]);
+          });
+          bru.setVar("fin124HistClarification", form.clarification_id);
+        }

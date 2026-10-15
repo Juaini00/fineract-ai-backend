@@ -1,0 +1,30 @@
+info:
+  name: FIN-124 run-history choose job
+  type: http
+  seq: 11.3
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs/{{fin124HistJob}}/responses"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124HistKey}}-answer"
+  body:
+    type: json
+    data: |
+      {
+        "clarification_id": "{{fin124HistClarification}}",
+        "revision": 1,
+        "answers": { "job_id": "{{fin124HistOption}}" }
+      }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        test("FIN-124 the same job resumes", function () {
+          expect(res.getStatus()).to.equal(202);
+          expect(res.getBody().data.job_id).to.equal(bru.getVar("fin124HistJob"));
+        });

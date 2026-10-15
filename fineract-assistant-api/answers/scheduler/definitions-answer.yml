@@ -1,0 +1,57 @@
+info:
+  name: FIN-124 definitions answer
+  type: http
+  seq: 22
+  description: |
+    Chain 2 — job grain with missing runs and time boundaries. Window "December
+    2025 to December 2025" -> [2025-12-01 00:00:00, 2026-01-01 00:00:00). Runs
+    exist exactly at 2025-12-01 00:00:00 (included) and 2026-01-01 00:00:00
+    (excluded): "Send Asynchronous Events" (every minute) must count 31 * 1440.
+    "Recalculate Savings Balances" is an active daily job with zero runs in the
+    window: that proves no observed run only.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124DefsJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "scheduler_job_definitions", document);
+          const got = answers.answerRows(document);
+          const job = (id) => got.rows.find((r) => r.job_id === id);
+          test("FIN-124 definitions: Answered/Complete, validator passed, job grain (one row per job)", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+            expect(got.rows.length).to.equal(44);
+            expect(new Set(got.rows.map((r) => r.job_id)).size).to.equal(44);
+            expect(got.rows.map((r) => r.job_id)).to.deep.equal(got.rows.map((r) => r.job_id).slice().sort((a, b) => a - b));
+          });
+          test("FIN-124 boundaries: [start, end) — the 00:00:00 run at the start counts, the one at the end does not", function () {
+            expect(job(36).runs_in_window).to.equal(31 * 1440);
+            expect(job(36).window_observation).to.equal("runs_observed");
+          });
+          test("FIN-124 zero runs: no_observed_run only — latest run status stays separate and unfiltered", function () {
+            const daily = job(42);
+            expect(daily.is_active).to.equal(true);
+            expect(daily.cron_expression).to.equal("0 0 0 1/1 * ? *");
+            expect(daily.runs_in_window).to.equal(0);
+            expect(daily.window_observation).to.equal("no_observed_run");
+            expect(daily.success_runs_in_window).to.equal(0);
+            expect(daily.failed_runs_in_window).to.equal(0);
+            // Its latest run overall is a failure outside the window: the window says nothing about it.
+            expect(daily.latest_run_status).to.equal("failed");
+          });
+          test("FIN-124 absence semantics disclosed; no success/failure/never-ran claim", function () {
+            const scope = document.blocks_json.find((b) => b.block_id === "operational_scope");
+            expect(scope.absence_semantics).to.equal("no_observed_run_only");
+            expect(scope.window).to.deep.equal({ start_inclusive: "2025-12-01T00:00:00", end_exclusive: "2026-01-01T00:00:00" });
+            expect(scope.body).to.include("does not show that the job succeeded, failed, was skipped or never ran");
+          });
+        }

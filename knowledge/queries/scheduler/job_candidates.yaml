@@ -1,0 +1,17 @@
+id: scheduler.job_candidates
+database: fineract
+# Resolver for the job identity slot of scheduler_job_run_history (K1): a job is
+# chosen from the approved list, never bound from free text.
+sql_file: queries/scheduler/job_candidates.sql
+data_areas: [scheduler_ops]
+tables: [job]
+metrics: []
+resolves: { dataset_id: scheduler.jobs, shape_id: job_candidates }
+parameters: []
+output_fields:
+  - { name: job_id, type: bigint, sensitivity: public_business }
+  - { name: job_name, type: string, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [job_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, operational_tenant_wide: true, parameterized_only: true }
+timeout_ms: 3000

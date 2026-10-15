@@ -41,3 +41,8 @@ bindings:
   # Filter-only and never projected; reaches SQL as transient_sensitive_input,
   # but still needs a declared home so a clarification answer can be stored.
   account_number: [account_number]
+  # Probe-only parameters (D14 freshness hand-off). Nothing the user says binds
+  # them: the batch name comes from the capability's `freshness` declaration and
+  # the COB date from the business-date row read by the batch probe.
+  batch_job_name: []
+  cob_date: []

@@ -1,0 +1,12 @@
+info:
+  name: scheduler
+  seq: 7
+  description: |
+    FIN-124 D14: scheduler job definitions + run history (operational tenant-wide
+    read, owner decision) and the loan_arrears freshness hand-off. Four chains
+    with REAL-model planning, each compared row-for-row with independent SQL
+    under tests/answers/scheduler_*.sql:
+      1. run history of one chosen job — success AND failed attempts, chronological, latest separate
+      2. job definitions — zero-run window, half-open boundaries, job grain
+      3. loan_arrears freshness — answers/loans/loan_arrears-* (Partial + reason)
+      4. refusals — raw errors, read+rerun, office filter, calendar word on the stored clock, coverage claim (question D)

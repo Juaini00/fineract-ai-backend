@@ -24,7 +24,7 @@ use crate::{
     catalog::Catalog,
     clarification::repository::{self as clarification_repository, AcceptedAnswer},
     engine::{
-        compose, dataset, executor, memory,
+        compose, dataset, executor, freshness, memory,
         planner::{self, Plan},
         repository::{self, ClaimedJob, NodeOutcome, SettledResponse},
         resolver,
@@ -241,13 +241,17 @@ async fn run_job(
     // ditolak sebelum scope, retrieval, plan, dan query sumber apa pun; ia
     // tidak boleh jatuh ke capability baca terdekat lalu dijawab (FIN-139).
     if write_intent::is_write_request(&job.request_text) {
-        return settle_blocked(
-            foundation,
-            job,
-            WRITE_NOT_SUPPORTED,
-            "Jarvis is read-only: it never creates, changes or deletes data in Fineract, so this request was not run.",
-        )
-        .await;
+        // D14 — a read that also asks to trigger or re-run a job is a write:
+        // the whole request is refused (existing rejection contract), and the
+        // refusal says exactly what did not happen, so no side effect is implied.
+        let explanation = if write_intent::is_scheduler_rerun_request(&job.request_text) {
+            "Jarvis is read-only: it never triggers, re-runs or changes scheduler jobs. This request \
+             asks for a job re-run, so the whole request was refused: no job was triggered or re-run, \
+             nothing was changed, and no query was run."
+        } else {
+            "Jarvis is read-only: it never creates, changes or deletes data in Fineract, so this request was not run."
+        };
+        return settle_blocked(foundation, job, WRITE_NOT_SUPPORTED, explanation).await;
     }
 
     // OVR-6.6 — permintaan atas permukaan yang tidak disetujui (field rahasia,
@@ -341,11 +345,13 @@ async fn run_job(
 
     let plan = match planned {
         Ok(plan) => plan,
-        Err(planner::Unplannable::PlannerFailure(code)) => {
-            return settle_failed_with(
-                foundation, job, code,
-                "The planner could not produce a verified plan, so this request was not answered. No source query was run.",
-            ).await;
+        Err(problem @ planner::Unplannable::PlannerFailure(code)) => {
+            let explanation = if code == "planner_no_fit" {
+                problem.explain()
+            } else {
+                "The planner could not produce a verified plan, so this request was not answered. No source query was run.".to_string()
+            };
+            return settle_failed_with(foundation, job, code, &explanation).await;
         }
         Err(planner::Unplannable::InvalidSource(_)) => {
             return settle_failed_with(
@@ -480,6 +486,21 @@ async fn run_job(
             // memori melihat set yang sama, dan pemotongannya dinyatakan.
             let row_cap = compose::cap_rows(&plan, &mut result.rows);
 
+            // D14 / XR-ASOF — a capability that declares `freshness:` is only
+            // Complete when account-level evidence proves the batch covered
+            // it. The claim is computed once, here, from approved probes run
+            // outside any commit transaction (I1), and then travels the same
+            // ledger → dataset → response path as the row cap.
+            let freshness = match &plan.freshness {
+                Some(declared) => Some(
+                    freshness::gather(foundation.fineract_db(), declared, &authorized)
+                        .await
+                        .for_rows(result.rows.len()),
+                ),
+                None => None,
+            };
+            let lowered = compose::lowered_claim(row_cap, freshness.as_ref());
+
             // Sakelar PII disnapshot saat job diterima (#15), bukan dibaca ulang
             // sekarang: laporan tidak boleh berubah makna karena konfigurasi
             // berubah di tengah eksekusi.
@@ -517,12 +538,10 @@ async fn run_job(
                 attempt,
                 NodeOutcome {
                     status: "Completed",
-                    completeness: Some(if row_cap.is_some() {
-                        "Partial"
-                    } else {
-                        "Complete"
-                    }),
-                    completeness_reason: row_cap.map(|_| compose::ROW_CAP_REACHED),
+                    completeness: Some(
+                        lowered.map_or("Complete", |(completeness, _)| completeness),
+                    ),
+                    completeness_reason: lowered.map(|(_, reason)| reason),
                     failure_code: None,
                     // Hasil kecil disimpan inline; dataset berchunk baru
                     // diperlukan saat hasil besar, dan belum ada konsumennya.
@@ -544,9 +563,27 @@ async fn run_job(
                             .map(|slot| slot.field_id.as_str())
                             .collect::<Vec<_>>(),
                     }),
-                    provenance_json: node_provenance(&plan, result.rows.len()),
+                    provenance_json: {
+                        let mut provenance = node_provenance(&plan, result.rows.len());
+                        if let Some(claim) = &freshness {
+                            provenance["freshness"] = serde_json::json!({
+                                "completeness": claim.completeness,
+                                "reason": claim.reason,
+                                "evidence": claim.facts,
+                                "queries_issued": claim.queries_issued,
+                                "probe_queries": plan.freshness.as_ref().map(|declared| {
+                                    [&declared.batch.query_id, &declared.coverage.query_id]
+                                        .into_iter()
+                                        .take(claim.queries_issued.max(0) as usize)
+                                        .collect::<Vec<_>>()
+                                }),
+                            });
+                        }
+                        provenance
+                    },
                     rows_returned: Some(result.rows.len() as i64),
                     duration_ms: Some(result.duration_ms),
+                    extra_queries: freshness.as_ref().map_or(0, |claim| claim.queries_issued),
                 },
             )
             .await?;
@@ -569,6 +606,7 @@ async fn run_job(
                 &authorized,
                 &stored_rows,
                 row_cap,
+                lowered,
             )
             .await?
             else {
@@ -577,7 +615,7 @@ async fn run_job(
                 return Ok(false);
             };
 
-            let response = compose::analysis(
+            let response = compose::analysis_with_freshness(
                 &plan,
                 &result.rows,
                 result.duration_ms,
@@ -586,6 +624,7 @@ async fn run_job(
                 node_run_id,
                 &retained,
                 row_cap,
+                freshness.as_ref(),
             );
 
             // D1–D3 sesudah ledger durable, bukan sebelum: yang divalidasi
@@ -652,6 +691,7 @@ async fn run_job(
                     provenance_json: node_provenance(&plan, 0),
                     rows_returned: None,
                     duration_ms: None,
+                    extra_queries: 0,
                 },
             )
             .await?;
@@ -687,6 +727,7 @@ async fn retain_dataset(
     authorized: &[i64],
     rows: &[serde_json::Map<String, serde_json::Value>],
     row_cap: Option<compose::RowCapReached>,
+    lowered: Option<(&'static str, &'static str)>,
 ) -> anyhow::Result<Option<dataset::Retained>> {
     let pool = foundation.app_db().pool();
     let config = foundation.config();
@@ -696,6 +737,7 @@ async fn retain_dataset(
         materialized.truncation,
         materialized.row_count_total,
         row_cap,
+        lowered,
     );
     debug_assert!(dataset::claim_is_stated(
         materialized.truncated(),
@@ -728,7 +770,7 @@ async fn retain_dataset(
             // dinyatakan, dan itu tidak boleh dibaca sebagai "tanpa fanout".
             grain_json: serde_json::json!({}),
             // Scope yang BENAR-BENAR dipakai mengeksekusi, bukan yang diminta.
-            scope_json: serde_json::json!({ "office_ids": authorized, "scope_class": if plan.org_wide_reference { "org_wide_reference" } else { "office_bound" } }),
+            scope_json: serde_json::json!({ "office_ids": authorized, "scope_class": plan.scope_class() }),
             provenance_json: provenance,
             // Urutan dibekukan pada saat materialisasi: chunk menyimpan baris
             // persis seperti yang dikembalikan query yang disetujui, dan
@@ -788,15 +830,19 @@ fn handle_claim(
     storage_truncation: Option<&'static str>,
     row_count_total: Option<i64>,
     row_cap: Option<compose::RowCapReached>,
+    lowered: Option<(&'static str, &'static str)>,
 ) -> HandleClaim {
-    let completeness_reason = storage_truncation.or(row_cap.map(|_| compose::ROW_CAP_REACHED));
+    // Storage truncation is named first (api-reference); otherwise the
+    // node-level lowered claim — the same value the ledger and the response
+    // carry, so the three can never disagree.
+    let (completeness, completeness_reason) = match (storage_truncation, lowered) {
+        (Some(reason), _) => ("Partial", Some(reason)),
+        (None, Some((completeness, reason))) => (completeness, Some(reason)),
+        (None, None) => ("Complete", None),
+    };
 
     HandleClaim {
-        completeness: if completeness_reason.is_some() {
-            "Partial"
-        } else {
-            "Complete"
-        },
+        completeness,
         completeness_reason,
         row_count_total: if row_cap.is_some() {
             None
@@ -1265,7 +1311,12 @@ mod tests {
         let reached = Some(compose::RowCapReached { row_cap: 100 });
 
         assert_eq!(
-            handle_claim(None, Some(100), reached),
+            handle_claim(
+                None,
+                Some(100),
+                reached,
+                Some(("Partial", compose::ROW_CAP_REACHED))
+            ),
             HandleClaim {
                 completeness: "Partial",
                 completeness_reason: Some(compose::ROW_CAP_REACHED),
@@ -1281,7 +1332,12 @@ mod tests {
         let reached = Some(compose::RowCapReached { row_cap: 100 });
 
         assert_eq!(
-            handle_claim(Some(dataset::ROW_CAP_REASON), Some(100), reached),
+            handle_claim(
+                Some(dataset::ROW_CAP_REASON),
+                Some(100),
+                reached,
+                Some(("Partial", compose::ROW_CAP_REACHED))
+            ),
             HandleClaim {
                 completeness: "Partial",
                 completeness_reason: Some(dataset::ROW_CAP_REASON),
@@ -1289,7 +1345,7 @@ mod tests {
             }
         );
         assert_eq!(
-            handle_claim(Some(dataset::BYTE_CAP_REASON), Some(7), None),
+            handle_claim(Some(dataset::BYTE_CAP_REASON), Some(7), None, None),
             HandleClaim {
                 completeness: "Partial",
                 completeness_reason: Some(dataset::BYTE_CAP_REASON),
@@ -1297,7 +1353,7 @@ mod tests {
             }
         );
         assert_eq!(
-            handle_claim(None, Some(7), None),
+            handle_claim(None, Some(7), None, None),
             HandleClaim {
                 completeness: "Complete",
                 completeness_reason: None,

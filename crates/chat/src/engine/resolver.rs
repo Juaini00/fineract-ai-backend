@@ -57,6 +57,10 @@ pub struct ResolverSlot {
     /// Memperlakukannya sebagai batas populasi membuat kandidat ke-26 tidak
     /// pernah dapat dipilih walaupun paginasi ada.
     pub page_size: usize,
+    /// Manifest resolver mendeklarasikan parameter `authorized_scope`. Resolver
+    /// data operasional tingkat tenant (D14, `operational_tenant_wide`) tidak
+    /// punya jalur office: tidak ada scope untuk diikat, dan tidak dikarang.
+    pub scoped: bool,
 }
 
 impl ResolverSlot {
@@ -94,6 +98,11 @@ impl ResolverSlot {
                 .collect(),
             // Shape tanpa row_cap: halaman probe yang lebih ketat, bukan tanpa batas.
             page_size: resolver.shape.row_cap.unwrap_or(25).max(1),
+            scoped: resolver
+                .query
+                .parameters
+                .iter()
+                .any(|parameter| parameter.source.as_deref() == Some("authorized_scope")),
         })
     }
 }
@@ -139,7 +148,11 @@ pub async fn candidates(
     let executed = executor::run(
         fineract,
         &slot.sql,
-        &[Bound::OfficeIds(authorized_office_ids.to_vec())],
+        &if slot.scoped {
+            vec![Bound::OfficeIds(authorized_office_ids.to_vec())]
+        } else {
+            Vec::new()
+        },
         slot.timeout_ms,
     )
     .await?;
@@ -319,6 +332,7 @@ mod tests {
             label_fallback: Some("Client {client_id}".into()),
             public_fields: vec!["client_id".into(), "office_id".into(), "office_name".into()],
             page_size: 2,
+            scoped: true,
         }
     }
 
@@ -352,6 +366,7 @@ mod tests {
             label_fallback: Some("Savings account {savings_account_id}".into()),
             public_fields: vec!["savings_account_id".into(), "masked_account_number".into()],
             page_size: 25,
+            scoped: true,
         };
         let rows = [
             json!({ "savings_account_id": 1, "masked_account_number": "****0001" })

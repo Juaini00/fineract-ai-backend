@@ -1,29 +1,46 @@
 id: scheduler
-status: gap
+status: approved_mvp
 display_name: Scheduler and batch job runs
 description: >-
-  Batch job definitions and run history — an operational surface plus a
+  Batch job definitions and run history — a bounded operational surface plus a
   data-completeness freshness signal, per D14
-  (dataset-scope-decisions.md:174-180) and dataset-inventory.md D14. Not
-  real-time monitoring; never triggers or re-runs a job (write forbidden).
-  Agreed baseline scope; no approved Mode-1 capability exists yet.
+  (dataset-scope-decisions.md:174-180) and dataset-inventory.md D14. Job
+  definitions (name, cron schedule, active flag) with run observations over an
+  explicit half-open window, and failed runs by run; never real-time monitoring
+  and never a trigger or re-run (write forbidden). Raw error text is never
+  exposed. Run status alone never proves business-period or account coverage:
+  the freshness hand-off marks affected analyses Partial or Unknown from
+  account-level evidence (loan_arrears cites Loan COB).
 inventory_refs:
   - D14
-data_areas: []
+data_areas: [scheduler_ops]
 concepts:
   - id: job_run
     meaning: A recorded execution of a scheduled batch job, with its status and trigger type.
-    synonyms: [job run history, batch job status, riwayat job]
+    synonyms: [job run history, batch job status, riwayat job, scheduled job, batch job, scheduler job, job batch]
+# D14 stays `gap` in the inventory (FIN-124). Source-backed findings (Fineract
+# SavingsAccountSummary / PostInterestForSavingTasklet, checked 2026-10-15):
+# `m_savings_account.interest_posted_till_date` is the transaction date of the
+# latest non-reversed interest-posting transaction, and the posting batch selects
+# every active account whose value is NULL or <= business date - 1 on each run,
+# so no account-level fact proves "interest posted through the business date".
+# No implemented capability reads a posting-dependent column, so none receives a
+# freshness claim; a question about posting freshness is answered with run
+# observations only and the gap intents below stay explicit. Provisioning
+# (D07) has 0 rows and no capability.
 supported_intents: []
 gap_intents:
-  - { phrase: "job run history", inventory_ref: D14 }
-  - { phrase: "batch job status", inventory_ref: D14 }
+  - { phrase: "savings interest posting freshness", inventory_ref: D14 }
+  - { phrase: "provisioning freshness", inventory_ref: D14 }
 unsupported_intents:
   - { phrase: "trigger job", exempt: "write_action" }
   - { phrase: "rerun job", exempt: "write_action" }
+  - { phrase: "re-run job", exempt: "write_action" }
 default_rules:
-  - Scheduler/batch job runs (D14) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
+  - Scheduler data is tenant-level operational data; there is no approved office relationship, so an office-specific scheduler question is not answered from it.
+  - Timestamps are timezone-naive as stored; a window is [from_date 00:00:00, to_date + 1 day 00:00:00) with no timezone or business-calendar interpretation. A request must state its window as explicit dates on the stored clock; calendar words ("last night", "semalam") and timezone names are refused (stored_clock_window_required), never converted.
+  - No run observed in a window proves nothing about success, failure or whether the job ever ran.
   - A future capability is read-only history, not real-time monitoring, and must never trigger or re-run a job.
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D14's row moves to inherited.
+  - id: no_write_capability
+    rule: no scheduler capability may trigger, re-run, enable, disable or edit a job.

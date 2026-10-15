@@ -401,6 +401,22 @@ capability mendeklarasikan `defaults.default_limit`, nilai itu yang diikat
 kelengkapan tidak berubah. Default literal pada `limit` (mis. `"10"`) tetap
 menang atas `defaults.default_limit`.
 
+Capability yang mendeklarasikan `freshness:` (hari ini `loan_arrears`, D14 /
+XR-ASOF, FIN-124) hanya `Complete` bila bukti tingkat akun membuktikan batch
+(`Loan COB`) menutup **setiap** loan terotorisasi sampai tanggal COB. Status
+run `success` saja tidak pernah cukup. Hasilnya dihitung deterministik oleh satu
+fungsi untuk node ledger, handle dataset, dan dokumen: `Partial` +
+`batch_coverage_incomplete` (ada loan yang tertinggal dari tanggal COB) atau
+`batch_latest_run_failed` (cakupan penuh tetapi run batch terbaru gagal);
+`Unknown` + `batch_run_not_observed` (batch tidak punya run tercatat),
+`batch_latest_status_unrecognized` (status run terbaru bukan `success`/`failed`),
+`batch_job_not_registered`, `cob_date_unavailable`, `coverage_probe_failed` atau
+`freshness_probe_failed` (bukti tidak terbaca). `Complete` menuntut batch teramati
+berjalan, run terbarunya `success`, DAN tidak ada loan tertinggal.
+Jawaban tanpa baris tidak pernah `Partial` (engine.md): ia naik menjadi
+`Unknown`. Bukti dan alasannya tampil sebagai blok `freshness`, dan
+`provenance_json.freshness` pada node run memuat bukti yang sama.
+
 ### `GET /chat/jobs/{job_id}/response`
 
 `404` selama `final_response_version` masih `null`. Frontend **tidak boleh**
@@ -653,6 +669,8 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `block_id` | Arti | Field tambahan |
 | --- | --- | --- |
 | `pii_withheld` | Kolom PII ditahan karena sakelar PII mati | `withheld_columns` |
+| `operational_scope` | Capability `operational_tenant_wide` (D14, keputusan owner 2026-10-15): data scheduler tingkat tenant yang dibaca admin, bukan fakta office; timestamp scheduler **tanpa zona waktu** sebagaimana tersimpan; jendela adalah rentang setengah-terbuka tanpa konversi; tidak ada run terobservasi **bukan** bukti sukses/gagal/tidak pernah berjalan; teks error mentah tidak pernah dikembalikan; tidak ada aksi tulis | `scope_class` (`operational_tenant_wide`), `timestamp_clock` (`timezone_naive_as_stored`), `window` (`{ start_inclusive, end_exclusive }`), `window_semantics`, `absence_semantics` (`no_observed_run_only`), `raw_errors_returned` (`false`), `write_actions` (`none`) |
+| `freshness` | Klaim kesegaran D14 / XR-ASOF atas capability ber-`freshness:`. `limitation` bila menurunkan kelengkapan, `note` bila cakupan terbukti. Tanpa `derived_from` | `completeness`, `reason`, `evidence` (`batch_job`, `cob_date`, `business_date`, `latest_run`, `latest_success`, `coverage`), `run_status_is_not_coverage` (`true`) |
 | `params_not_applied` | `request_text` menyebut nilai untuk sebuah slot (mis. nama kantor) yang tidak dapat diikat secara deterministik — slot identitas tidak pernah diikat dari teks bebas (K1) — sehingga default manifest yang dipakai (FIN-135). Bukan D2/auto-bind: tidak ada nilai yang diikat | `not_applied_params` (`[{ "parameter", "detail" }]`) |
 | `skipped_inputs` | Pengguna berhenti; input yang tidak pernah diisi | `unanswered_fields`, `completed_nodes` |
 | `validation_rejected` | Ada blok yang dibuang validator | `failed_rules`, `failures` |
@@ -662,12 +680,14 @@ di balik "lihat detail". `block_id` yang ada hari ini:
 | `no_capability_matched` | Tidak ada capability yang disetujui mencakup permintaan | `request_echo` |
 | `identity_slot_without_resolver` | Slot identitas tanpa resolver; tidak dapat ditanyakan (K1) | `request_echo` |
 | `parameter_needs_clarification` | Parameter kurang dan tidak dapat diturunkan | `request_echo` |
-| `write_not_supported` | Perintah mengubah data Fineract (hapus/ubah/tambah, SQL tulis/DDL). Jarvis read-only: ditolak sebelum retrieval dan query sumber. Job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null` (OVR-6.6) | `request_echo` |
+| `write_not_supported` | Perintah mengubah data Fineract (hapus/ubah/tambah, SQL tulis/DDL) atau memicu/menjalankan ulang job scheduler — termasuk permintaan baca yang juga meminta menjalankan ulang job (D14): seluruh permintaan ditolak dan penjelasannya menyatakan bahwa tidak ada job yang dipicu atau dijalankan ulang, tidak ada yang diubah, dan tidak ada query yang dijalankan. Jarvis read-only: ditolak sebelum retrieval dan query sumber. Job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null` (OVR-6.6) | `request_echo` |
 | `surface_not_approved` | Permintaan menyebut permukaan yang tidak disetujui: field rahasia (`secret_never_expose`), tabel di luar cakupan (`excluded_tables` area data-scope), frasa tindakan atas permukaan yang dikecualikan (`excluded_phrases`, mis. menjalankan report bawaan Fineract — D13), atau intent yang dinyatakan tidak didukung domain (`unsupported_intents`) — kosakatanya dari `knowledge/`, termasuk padanan Indonesia (`sensitivity.yaml` `synonyms`, FIN-140). Ditolak sebelum retrieval dan query sumber, bukan dipetakan ke capability baca terdekat; job `Completed` + outcome `BlockedByPolicy` + `completeness` `Unknown`, `plan_version` `null`. Teks penjelasannya tidak menyebut istilah yang cocok (tidak membocorkan schema yang dibatasi) (OVR-6.6) | `request_echo` |
-| `domain_gap` | Subjek permintaan adalah domain berstatus `gap` (cakupan disepakati §1/D01–D15, belum punya capability disetujui, mis. `loan`, `tax`, `accounting`, `audit`, `share`, `products`, `fixed_recurring_deposit`, `linking_resources`, `teller_cashier`, `standing_instructions`, `provisioning`, `scheduler` — `knowledge/domains/*.yaml`, FIN-153), atau intent spesifik yang disepakati-tapi-belum-dikontrak di domain lain yang statusnya bukan `deferred`/`candidate` (`gap_intents`, mis. alamat client CLI-6, roster akun loan/share milik client, atau realisasi/kehadiran pertemuan group/center D08). Dikenali lintas bahasa dari `concepts[].synonyms`/`gap_intents`. | `request_echo` |
+| `domain_gap` | Subjek permintaan adalah domain berstatus `gap` (cakupan disepakati §1/D01–D15, belum punya capability disetujui, mis. `loan`, `tax`, `accounting`, `audit`, `share`, `products`, `fixed_recurring_deposit`, `linking_resources`, `teller_cashier`, `standing_instructions`, `provisioning` — `knowledge/domains/*.yaml`, FIN-153), atau intent spesifik yang disepakati-tapi-belum-dikontrak di domain lain yang statusnya bukan `deferred`/`candidate` (`gap_intents`, mis. alamat client CLI-6, roster akun loan/share milik client, atau realisasi/kehadiran pertemuan group/center D08). Dikenali lintas bahasa dari `concepts[].synonyms`/`gap_intents`. | `request_echo` |
 | `domain_deferred` | Subjek permintaan adalah domain berstatus `deferred` — deferred ke onboarding deployment karena skema/keberadaannya bergantung tenant (D10 `custom_datatables`, D15a/b survei/credit-bureau), bukan sekadar belum dikontrak. | `request_echo` |
 | `domain_conditional_not_enabled` | Subjek permintaan adalah domain berstatus `candidate` — mis. `group_center` di deployment **lain** yang belum memverifikasi penggunaan group/center dan semantik kalender; default-nya `Unsupported` sampai area dan capability diaktifkan berdasarkan bukti. Deployment lokal FIN-117 sudah memverifikasi dan mengaktifkan jadwal pertemuan, bukan realisasi/kehadiran. | `request_echo` |
 | `office_scope_not_authorized` | `office_ids` pada `POST /chat/jobs` memuat office di luar otorisasi pemanggil — upaya memperlebar scope. Ditolak utuh, tidak dipangkas diam-diam; outcome `BlockedByPolicy`, tanpa plan dan tanpa query sumber (OVR-6.6, I7) | `request_echo` |
+| `operational_office_unavailable` | Data scheduler adalah data operasional tingkat tenant; tidak ada relasi terbukti antara job/run dan office, sehingga permintaan yang menyebut office atau `office_ids` tidak dijawab dengan filter karangan (D14). `Unsupported`, tanpa query sumber | `request_echo` |
+| `stored_clock_window_required` | Jendela scheduler hanya dijawab pada jam tersimpan tanpa zona waktu, dan hanya bila permintaan menyatakannya; kata kalender ("semalam", "last night", "yesterday"), periode relatif, dan nama zona waktu tidak pernah dikonversi (keputusan owner D14, 2026-10-15). Tidak ada query sumber yang dijalankan |
 | `source_query_timeout`, `source_query_failed` | Query sumber tidak selesai; hasilnya **tidak diketahui**, bukan nol | — |
 | `node_attempt_cap_reached` | Setiap attempt query sumber yang diizinkan (`NODE_ATTEMPT_CAP`, default 3) terputus sesudah query dikirim dan sebelum hasilnya durable. Hasilnya **tidak diketahui** — bukan gagal, bukan nol — dan tidak diulang lagi. Job `Failed` + `OperationalFailure` + `Unknown`, `failure_code` sama (OVR-6.4) | — |
 | `plan_changed_on_recovery` | Job diklaim ulang sesudah lease hilang, tetapi plan yang diverifikasi ulang tidak identik dengan plan versi aktif yang tersimpan (graph atau katalog berubah). Node tidak dijalankan di bawah plan yang bukan miliknya, dan re-plan belum ada. Job `Failed` + `OperationalFailure` + `Unknown` | — |
@@ -725,6 +745,9 @@ klien boleh dilewati, dan jejak asal angka tidak boleh ikut hilang bersamanya.
   "derivations": []
 }
 ```
+
+`scope_class` pada lineage bernilai `office_bound`, `org_wide_reference` atau
+`operational_tenant_wide` (D14: data scheduler; tanpa parameter `office_ids`).
 
 Scope dicatat sebagai **jumlah**, bukan daftar office. `derivations` kosong
 selama belum ada narasi model; ia adalah satu-satunya jalan angka turunan

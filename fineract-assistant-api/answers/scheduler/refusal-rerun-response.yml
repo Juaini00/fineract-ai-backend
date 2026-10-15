@@ -1,0 +1,33 @@
+info:
+  name: FIN-124 refusal-rerun response
+  type: http
+  seq: 34.2
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124RerunJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("FIN-124 refusal-rerun: refusal document carries the reason and no scheduler data", function () {
+            expect(document.kind).to.equal("limitation");
+            expect(document.outcome).to.equal("BlockedByPolicy");
+            expect(document.completeness).to.equal("Unknown");
+            const blocks = document.blocks_json;
+            expect(blocks.length).to.equal(1);
+            expect(blocks[0].block_id).to.equal("write_not_supported");
+            expect(blocks[0].type).to.equal("limitation");
+            expect(blocks.some((b) => b.type === "table" || b.type === "metric")).to.equal(false);
+            const body = blocks[0].body;
+            expect(body).to.include("never triggers, re-runs or changes scheduler jobs");
+            expect(body).to.include("no job was triggered or re-run");
+            expect(body).to.include("nothing was changed");
+            expect(body).to.include("no query was run");
+          });
+        }

@@ -5,6 +5,7 @@
 pub mod compose;
 pub mod dataset;
 pub mod executor;
+pub mod freshness;
 pub mod memory;
 pub mod param_parse;
 pub mod llm;

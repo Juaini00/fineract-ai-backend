@@ -1,0 +1,27 @@
+info:
+  name: FIN-124 definitions job
+  type: http
+  seq: 21
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124DefsKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin124DefsSession}}", "request_text": "Show the scheduled batch jobs with their run counts and latest run status December 2025 to December 2025 on the stored clock."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin124DefsKey", "fin124-definitions-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin124DefsJob", res.getBody().data.job_id);

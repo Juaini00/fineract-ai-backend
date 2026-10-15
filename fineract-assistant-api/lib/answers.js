@@ -143,6 +143,21 @@ function expectOfficeIds(test, expect, capabilityId, document, truth) {
 }
 
 function expectScope(test, expect, capabilityId, document, truth) {
+  // FIN-124 / D14 (owner decision): operational scheduler data is tenant-wide for
+  // an admin, declared separately from org_wide_reference — no office parameter
+  // is bound and the scope/meaning disclosure travels with the answer.
+  if (document.evidence_json.lineage[0].scope_class === "operational_tenant_wide") {
+    test(`FIN-124 ${capabilityId}: operational tenant-wide scope is disclosed, no office filter invented`, function () {
+      const lineage = document.evidence_json.lineage[0];
+      expect(lineage.parameters.some((p) => p.name === "office_ids")).to.equal(false);
+      expect(document.blocks_json.some((b) => b.block_id === "org_wide_reference")).to.equal(false);
+      const scope = document.blocks_json.find((b) => b.block_id === "operational_scope");
+      expect(scope, "blok operational_scope").to.exist;
+      expect(scope.type).to.equal("limitation");
+      expect(scope.scope_class).to.equal("operational_tenant_wide");
+    });
+    return;
+  }
   if (document.evidence_json.lineage[0].scope_class === "org_wide_reference") {
     test(`FIN-109 ${capabilityId}: tenant-wide master is disclosed, not office usage`, function () {
       expect(document.evidence_json.lineage[0].parameters.some((p) => p.name === "office_ids")).to.equal(false);

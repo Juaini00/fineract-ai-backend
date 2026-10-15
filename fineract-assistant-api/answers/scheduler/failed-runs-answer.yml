@@ -1,0 +1,36 @@
+info:
+  name: FIN-124 failed runs answer
+  type: http
+  seq: 27
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124FailedFailedJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          const truth = require("./.answers/expected.js");
+          const got = answers.answerRows(document);
+          const lineage = document.evidence_json.lineage[0];
+          test("FIN-124 failed runs: failed runs match independent SQL in the explicit stored-clock window", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+            expect(lineage.capability_id).to.equal("scheduler_job_failed_runs");
+            expect(Object.fromEntries(lineage.parameters.map((p) => [p.name, p.value]))).to.deep.equal(truth.params.scheduler_job_failed_runs);
+            expect(got.rows).to.deep.equal(truth.rows.scheduler_job_failed_runs);
+          });
+          test("FIN-124 failed runs: later success does not erase failed attempts or expose raw errors", function () {
+            expect(got.rows.filter((r) => r.job_id === 12).map((r) => [r.status, r.job_latest_run_status])).to.deep.equal(Array.from({length: 9}, () => ["failed", "success"]));
+            expect(got.rows.every((r) => r.status === "failed")).to.equal(true);
+            expect(got.columns).to.not.include("error_message");
+            expect(got.columns).to.not.include("error_log");
+            expect(lineage.scope_class).to.equal("operational_tenant_wide");
+          });
+        }

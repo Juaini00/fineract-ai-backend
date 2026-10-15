@@ -63,6 +63,11 @@ pub struct Plan {
     pub sql_file: String,
     /// The query is tenant-wide reference/configuration, not an office fact.
     pub org_wide_reference: bool,
+    /// Owner decision (D14): operational scheduler data read tenant-wide by an
+    /// authenticated admin. Never combined with `org_wide_reference`.
+    pub operational_tenant_wide: bool,
+    /// D14 / XR-ASOF freshness hand-off declared by the capability.
+    pub freshness: Option<super::freshness::FreshnessPlan>,
     pub parameters: Vec<Bound>,
     pub parameter_names: Vec<String>,
     pub output_fields: Vec<String>,
@@ -94,6 +99,18 @@ pub struct Chart {
 }
 
 impl Plan {
+    /// How the query is scoped: bound office facts, an org-wide master
+    /// reference, or D14 operational tenant-wide scheduler data.
+    pub fn scope_class(&self) -> &'static str {
+        if self.operational_tenant_wide {
+            "operational_tenant_wide"
+        } else if self.org_wide_reference {
+            "org_wide_reference"
+        } else {
+            "office_bound"
+        }
+    }
+
     /// Row cap yang berlaku pada eksekusi ini, bila planner mengikatnya.
     pub fn row_cap(&self) -> Option<i64> {
         self.parameters.iter().find_map(|bound| match bound {
@@ -113,6 +130,13 @@ pub enum Unplannable {
     GlobalReferenceUnauthorized,
     /// No office-to-product relation proves office-specific applicability.
     GlobalReferenceOfficeUnavailable,
+    /// Scheduler data is tenant-level; no approved relationship ties a job or
+    /// run to an office, so an office filter is never invented for it (D14).
+    OperationalOfficeUnavailable,
+    /// A scheduler window is answered only on the stored timezone-naive clock,
+    /// and only when the request says so; calendar words and timezone names
+    /// are never mapped onto it (owner decision, D14, 2026-10-15).
+    StoredClockWindowRequired(&'static str),
     /// This deployment has no product-level recurring contribution frequency.
     RecurringProductFrequencyUnavailable,
     /// Parameter wajib tidak dapat diisi tanpa bertanya lebih dulu.
@@ -181,6 +205,8 @@ impl Unplannable {
             Self::GlobalReferenceOfficeUnavailable => {
                 "global_reference_office_unavailable".to_string()
             }
+            Self::OperationalOfficeUnavailable => "operational_office_unavailable".to_string(),
+            Self::StoredClockWindowRequired(_) => "stored_clock_window_required".to_string(),
             Self::RecurringProductFrequencyUnavailable => {
                 "recurring_product_frequency_unavailable".to_string()
             }
@@ -197,12 +223,30 @@ impl Unplannable {
     /// Kalimat untuk blok `limitation`. Bahasa Inggris: teks produk publik.
     pub fn explain(&self) -> String {
         match self {
+            Self::PlannerFailure("planner_no_fit") => "No single approved capability fits this request as asked, so it was not answered and no source query was run. A request that combines facts an approved capability can read (for example job run observations) with a claim no approved capability can establish (for example that a business period or every account is covered or current) is not answered from the supported part alone.".to_string(),
             Self::PlannerFailure(_) | Self::InvalidSource(_) => "The planner could not produce a verified plan; no source query was run.".to_string(),
             Self::GlobalReferenceUnauthorized => {
                 "This tenant-wide master requires an active administrator; no source query was run.".to_string()
             }
             Self::GlobalReferenceOfficeUnavailable => {
                 "The product master is organization-wide; no approved relationship proves which products are available or used in the requested office.".to_string()
+            }
+            Self::OperationalOfficeUnavailable => {
+                "Scheduler job and run data is tenant-level operational data; no approved relationship ties a job or run to an office, so it cannot be answered for one office.".to_string()
+            }
+            Self::StoredClockWindowRequired(why) => {
+                let detail = match *why {
+                    "calendar_or_timezone_expression" => {
+                        "The request mixes an explicit window with a relative calendar period; the scheduler storage timezone is not established, so none is interpreted."
+                    }
+                    "explicit_window_not_stated" => {
+                        "The request does not state an explicit month range or date range; calendar words and timezone names are not interpreted."
+                    }
+                    _ => "The request does not say its window is on the stored scheduler clock.",
+                };
+                format!(
+                    "Scheduler timestamps are timezone-naive. {detail} No source query was run. Restate the window as explicit dates on the stored clock, for example 'from 1 April 2026 to 30 April 2026 on the stored clock'."
+                )
             }
             Self::RecurringProductFrequencyUnavailable => {
                 "Recurring contribution frequency is not recorded on the product master in this deployment; an account schedule cannot stand in for product configuration.".to_string()
@@ -315,6 +359,19 @@ pub fn plan(
             return Err(Unplannable::GlobalReferenceOfficeUnavailable);
         }
     }
+    if query.guards.operational_tenant_wide == Some(true) {
+        if !global_reference_allowed {
+            return Err(Unplannable::GlobalReferenceUnauthorized);
+        }
+        if explicit_office_scope || asks_for_office_specific_products(request_text) {
+            return Err(Unplannable::OperationalOfficeUnavailable);
+        }
+        if query.parameters.iter().any(|p| p.name == "from_date")
+            && let Some(why) = param_parse::stored_clock_window_issue(request_text, today)
+        {
+            return Err(Unplannable::StoredClockWindowRequired(why));
+        }
+    }
     if query.id == "products.recurring_deposit_product_master"
         && has_any_term(request_text, &["frequency", "frekuensi"])
     {
@@ -422,6 +479,8 @@ pub fn plan(
         capability_id: capability.id.clone(),
         query_id: query.id.clone(),
         org_wide_reference: query.guards.org_wide_reference == Some(true),
+        operational_tenant_wide: query.guards.operational_tenant_wide == Some(true),
+        freshness: freshness_plan(catalog, capability)?,
         parameter_names: query
             .parameters
             .iter()
@@ -521,6 +580,7 @@ fn verify_slots(
                 } else {
                     param_parse::parse_period(&source.quote, today)
                 }
+                .or_else(|| param_parse::parse_month_phrase(&source.quote, today))
                 .ok_or_else(invalid)?;
                 let date = match name.as_str() {
                     "from_date" => period.from,
@@ -614,9 +674,48 @@ fn has_any_term(text: &str, wanted: &[&str]) -> bool {
 }
 
 /// A global master cannot answer an office-specific availability question
-/// without a verified product-to-office relation (FIN-109 / XR-SCOPE).
+/// without a verified product-to-office relation (FIN-109 / XR-SCOPE). Scheduler
+/// data has no office relationship either (D14), so it reuses this test.
 fn asks_for_office_specific_products(text: &str) -> bool {
     has_any_term(text, &["office", "branch", "cabang", "kantor"])
+}
+
+/// Resolve the capability's `freshness:` declaration to approved probe SQL.
+/// The catalog validator guarantees both manifests exist and have the shape the
+/// engine reads; a missing one here is still a planner failure, never a skip.
+fn freshness_plan(
+    catalog: &Catalog,
+    capability: &Capability,
+) -> Result<Option<super::freshness::FreshnessPlan>, Unplannable> {
+    use super::freshness::{FreshnessPlan, ProbePlan};
+    let Some(declared) = &capability.freshness else {
+        return Ok(None);
+    };
+    let invalid = || Unplannable::PlannerFailure("planner_output_invalid");
+    let probe = |query_id: &str| -> Result<ProbePlan, Unplannable> {
+        let query = catalog
+            .queries
+            .iter()
+            .map(|loaded| &loaded.entry)
+            .find(|query| query.id == query_id)
+            .ok_or_else(invalid)?;
+        let sql = query
+            .sql_file
+            .as_ref()
+            .and_then(|file| catalog.sql_files.get(file))
+            .cloned()
+            .ok_or_else(invalid)?;
+        Ok(ProbePlan {
+            query_id: query.id.clone(),
+            sql,
+            timeout_ms: query.timeout_ms.unwrap_or(3_000),
+        })
+    };
+    Ok(Some(FreshnessPlan {
+        batch_job: declared.batch_job.clone(),
+        batch: probe(&declared.batch_probe)?,
+        coverage: probe(&declared.coverage_probe)?,
+    }))
 }
 
 /// Batas atas yang dideklarasikan capability untuk sebuah parameter numerik:
@@ -905,6 +1004,34 @@ mod tests {
     }
 
     #[test]
+    fn verifier_grounds_each_range_bound_in_its_own_month_quote() {
+        let capability = capability(&[]);
+        let query = query(vec![
+            parameter("from_date", "date", true, None),
+            parameter("to_date", "date", true, None),
+        ]);
+        let node: super::super::proposal::Node = serde_json::from_value(serde_json::json!({
+            "id": "n1", "capability_id": capability.id, "depends_on": [],
+            "slots": {
+                "from_date": { "kind": "date_phrase", "source": { "quote": "April 2026", "occurrence": 0 } },
+                "to_date": { "kind": "date_phrase", "source": { "quote": "May 2026", "occurrence": 0 } }
+            }
+        })).unwrap();
+        let (values, _, _) = verify_slots(
+            &catalog(),
+            &capability,
+            &query,
+            &node,
+            &BTreeMap::new(),
+            "Which jobs failed from April 2026 to May 2026?",
+            NaiveDate::from_ymd_opt(2026, 10, 15).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(values["from_date"], "2026-04-01");
+        assert_eq!(values["to_date"], "2026-05-31");
+    }
+
+    #[test]
     fn verifier_rejects_scope_fabricated_values_unknown_slots_and_caps() {
         let capability = capability_with_cap(&[("limit", "unbounded")], Some(10));
         let query = query(vec![
@@ -1040,6 +1167,91 @@ mod tests {
         }
     }
 
+    /// D14 owner decision: scheduler data has no office relationship, so an
+    /// office-specific question is refused (never answered with an invented
+    /// filter), and a non-admin cannot read it tenant-wide.
+    #[test]
+    fn operational_scheduler_data_refuses_an_office_scope_instead_of_inventing_a_filter() {
+        use crate::catalog::loader::Loaded;
+
+        let mut capability = capability(&[]);
+        capability.id = "scheduler_job_failed_runs".into();
+        capability.status = Some("approved_mvp".into());
+        capability.query_id = Some("scheduler.job_failed_runs".into());
+        let mut manifest = query(vec![
+            parameter("from_date", "date", true, None),
+            parameter("to_date", "date", true, None),
+        ]);
+        manifest.id = "scheduler.job_failed_runs".into();
+        manifest.guards.operational_tenant_wide = Some(true);
+        let mut catalog = catalog();
+        catalog.capabilities.push(Loaded {
+            path: "c.yaml".into(),
+            entry: capability,
+        });
+        catalog.queries.push(Loaded {
+            path: "q.yaml".into(),
+            entry: manifest,
+        });
+
+        let proposal = super::super::proposal::Proposal::parse(
+            r#"{"schema_version":1,"decision":"planned","confidence":"high","nodes":[{"id":"n1","capability_id":"scheduler_job_failed_runs","depends_on":[],"slots":{}}]}"#,
+        )
+        .unwrap();
+        let shortlist = ["scheduler_job_failed_runs".to_string()];
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let attempt = |text: &str, admin: bool, explicit_office: bool| {
+            plan(
+                &catalog,
+                Uuid::nil(),
+                text,
+                &[1, 2],
+                admin,
+                explicit_office,
+                &BTreeMap::new(),
+                &proposal,
+                &shortlist,
+                today,
+            )
+            .map(|_| ())
+        };
+
+        assert_eq!(
+            attempt(
+                "Which batch jobs failed in the Branch 001 office?",
+                true,
+                false
+            ),
+            Err(Unplannable::OperationalOfficeUnavailable)
+        );
+        assert_eq!(
+            attempt("Which batch jobs failed?", true, true),
+            Err(Unplannable::OperationalOfficeUnavailable)
+        );
+        assert_eq!(
+            attempt("Which batch jobs failed?", false, false),
+            Err(Unplannable::GlobalReferenceUnauthorized)
+        );
+        // Owner decision (stored-clock windows only): calendar words and an
+        // unstated clock never reach the naive scheduler timestamps.
+        assert_eq!(
+            attempt(
+                "Which batch jobs failed last night on the stored clock?",
+                true,
+                false
+            ),
+            Err(Unplannable::StoredClockWindowRequired(
+                "explicit_window_not_stated"
+            ))
+        );
+        assert_eq!(
+            attempt("Which batch jobs failed in April 2026?", true, false),
+            Err(Unplannable::StoredClockWindowRequired(
+                "stored_clock_not_stated"
+            ))
+        );
+    }
+
     fn capability(parameters: &[(&str, &str)]) -> Capability {
         capability_with_cap(parameters, None)
     }
@@ -1073,6 +1285,7 @@ mod tests {
             guards: BTreeMap::new(),
             defaults: BTreeMap::new(),
             chart: None,
+            freshness: None,
         }
     }
 

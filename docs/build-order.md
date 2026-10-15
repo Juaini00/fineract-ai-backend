@@ -229,7 +229,7 @@ catalog reads 13 Fineract tables out of ~220 (D15 audit; the inventory's own
 local read found 300 public tables and flags the 220↔300 gap for the owner,
 unresolved). Loan, products, FD/RD (except one maturity capability), share,
 GL traceability, tax, teller, standing instructions, provisioning, source
-audit and scheduler have **none**. FIN-153 (`knowledge/` alignment against
+audit have **none**; the scheduler now has two (FIN-124, D14 — see "Update after FIN-124"). FIN-153 (`knowledge/` alignment against
 the inventory, point 2 of "Done when" above) is merged: `knowledge/domains/`
 and `knowledge/data-scope/areas/` now agree with the scope documents (six
 contradictions fixed, `inventory_refs` mechanically checked — see the
@@ -2129,6 +2129,241 @@ loan currency; uncommitted worktree deliverable, 2026-10-15):
   changed. No layer status in §5 changes; FIN-108/L1C/L2 are not claimed
   complete. FIN-155 stays blocked by FIN-161/full catalog work, not only by
   this column.
+
+Update after FIN-124 (D14 scheduler read surface + the first enforced freshness
+hand-off; **published for review; D14 is NOT complete and the inventory row
+stays `gap`; the ticket is not closed here**):
+
+- **Owner decision (recorded separately).** Tenant-wide operational access for D14
+  only — an authenticated tenant admin may read approved job/run fields through a
+  dedicated `operational_tenant_wide` declaration, **not** `org_wide_reference`, no
+  invented office filter, no raw errors, no write — is recorded in
+  [product/2026-10-15-d14-operational-access-decision.md](product/2026-10-15-d14-operational-access-decision.md).
+  No other contract document was edited to fit code.
+- **Implemented scope (what is actually built).**
+  1. `scheduler_job_definitions` — job grain: name, cron, active, run counts in an
+     explicit window, `window_observation`, the job's latest run overall.
+  2. `scheduler_job_run_history` — run grain for ONE job chosen through the approved
+     `scheduler.jobs` resolver (K1, no free-text job name): every attempt, success
+     and failed, oldest first (ties by run id), `is_job_latest_run` and the job's
+     latest status (unfiltered) per row. The resolver mechanism needed one change:
+     a resolver manifest with no `authorized_scope` parameter (tenant-level data)
+     now binds no office list (`ResolverSlot.scoped`).
+  3. `scheduler_job_failed_runs` — failed runs across jobs, newest first.
+  4. Windows are `[from_date 00:00:00, to_date + 1 day 00:00:00)` on the stored
+     **timezone-naive** clock; no conversion, no calendar words. `error_message` /
+     `error_log` are never read; a read that also asks to re-run a job is refused
+     whole and states nothing was triggered.
+  5. Freshness hand-off for `loan_arrears` (LOAN-9) only. `Complete` requires the
+     required batch (`Loan COB`) to be observed AND its latest run recorded as
+     `success` AND no in-scope loan behind the COB date. Otherwise `Partial`
+     (`batch_coverage_incomplete`, `batch_latest_run_failed`) or `Unknown`
+     (`batch_run_not_observed`, `batch_latest_status_unrecognized`,
+     `batch_job_not_registered`, `cob_date_unavailable`, `coverage_probe_failed`,
+     `freshness_probe_failed`). An absent or unfamiliar status is never read as
+     success. One function (`compose::lowered_claim`) feeds node ledger, dataset
+     handle and response; the validator rejects a document claiming better.
+- **Source investigation (replaces the earlier "owner blocker" list).** A missing
+  mapping was investigated first, not escalated. Findings (Fineract source + every
+  `queries/*/*.sql`; detail in `knowledge/VERIFICATION.md` §16):
+  1. Savings interest posting — `interest_posted_till_date` is the transaction date
+     of the latest non-reversed interest-posting transaction; the posting batch
+     re-selects every active account with a NULL or `<= business date - 1` value on
+     each run. It is a recorded fact, **not** a coverage marker, so "posted through
+     the business date" is **not derivable from account data**. No implemented query
+     reads a posting-dependent column, so no capability gets a freshness claim, and
+     recorded balances (`savings_balance_summary`) are not lowered. A question about
+     posting freshness is answered with run observations only (every scheduler
+     response states a run proves no business result) and stays a declared gap intent.
+  2. Provisioning — D07 tables have 0 rows and no capability exists.
+  3. The only batch-written account facts any implemented query reads are
+     `m_loan_arrears_aging` / `last_closed_business_date` (`loan_arrears`); RD overdue
+     values are written by transactions, not by a scheduler job. So `loan_arrears`
+     is the sole hand-off required today. `Unknown`-vs-`Partial` needed no new owner
+     policy: database-design I4, responses §3, dataset-inventory XR-ASOF and
+     dataset-lifecycle already define it (known incomplete → `Partial`, unknown →
+     `Unknown` with a deterministic reason).
+- **Stored-clock windows (owner decision 2026-10-15).** Every `operational_tenant_wide`
+  query with a `from_date` is gated in the planner by
+  `param_parse::stored_clock_window_issue` on **positive evidence**, not a word list:
+  the request must state the stored clock AND an explicit month range or ISO date
+  range (the same parsers the grounded date binding uses), with no relative period
+  beside it; otherwise it ends `stored_clock_window_required` (no plan, no source
+  query). An unlisted calendar word or timezone name without an explicit window is
+  therefore refused too. The earlier month-range proof did not state the stored
+  clock and was re-run with it.
+- **Freshness probe budget (review finding).** The two `loan_arrears` freshness probes
+  are source queries and are now charged to the job's absolute `query_count` in T4
+  (`NodeOutcome.extra_queries`, `Claim.queries_issued`: 1 batch probe, +1 coverage
+  probe only when a COB date was read), recorded in the node `provenance_json`
+  (`freshness.queries_issued`, `freshness.probe_queries`). Proof: arrears job
+  `eb1cd242-3656-40b8-8ef6-35f827302bd6` has `query_count = 3` (primary + batch +
+  coverage), `model_call_count = 1`, probes
+  `scheduler.loan_cob_batch_evidence`, `loan.loan_cob_coverage`. Resolver option
+  probes are not counted by the existing code (unchanged, `query_count` is only
+  incremented at T4/reaper); the code has no `BUDGET_MAX_QUERIES` enforcement at all
+  (documented in runtime.md, no config/check exists), so there is no cap to hook —
+  a no-budget `Unknown` fallback is not applicable. Fencing is unchanged (probes run
+  before T4, which stays lease-fenced). The unscoped (no `authorized_scope`) resolver
+  is now guarded by catalog rule `resolver_unscoped_requires_operational`: it is
+  accepted only for a Fineract query declaring `operational_tenant_wide`, whose tables
+  the existing rule restricts to `operational_tenant_tables`.
+- **Original question D over HTTP (Indonesian, one real-model request).** "Does the
+  latest successful Post Interest For Savings run prove August interest and every
+  account current?" → job `963d15e5-3b03-4684-bcc8-54584b5537b6`: the real model
+  returned a valid `no_fit`; the response is `limitation` / `Unknown` /
+  `planner_no_fit`, no rows, no lineage, and the `no_fit` text now states explicitly that
+  a request combining readable run observations with a coverage claim no approved
+  capability can establish is not answered from the supported part. No run list was
+  presented as an answer. Run-history/definition SQL proof is unchanged.
+- **English-only FIN-124 test inputs (owner instruction).** Scheduler HTTP prompts,
+  test names/descriptions and the new D14 pure-regression inputs now use English.
+  A targeted real-model run through the locked runner passed both English cases:
+  "last night on the stored clock" (`58f1c405-39a7-4010-860a-469c58b01930`) and
+  the August/all-account coverage question (`3d25f972-267e-4f7e-8299-67d5da1dcac8`).
+  Both settled `Failed` / `OperationalFailure` / `Unknown` with `planner_no_fit`
+  and zero source queries: safe refusal, not a completed coverage analysis.
+  The run used 108 HTTP requests (6 logical, 102 response polls), 4 model calls
+  (1 clock, 3 coverage), and passed 2/2 tests. The three changed pure regressions
+  passed individually. Evidence: `/tmp/fin124-english-refusals.out`.
+- **Scope of D14 as recorded (no owner question needed for this).** Implemented
+  reads exist, so D14 is recorded with its actual limits: run observations on the
+  stored clock; one enforced freshness hand-off (`loan_arrears`); savings
+  interest-posting and provisioning coverage have no account-level source (section
+  above). Genuine remaining limits: undeclared storage timezone (only stored-clock
+  windows, owner-approved), no interest-job failure and no cross-midnight fixture.
+  L2 and FIN-163 are not claimed complete.
+- **Remaining (D14 row stays `gap` as a status choice).** The `job_run_history` storage
+  timezone is undeclared (tenant `Asia/Beirut` vs a 5 h 30 min cron offset). Whether D14 may move to `inherited` for the
+  implemented read surface plus the single `loan_arrears` hand-off, and whether to
+  fold the operational-access decision into `analytical-contracts.md` §6, are owner
+  decisions.
+- **Planner diagnosis, 2026-10-15 (recovery + publication run).** Two latest
+  real-model failures were diagnosed from the stored audit rows plus a throwaway
+  proposal log (removed; no telemetry kept). (a) Failed runs: attempt 1 quoted
+  "between April 2026 and May 2026", which is not in the request
+  (`source_quote_not_found`, repaired); attempt 2 quoted "April 2026" and
+  "May 2026" for the two bounds — grounded in the request, but the verifier only
+  parsed whole month *ranges*, so a single-month slot phrase was rejected as
+  `static_verification_rejected`. Fix (the demonstrated cause only): a date slot
+  whose quote is exactly one month and one year now binds that month
+  (`param_parse::parse_month_phrase`, slot verification only; `parse_period` and
+  the request-level "explicit period" check are unchanged, no verifier or
+  assertion relaxed). (b) Run history: the same request produced, across runs, a
+  valid high-confidence `no_fit`, repeated 30 s provider timeouts
+  (`planner_unavailable`; calls take 21–30 s of mostly reasoning tokens against
+  `LLM_TIMEOUT_MS=30000`), one `static_verification_rejected` whose proposal text
+  was not captured, and — in a bounded diagnostic — a correct `planned` proposal
+  (correct capability, "April 2026 to May 2026" for both bounds, identity probe).
+  The `no_fit` and the uncaptured rejection are **not** explained by any
+  demonstrated code or catalog defect and no catalog/selection/retry change was
+  made for them: they remain provider-reliability limits (the timeout is an
+  operator setting and was not changed). Scoped final run
+  (`answers/scheduler`, 256 requests, 32/32 tests, `/tmp/fin124-pub-scheduler2.out`)
+  passed with the real model: run history `7dab742e-…`, definitions
+  `1d11426b-…`, failed runs `6cd0e8f8-…` (each Answered/Complete, row-for-row
+  equal to independent SQL), raw-error and re-run refusals `BlockedByPolicy`,
+  office/clock/coverage refusals `Unknown`. The first scoped run of the same code
+  failed at the run-history form (`f474d4ea-…`: one timeout, then
+  `static_verification_rejected`) and is retained as failed evidence; the passing
+  run is a second run, not a claim that the planner is reliable. Failed-runs now
+  has a tracked chain (`answers/scheduler/failed-runs-*.yml`).
+- **Proof (locked runner, port 3324, DB `jarvis_wt_fin_124_scheduler`, real
+  `qwen-cloud`/`qwen3.8-flash`).** Chains 1, 2, 4 re-run at the final knowledge hash
+  `3671aaa3…` with explicit stored-clock requests; chain 3 (`loan_arrears`, hash
+  `5ffecef8…`) is unchanged and was not re-run. Four chains vs independent SQL
+  (params, scope, window, status, order, limit):
+  1. run history of job 12 "Apply penalty to overdue loans", April–May 2026 on the stored clock, via
+     the clarification flow (job chosen from the resolver, 44 candidates): job
+     `e33921c9-771a-4a06-bbdd-15938eaaaceb`, 33 rows = oracle 33 — 9 failed
+     (2026-04-01..04-09) then 24 success (04-10..05-03), chronological, latest
+     overall `success` flagged on the last row. No interest-posting job has ever
+     failed in this fixture, so this is the mechanism proof, not an interest claim;
+  2. job definitions, "December 2025 to December 2025 on the stored clock": `c5aaa101-e173-42cb-9a48-e767c4dc5ef7` (a first attempt, `d2da2a83-…`, was `planner_output_invalid` — model output, nothing executed),
+     44 = 44, job 36 = 44,640 (both half-open edges), job 42 zero runs
+     `no_observed_run`;
+  3. `loan_arrears`: `8d6465fb-1c2a-4dec-96ee-15181cd96087`, 59 = 59,
+     `Partial`/`batch_coverage_incomplete` on ledger, dataset and response; 87 of 87
+     loans behind COB 2026-09-07 while the latest Loan COB run (2026-05-03) is a
+     `success`;
+  4. refusals: raw error/stack `a89300e2-…` (`surface_not_approved`), read + re-run
+     `1cf5bab7-…` (`write_not_supported`, nothing triggered), office-specific
+     `b8e94681-…` (real model: `planner_no_fit`; the
+     `operational_office_unavailable` guard is a unit test, not HTTP), and calendar word
+     "last night (semalam)" `7ab9569e-…` (real model planned; planner guard
+     `stored_clock_window_required`, no plan, no source query).
+  Counts (final runs): run 1 = 44 requests executed (34 `404` response polls, 10 others
+  = login, session, job POST, state reads, clarification form/options/answer, 2 answer
+  reads; run history 14/14 tests, then stopped on the definitions `planner_output_invalid`
+  bail); run 2 = 62 requests (45 `404` polls, 17 logical incl. login/sessions), 15/15
+  tests; real-model calls (distinct `model_call_id`) 6: run history 2, definitions 2
+  (one invalid output, one answered), office 1, calendar word 1; the write and raw-error
+  refusals are deterministic (0). The earlier `scheduler_job_failed_runs` HTTP proof
+  (job `bae2e8d6-…`, 90 = 90, hash `2d9ee04f…`) was NOT re-run at the final hash.
+- **Gates.** `cargo clippy --workspace -- -D warnings` clean; `cargo test
+  --workspace` 200 + 41 passed; catalog 0 error / 2 pre-existing warnings, validated;
+  `docs-check.sh` and `acceptance-check.sh` OK; Graphify updated (2,708 nodes).
+  The stale `engine/policy-deferred-scheduler-*` Bruno pair (old `domain_gap`) was
+  removed because the scheduler domain is approved for what is implemented;
+  `loan_arrears-answer.yml` expects `Partial` on this fixture. L2 is not claimed.
+
+**Readiness review and checkout recovery, 2026-10-15 (uncommitted; publication held):**
+
+- The FIN-124 directory, Git worktree registration and local branch were absent at
+  session start. The isolated database and historical reports survived. With owner
+  approval, 73 files were reconstructed from successful local transcript operations,
+  including the decision record, and the two obsolete scheduler `domain_gap` tests
+  were removed again. The same worktree path and Linear branch were restored at
+  `b798b84`; no implementation redesign, commit, push, PR, merge or ticket closure.
+  Recovery snapshot and per-file hashes: `/tmp/fin124-recovery-20261015-source/`.
+- Recovered YAML/SQL catalog bytes reproduce the retained content hash exactly:
+  `3671aaa3ce24626322fa73772a28b0a522cefcb608d06bb714ab90076a2f4cfd`.
+  This hash does not cover Rust/tests/docs. Compilation and runtime checks below
+  separately exercise the reconstructed code. The deleted worktree's original
+  `.env` and unrecorded untracked files cannot be claimed recovered byte-for-byte:
+  bootstrap copied current main configuration and retargeted it through
+  `jarvis-db.sh` to the surviving `jarvis_wt_fin_124_scheduler`, without dropping it.
+- New verification: `cargo test --workspace` 241 passed; clippy with `-D warnings`
+  passed; catalog 0 errors / 2 existing warnings. All new smoke inputs were English,
+  used the real `qwen-cloud` / `qwen3.8-flash`, and ran through the locked runner on
+  port 3324. No full collection, transaction/charge or outage-control run.
+
+| Recovery run | Executed HTTP requests | 404 polls | Other requests | Observed result |
+| --- | --- | --- | --- | --- |
+| scheduler | 63 | 60 | 3 | Run-history clarification never opened because the model returned `no_fit`; script failed, 22 remaining requests skipped |
+| scheduler-targeted | 52 | 45 | 7 | Definitions 9/9 tests passed; failed-runs smoke script failed on absent lineage after `planner_output_invalid`; 13 remaining requests skipped |
+| freshness and refusals | 124 | 103 | 21 | 17/17 tests passed, including independent SQL row comparisons and I1 log check |
+
+- Definitions job `24aad743-72ae-4453-80e2-0f6e9de09fae`: 44 jobs = independent
+  SQL 44, job 36 has 44,640 December runs, boundary assertions passed, job 42
+  remains `no_observed_run`. Arrears job `fbbb59be-1b53-4078-8001-fcb2c70b2fd9`:
+  59 rows = independent SQL 59; 87/87 loans behind COB 2026-09-07 despite latest
+  Loan COB `success`; node, dataset and response remain `Partial` /
+  `batch_coverage_incomplete`, validator passed, `query_count=3`.
+- **Current readiness is not green.** Run-history job
+  `1490a21d-a3a6-469f-b7d3-1ea61bdb4660` ended `planner_no_fit`, 0 source queries.
+  Its request bytes match the old successful `e33921c9…` request, and the correct
+  capability is first in the reproduced shortlist. Failed-runs job
+  `8d13b3a6-befb-418a-984a-430fec2214d0` had one unavailable-provider attempt,
+  then a planned proposal rejected by the static verifier (`planner_output_invalid`),
+  0 source queries. Neither is a new SQL result proof. Assertions, verifier and
+  planner were not weakened or tuned per phrase to make these runs green.
+- Raw-error and mixed read/re-run controls passed with `BlockedByPolicy` and no
+  source/model calls. Office-specific, English last-night and English August /
+  all-account coverage questions safely refused with `Unknown` / `planner_no_fit`,
+  0 source queries; these are refusal proofs, not completed coverage analyses.
+  Across all nine new jobs, job counters record ten model calls.
+- Logs: `/tmp/fin124-recovery-{scheduler,scheduler-targeted,freshness}.out`;
+  detailed current evidence is appended to `/tmp/jarvis-reports/FIN-124.md`.
+  Throwaway failed-runs requests were removed from the collection and preserved
+  under the recovery snapshot's `smoke/` directory. Existing historical evidence
+  is retained, not promoted into a claim that the latest scheduler run passed.
+  D14 remains `gap`; storage timezone, interest/provisioning failure fixtures,
+  cross-midnight behavior and full query-budget enforcement remain unproven.
+  FIN-163/FIN-161 being `Done` in Linear is not full L2 conformance; no tracker
+  state was changed. After FIN-124 is ready, FIN-115 is the first remaining
+  Wave-1 child in FIN-107's ordering with FIN-152/153 satisfied; it is not started.
+
 
 ### 5.1 Scenario coverage
 
