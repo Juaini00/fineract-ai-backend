@@ -20,6 +20,7 @@ output_fields:
   - { name: amount_outstanding_derived, type: decimal, sensitivity: public_business }
   - { name: is_paid_derived, type: boolean, sensitivity: public_business }
   - { name: waived, type: boolean, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
 grain: [loan_charge_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000
@@ -32,3 +33,5 @@ checks:
     rule: SQL must use a bound LIMIT parameter.
   - id: output_columns_match_contract
     rule: Prepared SQL output columns must equal output_fields order.
+  - id: currency_per_row
+    rule: every row carries the owning loan's currency_code.

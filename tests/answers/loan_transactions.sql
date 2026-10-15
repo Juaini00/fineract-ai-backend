@@ -42,8 +42,9 @@ SELECT t.id AS transaction_id, t.loan_id, t.transaction_date,
        END AS transaction_type,
        t.amount, t.principal_portion_derived, t.interest_portion_derived,
        t.fee_charges_portion_derived, t.penalty_charges_portion_derived,
-       t.overpayment_portion_derived, t.office_id
+       t.overpayment_portion_derived, t.office_id, l.currency_code
 FROM m_loan_transaction t
+JOIN m_loan l ON l.id = t.loan_id
 WHERE t.is_reversed = false
   AND t.transaction_date >= (:'today'::date - interval '12 months')::date
   AND t.transaction_date <= :'today'::date

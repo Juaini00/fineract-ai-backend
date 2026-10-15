@@ -1,7 +1,7 @@
 -- Loan charges/penalties: charged vs actually-collected/waived/written-off
 -- (dataset-inventory.md LOAN-7). Office-scoped via the owning loan's
 -- client-or-group office (same path as LOAN-1..3); m_loan_charge has no
--- direct office_id.
+-- direct office_id. Amounts are in the owning loan's currency.
 SELECT
     lc.id AS loan_charge_id,
     lc.loan_id,
@@ -14,7 +14,8 @@ SELECT
     lc.amount_writtenoff_derived,
     lc.amount_outstanding_derived,
     lc.is_paid_derived,
-    lc.waived
+    lc.waived,
+    l.currency_code
 FROM m_loan_charge lc
 JOIN m_loan l ON l.id = lc.loan_id
 JOIN m_charge ch ON ch.id = lc.charge_id

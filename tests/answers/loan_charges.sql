@@ -18,9 +18,11 @@ SELECT
     lc.amount_writtenoff_derived,
     lc.amount_outstanding_derived,
     lc.is_paid_derived,
-    lc.waived
+    lc.waived,
+    l.currency_code
 FROM m_loan_charge lc
 JOIN scoped s ON s.id = lc.loan_id
+JOIN m_loan l ON l.id = lc.loan_id
 JOIN m_charge ch ON ch.id = lc.charge_id
 ORDER BY lc.loan_id, lc.id
 LIMIT 100

@@ -1,7 +1,8 @@
 -- Loan transactions within a date range, office-scoped directly on this
 -- table (unlike m_loan), reversed excluded by default (LOAN-6). Allocation
 -- portions reconcile to amount for repayment-type transactions only; a
--- disbursement's amount is not allocated across those columns.
+-- disbursement's amount is not allocated across those columns. Amounts are
+-- in the owning loan's currency (m_loan by primary key, no fanout).
 SELECT
     t.id AS transaction_id,
     t.loan_id,
@@ -49,8 +50,10 @@ SELECT
     t.fee_charges_portion_derived,
     t.penalty_charges_portion_derived,
     t.overpayment_portion_derived,
-    t.office_id
+    t.office_id,
+    l.currency_code
 FROM m_loan_transaction t
+JOIN m_loan l ON l.id = t.loan_id
 WHERE t.is_reversed = false
   AND t.transaction_date BETWEEN $2::date AND $3::date
   AND t.office_id = ANY($1::bigint[])
