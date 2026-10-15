@@ -4,7 +4,7 @@
 //! ditolak sebelum retrieval, plan, dan query sumber apa pun — bukan
 //! dicocokkan ke capability baca terdekat lalu dijawab seolah didukung.
 //!
-//! Dua pola, keduanya sengaja sempit supaya pertanyaan baca tidak ikut
+//! Tiga pola, semuanya sengaja sempit supaya pertanyaan baca tidak ikut
 //! tertolak (salah tolak adalah bug yang sama nyatanya):
 //!
 //! 1. **Perintah atas entitas Fineract**: token bermakna pertama (sesudah
@@ -17,6 +17,10 @@
 //! 2. **SQL tulis/DDL** di mana pun dalam teks: `create|drop|truncate|alter`
 //!    diikuti objek DDL, `delete from`, `insert into`, `update … set`, serta
 //!    `grant|revoke` diikuti hak akses.
+//! 3. **Perintah scheduler** (D14): menjalankan ulang atau memicu job batch.
+//!    Ini tulis walau permintaannya dibuka dengan pertanyaan baca — "Show
+//!    failed jobs and rerun them" — jadi seluruh permintaan ditolak, bukan
+//!    separuhnya dijawab diam-diam. Lihat [`is_scheduler_rerun_request`].
 
 /// Sapaan/pembuka yang dilewati sebelum menilai kata kerja pertama.
 const LEADING_FILLER: &[&str] = &[
@@ -142,13 +146,54 @@ const PRIVILEGES: &[&str] = &[
 ];
 
 pub fn is_write_request(text: &str) -> bool {
-    let tokens: Vec<String> = text
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+    let tokens = tokenize(text);
+
+    command_on_entity(&tokens) || sql_write(&tokens) || scheduler_rerun(&tokens)
+}
+
+/// Permintaan yang menyuruh memicu / menjalankan ulang job scheduler (D14).
+/// Subset dari [`is_write_request`], dipisah supaya penolakannya dapat
+/// menyatakan dengan tepat apa yang tidak dijalankan.
+pub fn is_scheduler_rerun_request(text: &str) -> bool {
+    scheduler_rerun(&tokenize(text))
+}
+
+fn tokenize(text: &str) -> Vec<String> {
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .filter(|token| !token.is_empty())
         .map(str::to_lowercase)
-        .collect();
+        .collect()
+}
 
-    command_on_entity(&tokens) || sql_write(&tokens)
+/// Kata benda scheduler; verba pemicu hanya dihitung bila salah satunya ada.
+const SCHEDULER_NOUNS: &[&str] = &["job", "jobs", "batch", "scheduler", "cob"];
+
+/// Verba pemicu satu kata. `trigger_type` (kolom) satu token utuh dengan `_`,
+/// jadi tidak pernah cocok; "triggered"/"triggers" bukan perintah.
+const RERUN_VERBS: &[&str] = &["rerun", "retrigger", "trigger", "restart", "picu", "ulangi"];
+
+/// Pasangan kata yang berarti "jalankan lagi": kata kedua muncul paling jauh
+/// `gap` token sesudah yang pertama ("run the failed jobs again").
+const RERUN_PAIRS: &[(&str, &str, usize)] = &[
+    ("re", "run", 0),
+    ("run", "again", 4),
+    ("jalankan", "ulang", 2),
+    ("jalankan", "lagi", 3),
+];
+
+fn scheduler_rerun(tokens: &[String]) -> bool {
+    tokens.iter().any(|t| SCHEDULER_NOUNS.contains(&t.as_str()))
+        && (tokens.iter().any(|t| RERUN_VERBS.contains(&t.as_str()))
+            || RERUN_PAIRS.iter().any(|(first, second, gap)| {
+                tokens.iter().enumerate().any(|(index, token)| {
+                    token == first
+                        && tokens
+                            .iter()
+                            .skip(index + 1)
+                            .take(gap + 1)
+                            .any(|later| later == second)
+                })
+            }))
 }
 
 fn command_on_entity(tokens: &[String]) -> bool {
@@ -206,6 +251,30 @@ mod tests {
             "GRANT ALL ON m_client TO mallory",
         ] {
             assert!(is_write_request(text), "{text}");
+        }
+    }
+
+    /// D14: reading and re-running in one request is a write; reading
+    /// `trigger_type` or the word "triggered" is not.
+    #[test]
+    fn scheduler_rerun_is_a_write_even_after_a_read_clause() {
+        for text in [
+            "Show failed jobs last week and rerun them",
+            "Which batch jobs failed from 2026-05-01 to 2026-05-04? Then re-run the failed ones",
+            "List failed batch jobs, then run them again",
+            "trigger the Loan COB job now",
+            "Run the job again after listing failures",
+        ] {
+            assert!(is_write_request(text), "{text}");
+            assert!(super::is_scheduler_rerun_request(text), "{text}");
+        }
+        for text in [
+            "Which batch jobs failed between 2026-05-01 and 2026-05-04?",
+            "Show the trigger_type of each job run last week",
+            "Which jobs were triggered by cron in May?",
+            "How long did the Loan COB job run?",
+        ] {
+            assert!(!is_write_request(text), "{text}");
         }
     }
 

@@ -22,6 +22,12 @@ fields:
   - table: m_savings_account_transaction
     columns: [reason_for_block]
     reason: Free text may contain sensitive operational details.
+  - table: job_run_history
+    columns: [error_message, error_log]
+    reason: Raw scheduler failure text and stack traces are never exposed (D14, owner decision 2026-10-15).
+  - table: job
+    columns: [initializing_errorlog]
+    reason: Raw scheduler initialization errors are never exposed (D14).
 rule: Excluded fields must not appear in approved query output contracts.
 checks:
   - id: excluded_fields_not_in_outputs

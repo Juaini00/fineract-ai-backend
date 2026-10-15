@@ -24,6 +24,15 @@ org_wide_reference_tables:
   - m_tax_component_history
   - m_floating_rates
   - m_floating_rates_periods
+# Owner decision (D14, docs/product/2026-10-15-d14-operational-access-decision.md):
+# operational scheduler tables may be read tenant-wide by an authenticated admin
+# bound to the source connection tenant. This is a DEDICATED declaration, not
+# org_wide_reference: it does not widen the product-master exception and it
+# invents no office filter. Fields are approved per query manifest.
+operational_tenant_tables:
+  - job
+  - job_run_history
+  - m_business_date
 enforcement_points:
   - policy guard validates requested office_ids
   - query metadata declares office_ids parameter source authorized_scope
@@ -33,5 +42,7 @@ checks:
     rule: every office-bound Fineract query declares office_ids from authorized_scope and require_office_filter=true.
   - id: approved_org_wide_reference_only
     rule: org_wide_reference queries may read only declared tables from org_wide_reference_tables, without office-bound facts.
+  - id: approved_operational_tenant_only
+    rule: operational_tenant_wide queries may read only operational_tenant_tables, never an office-bound fact, and are mutually exclusive with org_wide_reference.
   - id: sql_uses_bound_office_array
     rule: every office-bound fact SQL uses ANY($n::bigint[]) for office scope.

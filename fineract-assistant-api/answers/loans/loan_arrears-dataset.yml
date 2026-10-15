@@ -1,0 +1,26 @@
+info:
+  name: FIN-124 loan_arrears dataset handle
+  type: http
+  seq: 153
+  description: |
+    D14 hand-off, dataset leg: the retained handle carries the same Partial claim
+    and reason as the response (ledger -> dataset -> response).
+http:
+  method: get
+  url: "{{baseUrl}}/chat/datasets/{{fin124ArrearsDataset}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin108Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const handle = res.getBody().data;
+        test("FIN-124 loan_arrears: dataset handle is Partial with the freshness reason", function () {
+          expect(res.getStatus()).to.equal(200);
+          expect(handle.status).to.equal("ready");
+          expect(handle.completeness).to.equal("Partial");
+          expect(handle.completeness_reason).to.equal("batch_coverage_incomplete");
+          expect(handle.truncated).to.equal(false);
+          expect(handle.row_count_total).to.equal(handle.row_count_available);
+        });

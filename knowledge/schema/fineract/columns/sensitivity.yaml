@@ -15,7 +15,9 @@ classes:
     examples: [username, role, permission, client_ip]
   secret_never_expose:
     default_behavior: never_expose
-    examples: [password, token, command_as_json, result]
+    # error_message / error_log: raw scheduler failure text (stack traces and
+    # internals). D14 approves run status only; raw errors are never exposed.
+    examples: [password, token, command_as_json, result, error_message, error_log, stack_trace]
     # Padanan Indonesia (FIN-140): permintaan berbahasa Indonesia atas field
     # rahasia harus ditolak sama seperti padanan Inggrisnya.
     synonyms: [kata sandi, sandi, hash kata sandi]

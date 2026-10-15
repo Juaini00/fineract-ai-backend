@@ -1,0 +1,27 @@
+info:
+  name: FIN-124 refusal-coverage job
+  type: http
+  seq: 39
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124CoverKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin124RefuseSession}}", "request_text": "Does the latest successful Post Interest For Savings job run prove that savings interest for August 2026 has been posted and every account is up to date? Use the stored clock from 2026-08-01 to 2026-08-31."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin124CoverKey", "fin124-refusal-coverage-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin124CoverJob", res.getBody().data.job_id);

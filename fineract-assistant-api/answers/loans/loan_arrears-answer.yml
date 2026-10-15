@@ -16,10 +16,41 @@ runtime:
         if (await answers.awaitResponse(bru, req, res)) {
           const document = res.getBody().data;
           answers.check(test, expect, "loan_arrears", document);
-          test("FIN-108 loan_arrears: verified answer", function () {
+          // FIN-124 / D14 (XR-ASOF): arrears currency depends on Loan COB having closed
+          // the loans. On this fixture the batch has no run since 2026-05-03 and every
+          // in-scope loan is behind the COB date, so the answer is Partial WITH a
+          // reason — never Complete merely because a successful Loan COB run exists.
+          test("FIN-124 loan_arrears: verified answer, Partial because batch coverage is not proven", function () {
             expect(document.outcome).to.equal("Answered");
-            expect(document.completeness).to.equal("Complete");
+            expect(document.completeness).to.equal("Partial");
+            expect(document.completeness_reason).to.equal("batch_coverage_incomplete");
             expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-124 loan_arrears: freshness block = independent SQL (batch evidence and account coverage)", function () {
+            const truth = require("./.answers/expected.js").rows["loan_arrears__freshness"][0];
+            const block = document.blocks_json.find((b) => b.block_id === "freshness");
+            expect(block, "blok freshness").to.exist;
+            expect(block.type).to.equal("limitation");
+            expect(block.completeness).to.equal("Partial");
+            expect(block.reason).to.equal("batch_coverage_incomplete");
+            expect(block.run_status_is_not_coverage).to.equal(true);
+            const facts = block.evidence;
+            expect(facts.batch_job).to.equal("Loan COB");
+            expect(facts.cob_date).to.equal(truth.cob_date);
+            expect(facts.business_date).to.equal(truth.business_date);
+            expect(facts.latest_run.status).to.equal(truth.latest_run_status);
+            expect(facts.latest_run.start_time).to.equal(truth.latest_run_start_time);
+            expect(facts.latest_success.start_time).to.equal(truth.latest_success_start_time);
+            expect(facts.coverage.in_scope_loans).to.equal(truth.in_scope_loans);
+            expect(facts.coverage.loans_behind_cob).to.equal(truth.loans_behind_cob);
+            expect(facts.coverage.oldest_last_closed_business_date).to.equal(truth.oldest_last_closed_business_date);
+            // The decisive point: a SUCCESSFUL latest run coexists with uncovered loans.
+            expect(truth.latest_run_status).to.equal("success");
+            expect(truth.loans_behind_cob).to.be.above(0);
+          });
+          test("FIN-124 loan_arrears: the claim survives validation — no row lost, still the same rows", function () {
+            expect(answers.answerRows(document).rows.length).to.be.above(0);
+            bru.setVar("fin124ArrearsDataset", document.evidence_json.lineage[0].dataset_id);
           });
           test("FIN-108 LOAN-9: every row carries overdue_since_date_derived (XR-ASOF)", function () {
             const rows = answers.answerRows(document).rows;

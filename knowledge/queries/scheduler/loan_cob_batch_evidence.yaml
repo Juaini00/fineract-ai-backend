@@ -1,0 +1,26 @@
+id: scheduler.loan_cob_batch_evidence
+database: fineract
+sql_file: queries/scheduler/loan_cob_batch_evidence.sql
+data_areas: [scheduler_ops]
+tables: [job, job_run_history, m_business_date]
+metrics: []
+parameters:
+  - { name: batch_job_name, type: string, required: true }
+output_fields:
+  - { name: cob_date, type: date, sensitivity: public_business }
+  - { name: business_date, type: date, sensitivity: public_business }
+  - { name: job_id, type: bigint, sensitivity: public_business }
+  - { name: job_is_active, type: boolean, sensitivity: public_business }
+  - { name: latest_run_id, type: bigint, sensitivity: public_business }
+  - { name: latest_run_start_time, type: string, sensitivity: public_business }
+  - { name: latest_run_status, type: string, sensitivity: public_business }
+  - { name: latest_success_run_id, type: bigint, sensitivity: public_business }
+  - { name: latest_success_start_time, type: string, sensitivity: public_business }
+grain: [job_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, operational_tenant_wide: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: run_evidence_only
+    rule: this probe never claims coverage; it only reports the named job's latest and latest successful run beside the COB and business dates.
+  - id: no_raw_errors
+    rule: error_message and error_log are never selected.

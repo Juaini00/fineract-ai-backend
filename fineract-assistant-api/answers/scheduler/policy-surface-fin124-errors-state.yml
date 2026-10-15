@@ -1,0 +1,25 @@
+info:
+  name: FIN-124 errors-surface job state
+  type: http
+  seq: 31.1
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124ErrJob}}"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const poll = require("./lib/poll.js");
+        if (await poll.awaitJob(bru, req, res, (job) => job.lifecycle === "Completed")) {
+          const job = res.getBody().data;
+          test("FIN-124 errors-surface: Completed + BlockedByPolicy + Unknown, no plan (no source query)", function () {
+            expect(job.lifecycle).to.equal("Completed");
+            expect(job.outcome).to.equal("BlockedByPolicy");
+            expect(job.completeness).to.equal("Unknown");
+            expect(job.completeness_reason).to.equal("surface_not_approved");
+            expect(job.plan_version).to.equal(null);
+          });
+        }

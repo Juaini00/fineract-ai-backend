@@ -43,6 +43,22 @@ pub struct Capability {
     /// query yang grain-nya memuat dimensi waktu (divalidasi katalog).
     #[serde(default)]
     pub chart: Option<ChartDeclaration>,
+    /// D14 / XR-ASOF: batch yang harus terbukti menutup cakupan sebelum
+    /// jawaban capability ini boleh `Complete`. Tanpa deklarasi, tidak ada
+    /// klaim kesegaran sumber yang dibuat.
+    #[serde(default)]
+    pub freshness: Option<FreshnessDeclaration>,
+}
+
+/// `freshness:` pada capability. `batch_job` adalah `job.name` Fineract;
+/// kedua probe adalah manifest query yang disetujui katalog.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FreshnessDeclaration {
+    pub batch_job: String,
+    /// Query operasional (job + business date).
+    pub batch_probe: String,
+    /// Query cakupan akun, terikat office.
+    pub coverage_probe: String,
 }
 
 /// Satu-satunya jenis chart yang dikenal: `time_series` (§7).
@@ -92,6 +108,28 @@ pub struct RequestShape {
     #[serde(default)]
     pub pii: Option<String>,
 }
+
+/// Kolom yang dibaca engine dari probe batch D14 (`freshness.batch_probe`).
+/// Dipakai validator katalog dan perakit bukti kesegaran: kolom yang hilang
+/// dari manifest adalah bukti yang diam-diam kosong, bukan "tidak ada batch".
+pub const BATCH_PROBE_FIELDS: [&str; 9] = [
+    "cob_date",
+    "business_date",
+    "job_id",
+    "job_is_active",
+    "latest_run_id",
+    "latest_run_start_time",
+    "latest_run_status",
+    "latest_success_run_id",
+    "latest_success_start_time",
+];
+
+/// Kolom probe cakupan akun D14 (`freshness.coverage_probe`).
+pub const COVERAGE_PROBE_FIELDS: [&str; 3] = [
+    "in_scope_loans",
+    "loans_behind_cob",
+    "oldest_last_closed_business_date",
+];
 
 /// Manifest query: kontrak antara capability dan file SQL yang disetujui.
 #[derive(Debug, Clone, Deserialize)]
@@ -220,6 +258,10 @@ pub struct QueryGuards {
     /// Explicitly approved tenant-wide master/config read, never an office fact.
     #[serde(default)]
     pub org_wide_reference: Option<bool>,
+    /// Owner decision (D14): operational scheduler tables are readable tenant-wide
+    /// by an authenticated admin. Deliberately NOT `org_wide_reference`.
+    #[serde(default)]
+    pub operational_tenant_wide: Option<bool>,
     #[serde(default)]
     pub parameterized_only: Option<bool>,
 }
@@ -379,4 +421,7 @@ pub struct SafetyPolicy {
 pub struct OfficeScopePolicy {
     #[serde(default)]
     pub org_wide_reference_tables: Vec<String>,
+    /// Approved operational tables for `operational_tenant_wide` (D14).
+    #[serde(default)]
+    pub operational_tenant_tables: Vec<String>,
 }

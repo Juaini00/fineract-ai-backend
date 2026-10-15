@@ -1,0 +1,21 @@
+id: loan.loan_cob_coverage
+database: fineract
+sql_file: queries/loan/loan_cob_coverage.sql
+data_areas: [loans_identity, client_foundation, group_center_foundation]
+tables: [m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: cob_date, type: date, required: true }
+output_fields:
+  - { name: in_scope_loans, type: bigint, sensitivity: public_business }
+  - { name: loans_behind_cob, type: bigint, sensitivity: public_business }
+  - { name: oldest_last_closed_business_date, type: date, sensitivity: public_business }
+grain: [in_scope_loans]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: population_level
+    rule: coverage counts the whole in-scope non-closed population, not only the rows an analysis displays.

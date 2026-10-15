@@ -17,7 +17,7 @@ allowed_domains: [loan]
 default_rules:
   - A loan charge row separates amount (charged) from amount_paid_derived, amount_waived_derived, amount_writtenoff_derived and amount_outstanding_derived; they are never merged into one figure (LOAN-7, mirrors D04).
   - Loan balances are read from m_loan's own *_derived columns; they are never recomputed from m_loan_repayment_schedule or m_loan_transaction (LOAN-8, mirrors the GL rule in D12).
-  - An arrears row is a point-in-time snapshot (XR-ASOF); overdue_since_date_derived must travel with the response, and the data is never presented as always-current — freshness depends on COB having run (D14, still gap).
+  - An arrears row is a point-in-time snapshot (XR-ASOF); overdue_since_date_derived must travel with the response, and the data is never presented as always-current — freshness depends on Loan COB having closed the loans; loan_arrears enforces this through its D14 freshness hand-off (Partial/Unknown with a reason).
 checks:
   - id: office_scope_required
     rule: every approved query binds authorized office_ids through the owning loan's client or group office path; none of these three tables carry a direct office_id.

@@ -105,6 +105,25 @@ pub fn parse_schedule_period(text: &str, today: NaiveDate) -> Option<ParsedPerio
     parse_period(text, today)
 }
 
+/// One bound quoted on its own: exactly a month and a year ("April 2026").
+/// A range request legitimately grounds `from_date` and `to_date` in two such
+/// quotes, so a slot phrase may be one calendar month. It is deliberately not
+/// part of [`parse_period`]: free request text with "August 2026" in it is not
+/// thereby a period request.
+pub fn parse_month_phrase(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
+    let words = words(text);
+    let [month, year] = words.as_slice() else {
+        return None;
+    };
+    let month = month_number(&month.to_lowercase())?;
+    let year = parse_year_token(year)?;
+    Some(ParsedPeriod {
+        from: NaiveDate::from_ymd_opt(year, month, 1)?,
+        to: end_of_month(year, month)?.min(today),
+        detail: words.join(" "),
+    })
+}
+
 const RANGE_CONNECTORS: [&str; 5] = ["to", "through", "until", "sampai", "hingga"];
 
 fn parse_month_range(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
@@ -214,6 +233,50 @@ fn parse_year_only(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
         });
     }
     None
+}
+
+/// Phrases by which a request states that its window is on the stored
+/// timezone-naive scheduler clock (owner decision, D14, 2026-10-15).
+const STORED_CLOCK_MARKERS: [&str; 10] = [
+    "stored clock",
+    "stored time",
+    "stored timestamp",
+    "stored timestamps",
+    "as stored",
+    "timezone naive",
+    "jam tersimpan",
+    "waktu tersimpan",
+    "jam yang tersimpan",
+    "waktu yang tersimpan",
+];
+
+/// Why a scheduler window request cannot be answered on the stored clock.
+///
+/// Positive evidence only (no word blacklist): the request must say it is on
+/// the stored clock AND state an explicit window — a month range or ISO dates —
+/// that the grounded date binding can verify. A relative period alongside it
+/// ("yesterday", "last 3 months") contradicts an explicit window and is refused.
+pub fn stored_clock_window_issue(text: &str, today: NaiveDate) -> Option<&'static str> {
+    let joined = format!(" {} ", words(text).join(" ").to_lowercase());
+    let stated = STORED_CLOCK_MARKERS
+        .iter()
+        .any(|marker| joined.contains(&format!(" {marker} ")));
+    if !stated {
+        return Some("stored_clock_not_stated");
+    }
+    let explicit = parse_month_range(text, today).is_some() || has_iso_date(text);
+    if !explicit {
+        return Some("explicit_window_not_stated");
+    }
+    if parse_relative_phrase(text, today).is_some() || parse_last_n_months(text, today).is_some() {
+        return Some("calendar_or_timezone_expression");
+    }
+    None
+}
+
+fn has_iso_date(text: &str) -> bool {
+    text.split(|c: char| !(c.is_ascii_digit() || c == '-'))
+        .any(|token| NaiveDate::parse_from_str(token, "%Y-%m-%d").is_ok())
 }
 
 fn parse_relative_phrase(text: &str, today: NaiveDate) -> Option<ParsedPeriod> {
@@ -377,6 +440,16 @@ mod tests {
     }
 
     #[test]
+    fn month_phrase_binds_one_calendar_month_only_when_it_is_the_whole_quote() {
+        let april = parse_month_phrase("April 2026", today()).unwrap();
+        assert_eq!(april.from, NaiveDate::from_ymd_opt(2026, 4, 1).unwrap());
+        assert_eq!(april.to, NaiveDate::from_ymd_opt(2026, 4, 30).unwrap());
+        assert!(parse_month_phrase("between April 2026 and May 2026", today()).is_none());
+        assert!(parse_month_phrase("April", today()).is_none());
+        assert!(parse_period("April 2026", today()).is_none());
+    }
+
+    #[test]
     fn month_range_binds_stated_year_and_clamps_open_end_to_today() {
         let period =
             parse_period("Total deposits from January to September 2026.", today()).unwrap();
@@ -415,6 +488,36 @@ mod tests {
     fn bare_year_without_context_word_is_never_guessed() {
         // "366" alone (e.g. a stray number) must not be read as a year.
         assert!(parse_period("366 days of transactions", today()).is_none());
+    }
+
+    #[test]
+    fn stored_clock_window_needs_positive_evidence_not_a_blacklist() {
+        let today = NaiveDate::from_ymd_opt(2026, 10, 15).unwrap();
+        let issue = |text| stored_clock_window_issue(text, today);
+        assert_eq!(
+            issue("Runs from April 2026 to May 2026 on the stored clock"),
+            None
+        );
+        assert_eq!(
+            issue("Failed runs from 2026-04-01 to 2026-04-30 on the stored clock"),
+            None
+        );
+        assert_eq!(
+            issue("Runs from April 2026 to May 2026"),
+            Some("stored_clock_not_stated")
+        );
+        // Any unlisted calendar/timezone word without an explicit window is refused.
+        for text in [
+            "Jobs failed last night on the stored clock",
+            "Jobs failed during the Jakarta night shift on the stored clock",
+            "Runs in the last 3 months on the stored clock",
+        ] {
+            assert_eq!(issue(text), Some("explicit_window_not_stated"), "{text}");
+        }
+        assert_eq!(
+            issue("Runs from 2026-04-01 to 2026-04-30 yesterday on the stored clock"),
+            Some("calendar_or_timezone_expression")
+        );
     }
 
     #[test]

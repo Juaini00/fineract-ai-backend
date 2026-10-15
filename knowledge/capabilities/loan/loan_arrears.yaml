@@ -5,8 +5,11 @@ display_name: Loan Arrears
 description: >-
   Loans currently in arrears within authorized offices, with overdue amounts
   per component and the date arrears began (LOAN-9). XR-ASOF: a point-in-time
-  snapshot whose currency depends on COB having run; never presented as
-  always-current.
+  snapshot whose currency depends on Loan COB having closed the loans. The
+  answer is Complete only when account-level evidence proves every in-scope
+  loan closed through the COB date; otherwise it is Partial (loans behind COB)
+  or Unknown (evidence unavailable), with the reason. A successful Loan COB run
+  alone never proves coverage (D14).
 data_areas: [loans_charges_balances]
 required_api_capability: loan_arrears
 query_id: loan.loan_arrears
@@ -25,7 +28,13 @@ guards:
   require_office_scope: true
   snapshot_only: true
   pii: { returns_pii: false }
+freshness:
+  batch_job: Loan COB
+  batch_probe: scheduler.loan_cob_batch_evidence
+  coverage_probe: loan.loan_cob_coverage
 checks:
+  - id: freshness_enforced
+    rule: completeness is computed from the Loan COB batch evidence and the in-scope loans' last_closed_business_date versus the COB date, never from run status alone (D14, XR-ASOF).
   - id: asof_disclosed
     rule: response must carry overdue_since_date_derived per row; arrears is never presented as always-current (XR-ASOF).
 parameters:

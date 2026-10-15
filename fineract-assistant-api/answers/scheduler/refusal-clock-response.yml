@@ -1,0 +1,31 @@
+info:
+  name: FIN-124 refusal-clock response
+  type: http
+  seq: 38.1
+  description: |
+    Stored-clock windows only (owner decision, D14): "last night" is never
+    mapped onto the timezone-naive scheduler clock. With a real
+    model the request either reaches the planner guard (reason
+    `stored_clock_window_required`) or the model declines it (`planner_no_fit` /
+    `planner_abstained`); in every case no source query runs and no scheduler rows return.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124ClockJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          test("FIN-124 calendar-word scheduler window: refused, no rows, no clock conversion", function () {
+            expect(document.kind).to.not.equal("analysis");
+            expect(document.completeness).to.equal("Unknown");
+            expect(["stored_clock_window_required", "planner_no_fit", "planner_abstained"]).to.include(document.completeness_reason);
+            expect(document.blocks_json.some((b) => b.type === "table" || b.type === "metric")).to.equal(false);
+            expect(document.evidence_json.lineage || []).to.deep.equal([]);
+          });
+        }

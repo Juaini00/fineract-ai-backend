@@ -1,0 +1,65 @@
+info:
+  name: FIN-124 run-history response
+  type: http
+  seq: 12
+  description: |
+    Chain 1 — mixed success/failed attempts of ONE job (run grain), chronological.
+    Job 12 "Apply penalty to overdue loans" in [2026-04-01, 2026-06-01): failed
+    2026-04-01..04-09 (9 runs), succeeded 2026-04-10..05-03 (24 runs); its latest
+    run overall is a success. No interest-posting job has ever failed in this
+    fixture, so this job is the mechanism proof, not an interest-job claim.
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin124HistJob}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "scheduler_job_run_history", document);
+          const got = answers.answerRows(document);
+          test("FIN-124 run history: Answered/Complete, validator passed", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-124 run history: BOTH outcomes for one job, run grain, chronological", function () {
+            expect(got.rows.length).to.equal(33);
+            expect(got.rows.every((r) => r.job_id === 12)).to.equal(true);
+            expect(new Set(got.rows.map((r) => r.run_id)).size).to.equal(33);
+            const statuses = got.rows.map((r) => r.status);
+            expect(statuses.filter((s) => s === "failed").length).to.equal(9);
+            expect(statuses.filter((s) => s === "success").length).to.equal(24);
+            // failures first, then the subsequent successful attempts — never reordered by status
+            expect(statuses.slice(0, 9).every((s) => s === "failed")).to.equal(true);
+            expect(statuses.slice(9).every((s) => s === "success")).to.equal(true);
+            for (let i = 1; i < got.rows.length; i++) {
+              const a = got.rows[i - 1];
+              const b = got.rows[i];
+              expect(a.start_time <= b.start_time, `row ${i}`).to.equal(true);
+              if (a.start_time === b.start_time) expect(a.run_id < b.run_id).to.equal(true);
+            }
+          });
+          test("FIN-124 run history: latest status is separate from the windowed attempts", function () {
+            expect(got.rows.every((r) => r.job_latest_run_status === "success")).to.equal(true);
+            expect(got.rows.filter((r) => r.is_job_latest_run === true).length).to.equal(1);
+            expect(got.rows[got.rows.length - 1].is_job_latest_run).to.equal(true);
+          });
+          test("FIN-124 run history: a run status is not business coverage, said in the response", function () {
+            const scope = document.blocks_json.find((b) => b.block_id === "operational_scope");
+            expect(scope.window).to.deep.equal({ start_inclusive: "2026-04-01T00:00:00", end_exclusive: "2026-06-01T00:00:00" });
+            expect(scope.body).to.include("not evidence of any business result");
+          });
+          test("FIN-124 sanitation: no raw error text anywhere", function () {
+            const text = JSON.stringify(document).toLowerCase();
+            expect(got.columns.some((c) => /error/.test(c))).to.equal(false);
+            for (const needle of ["error_message", "error_log", "stack", "exception"]) {
+              expect(text.includes(needle), needle).to.equal(false);
+            }
+          });
+        }

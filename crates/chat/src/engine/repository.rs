@@ -1537,6 +1537,9 @@ pub struct NodeOutcome<'a> {
     pub provenance_json: Value,
     pub rows_returned: Option<i64>,
     pub duration_ms: Option<i64>,
+    /// Source queries sent beside the node's own query (D14 freshness probes).
+    /// Charged to the same absolute `query_count` budget as the primary query.
+    pub extra_queries: i64,
 }
 
 /// T4 — node selesai. Mengembalikan `job_node_runs.id`, atau `None` bila
@@ -1616,9 +1619,10 @@ pub async fn complete_node(
     // dicatat reaper saat menandainya (T11), karena query-nya mungkin sudah
     // berjalan.
     sqlx::query(
-        "UPDATE chat_jobs SET query_count = query_count + 1, updated_at = now() WHERE id = $1",
+        "UPDATE chat_jobs SET query_count = query_count + 1 + $2, updated_at = now() WHERE id = $1",
     )
     .bind(job_id)
+    .bind(outcome.extra_queries)
     .execute(&mut *tx)
     .await?;
 

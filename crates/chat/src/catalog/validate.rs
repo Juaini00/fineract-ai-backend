@@ -227,14 +227,20 @@ fn check_query(
     // The exception is for verified tenant-wide reference rows, never a
     // replacement for the office predicate on client/account/transaction facts.
     let org_wide = query.guards.org_wide_reference == Some(true);
+    // Owner decision (D14): operational scheduler tables are a DEDICATED
+    // declaration, mutually exclusive with `org_wide_reference`.
+    let operational = query.guards.operational_tenant_wide == Some(true);
     if query.database.as_deref() == Some("fineract") {
-        match (query.guards.require_office_filter == Some(true), org_wide) {
-            (false, false) | (true, true) => findings.push(Finding::error(
+        let declared = [query.guards.require_office_filter == Some(true), org_wide, operational]
+            .iter()
+            .filter(|class| **class)
+            .count();
+        if declared != 1 {
+            findings.push(Finding::error(
                 &subject,
                 "fineract_scope_class_declared",
-                "query Fineract harus tepat satu: office filter terikat ATAU org_wide_reference",
-            )),
-            _ => {}
+                "query Fineract harus tepat satu: office filter terikat ATAU org_wide_reference ATAU operational_tenant_wide",
+            ));
         }
     }
 
@@ -271,6 +277,53 @@ fn check_query(
                 "approved_org_wide_reference_only",
                 "tabel referensi global harus tepat sama dengan FROM/JOIN SQL dan semuanya ada di allowlist office_scope.yaml",
             ));
+        }
+    }
+
+    if operational {
+        if query.guards.require_office_filter != Some(false)
+            || org_wide
+            || query
+                .parameters
+                .iter()
+                .any(|parameter| parameter.source.as_deref() == Some("authorized_scope"))
+        {
+            findings.push(Finding::error(
+                &subject,
+                "operational_not_office_fact",
+                "operational_tenant_wide tidak boleh menyamar sebagai fakta office maupun org_wide_reference",
+            ));
+        }
+        let approved: BTreeSet<&str> = catalog
+            .office_scope_policy
+            .operational_tenant_tables
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let declared: BTreeSet<&str> = query.tables.iter().map(String::as_str).collect();
+        let sql_tables = global_reference_tables(&stripped);
+        if declared.is_empty()
+            || declared.len() != query.tables.len()
+            || !declared.is_subset(&approved)
+            || sql_tables
+                .as_ref()
+                .is_none_or(|tables| tables != &query.tables.iter().cloned().collect())
+        {
+            findings.push(Finding::error(
+                &subject,
+                "approved_operational_tenant_only",
+                "tabel operasional harus tepat sama dengan FROM/JOIN SQL dan semuanya ada di operational_tenant_tables office_scope.yaml",
+            ));
+        }
+        // D14: raw scheduler failure text is never an output.
+        for field in &query.output_fields {
+            if ["error_message", "error_log", "initializing_errorlog"].contains(&field.name.as_str()) {
+                findings.push(Finding::error(
+                    &subject,
+                    "no_raw_error_output",
+                    format!("output_field '{}' adalah teks error mentah (D14: tidak pernah dikeluarkan)", field.name),
+                ));
+            }
         }
     }
 
@@ -853,6 +906,27 @@ fn check_resolvers(catalog: &Catalog, findings: &mut Vec<Finding>) {
                 ));
             }
         }
+
+        // A resolver with no `authorized_scope` binds no office list at all
+        // (`ResolverSlot.scoped == false`). That is only legitimate for the
+        // dedicated operational class, whose tables the generic Fineract rules
+        // restrict to `operational_tenant_tables`; any other unscoped resolver
+        // would publish options from an unscoped query.
+        let scoped = loaded
+            .entry
+            .parameters
+            .iter()
+            .any(|parameter| parameter.source.as_deref() == Some("authorized_scope"));
+        if !scoped
+            && (loaded.entry.database.as_deref() != Some("fineract")
+                || loaded.entry.guards.operational_tenant_wide != Some(true))
+        {
+            findings.push(Finding::error(
+                &subject,
+                "resolver_unscoped_requires_operational",
+                "resolver tanpa authorized_scope hanya sah bila query Fineract operational_tenant_wide",
+            ));
+        }
     }
 
     for ((dataset_id, shape_id), manifests) in &wrapped {
@@ -1057,6 +1131,24 @@ fn check_capability(
         ));
     }
 
+    // D14: the capability guard and the query guard must tell the same story.
+    let capability_operational = capability
+        .guards
+        .get("operational_tenant_wide")
+        .and_then(serde_yaml::Value::as_bool)
+        == Some(true);
+    if capability_operational != (query.guards.operational_tenant_wide == Some(true)) {
+        findings.push(Finding::error(
+            &subject,
+            "operational_declaration_matches_query",
+            format!("guard operational_tenant_wide capability dan query {query_id} harus sama"),
+        ));
+    }
+
+    if let Some(freshness) = &capability.freshness {
+        check_freshness(catalog, capability, query, freshness, queries, &subject, findings);
+    }
+
     // chart_matches_grain (responses.md §7): chart hanya sah di atas bentuk data
     // yang dideklarasikan query. Di sini, bukan saat runtime — chart yang tidak
     // mungkin kompatibel adalah deklarasi yang salah, bukan data yang turun.
@@ -1090,6 +1182,78 @@ fn check_capability(
             )
         };
         findings.push(finding);
+    }
+}
+
+/// D14 / XR-ASOF: `freshness:` hanya sah bila kedua probe ada, bentuknya
+/// persis yang dibaca engine, dan capability itu sendiri terikat office —
+/// kesegaran dihitung atas akun dalam scope, bukan atas status job saja.
+fn check_freshness(
+    _catalog: &Catalog,
+    capability: &Capability,
+    query: &QueryManifest,
+    freshness: &crate::catalog::model::FreshnessDeclaration,
+    queries: &BTreeMap<&str, &QueryManifest>,
+    subject: &str,
+    findings: &mut Vec<Finding>,
+) {
+    use crate::catalog::model::{BATCH_PROBE_FIELDS, COVERAGE_PROBE_FIELDS};
+    let mut fail = |detail: String| findings.push(Finding::error(subject, "freshness_declaration_valid", detail));
+
+    if freshness.batch_job.trim().is_empty() {
+        fail("freshness.batch_job kosong".to_string());
+    }
+    if query.guards.require_office_filter != Some(true) {
+        fail(format!(
+            "capability {} bukan fakta terikat office; kesegaran akun tidak dapat dibuktikan",
+            capability.id
+        ));
+    }
+
+    let has_fields = |manifest: &QueryManifest, required: &[&str]| {
+        required
+            .iter()
+            .all(|name| manifest.output_fields.iter().any(|field| field.name == *name))
+    };
+    let shape = |manifest: &QueryManifest| -> Vec<(String, String, Option<String>)> {
+        manifest
+            .parameters
+            .iter()
+            .map(|p| (p.name.clone(), p.kind.clone(), p.source.clone()))
+            .collect()
+    };
+
+    match queries.get(freshness.batch_probe.as_str()) {
+        None => fail(format!("batch_probe {} tidak ada", freshness.batch_probe)),
+        Some(batch) => {
+            if batch.guards.operational_tenant_wide != Some(true)
+                || shape(batch) != [("batch_job_name".to_string(), "string".to_string(), None)]
+                || !has_fields(batch, &BATCH_PROBE_FIELDS)
+            {
+                fail(format!(
+                    "batch_probe {} harus operational_tenant_wide, satu parameter batch_job_name:string, dan memuat kolom bukti batch",
+                    freshness.batch_probe
+                ));
+            }
+        }
+    }
+    match queries.get(freshness.coverage_probe.as_str()) {
+        None => fail(format!("coverage_probe {} tidak ada", freshness.coverage_probe)),
+        Some(coverage) => {
+            if coverage.guards.require_office_filter != Some(true)
+                || shape(coverage)
+                    != [
+                        ("office_ids".to_string(), "array_bigint".to_string(), Some("authorized_scope".to_string())),
+                        ("cob_date".to_string(), "date".to_string(), None),
+                    ]
+                || !has_fields(coverage, &COVERAGE_PROBE_FIELDS)
+            {
+                fail(format!(
+                    "coverage_probe {} harus terikat office, parameter (office_ids, cob_date), dan memuat kolom cakupan",
+                    freshness.coverage_probe
+                ));
+            }
+        }
     }
 }
 

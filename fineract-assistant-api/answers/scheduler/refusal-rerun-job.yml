@@ -1,0 +1,27 @@
+info:
+  name: FIN-124 refusal-rerun job
+  type: http
+  seq: 34
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin124Token}}"
+    - name: Idempotency-Key
+      value: "{{fin124RerunKey}}"
+  body:
+    type: json
+    data: |
+      {"session_id": "{{fin124RefuseSession}}", "request_text": "Show the batch jobs that failed from April 2026 to May 2026 and rerun them."}
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin124RerunKey", "fin124-refusal-rerun-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin124RerunJob", res.getBody().data.job_id);

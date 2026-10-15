@@ -1,0 +1,38 @@
+id: scheduler.job_definitions
+database: fineract
+sql_file: queries/scheduler/job_definitions.sql
+data_areas: [scheduler_ops]
+tables: [job, job_run_history]
+metrics: []
+parameters:
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: job_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: display_name, type: string, sensitivity: public_business }
+  - { name: cron_expression, type: string, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+  - { name: runs_in_window, type: bigint, sensitivity: public_business }
+  - { name: success_runs_in_window, type: bigint, sensitivity: public_business }
+  - { name: failed_runs_in_window, type: bigint, sensitivity: public_business }
+  - { name: other_status_runs_in_window, type: bigint, sensitivity: public_business }
+  - { name: window_observation, type: string, sensitivity: public_business }
+  - { name: latest_run_id, type: bigint, sensitivity: public_business }
+  - { name: latest_run_start_time, type: string, sensitivity: public_business }
+  - { name: latest_run_end_time, type: string, sensitivity: public_business }
+  - { name: latest_run_status, type: string, sensitivity: public_business }
+  - { name: latest_run_trigger_type, type: string, sensitivity: public_business }
+grain: [job_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, operational_tenant_wide: true, parameterized_only: true }
+timeout_ms: 15000
+checks:
+  - id: window_half_open
+    rule: SQL counts runs with start_time >= $1 and start_time < $2 + 1 day.
+  - id: deterministic_order
+    rule: ORDER BY job id (unique) before the bound LIMIT.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.
