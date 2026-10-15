@@ -2025,6 +2025,79 @@ FIN-163 targeted verification after owner authorization:
   full regression gate were not exercised. FIN-163 remains In Progress
   without a commit, PR, CI result or closure.
 
+Update after FIN-159 (LOAN-6/LOAN-7 — loan transactions/charges carry source
+loan currency; uncommitted worktree deliverable, 2026-10-15):
+
+- Defect (code bug, omission): `loan.loan_transactions` and
+  `loan.loan_charges` returned monetary columns without the owning loan's
+  `currency_code`, against FIN-107 decision 1 and
+  `docs/data/analytical-contracts.md` §5–6 (currency per measure, no silent
+  mixing). `queries/loan/loan_transactions.sql` now joins `m_loan` on
+  `t.loan_id` (primary key; 2,859 non-reversed rows with and without the join,
+  no null `loan_id`) and projects `l.currency_code`; the direct
+  `t.office_id` filter, reversal exclusion, date window, grain
+  `transaction_id`, `ORDER BY transaction_date DESC, id DESC` and bound LIMIT
+  are unchanged. `queries/loan/loan_charges.sql` already joined `m_loan` for
+  its client-or-group `COALESCE` office scope and now projects
+  `l.currency_code`; every charge-state amount, grain, order and LIMIT are
+  unchanged. Both manifests list `currency_code` last in `output_fields` with
+  the existing `currency_per_row` check; `loan_transactions.yaml` lists
+  `m_loan` in `tables` (same shape as `loan.loan_recovery`). Answer columns
+  come from the manifest (`engine/planner.rs` `Plan.output_fields` →
+  `engine/compose.rs::table_block`); no Rust changed.
+- Oracles `tests/answers/{loan_transactions,loan_charges}.sql` derive
+  `currency_code` independently from `m_loan` (charges keep their own
+  `scoped` CTE). `answers/loans/{loan_transactions,loan_charges}-answer.yml`
+  add `FIN-159 LOAN-6/LOAN-7: currency_code per row = source loan currency`
+  (non-empty, row count = oracle, per-row currency = oracle, at least two
+  distinct currencies so a hardcoded single currency cannot pass).
+- Harness: `scripts/integration-test.sh` expands the optional `extra` array as
+  `${extra[@]+"${extra[@]}"}` (bash 3.2 `set -u` safe, never an empty
+  positional path — the earlier `"${extra[@]:-}"` attempt passed `""` to
+  `bru` and silently selected the whole collection), and an explicit
+  `PLANNER_PROVIDER_URL`/`PLANNER_PROVIDER`/`PLANNER_MODEL` process override
+  now applies to the catalog step and every stage, not only planner stages.
+- Proof, locked runner on port 3359, one chain per capability
+  (`fin108-login` → `<cap>-session` → `<cap>-job` → `<cap>-answer`,
+  `ANSWERS_ORACLE_PREFIX=<cap>`; 4 logical requests, 0 skipped):
+  - Real configured provider (`qwen-cloud`, `qwen3.8-flash`): job
+    `aa96119e-966d-4e90-b252-00d9531a44b7` failed `planner_output_invalid`,
+    4/4 model calls `provider_output_limits` with observed usage far below
+    limits (306–1,098 output tokens), i.e. the `complete && only_text` gate in
+    `crates/core/src/generation.rs`. This is the open FIN-163 provider
+    problem, not a FIN-159 result; the planner was not changed.
+  - All HTTP proof below therefore uses a throwaway deterministic
+    OpenAI-compatible **test fixture** provider outside the repo (process-only
+    `PLANNER_PROVIDER_URL`, model `test-fixture`) returning grounded proposals
+    for the two exact test requests through the unchanged Generation/Rig →
+    verifier → scope → SQL → compose path. It is **not** real-LLM or L2/PLN
+    proof.
+  - Failing before (fix temporarily reverted, new oracles/assertions kept):
+    both chains 4 requests (3 passed, 1 failed), tests 5/8; failures were the
+    column-set check (`currency_code` absent), the row comparison (row 0
+    `null` vs `USD`) and the FIN-159 currency test.
+  - Passing after: `loan_transactions` job
+    `e91c6b86-9752-437d-8d17-ce23708e30c3` 4/4 requests, 8/8 tests, 100 rows
+    (`from_date` 2025-10-15, `to_date` 2026-10-15, `limit` 100), HTTP
+    currencies AED 71 / USD 29 = oracle AED 71 / USD 29; `loan_charges` job
+    `fdeece29-729d-4410-930b-9b77504de805` 4/4 requests, 8/8 tests, 100 rows
+    (`limit` 100), HTTP AED 46 / EUR 6 / USD 48 = oracle AED 46 / EUR 6 /
+    USD 48. Answer polls (`GET …/response` 404 until settled) are extra
+    request executions on top of the 4 logical requests.
+- Source populations (read-only Fineract, 2026-10-15): non-reversed
+  transactions AED 1,704 / USD 1,121 / EUR 32 / AUD 2 (2025-11-10..2026-05-22,
+  all inside the default 12-month window); charges AED 155 / USD 48 / EUR 14
+  (217; no AUD charge exists). AUD/EUR transactions fall outside the default
+  first page; the production SQL for 2026-02-24..2026-04-28 returns AED 81 /
+  AUD 2 / USD 17 (SQL only, not exercised over HTTP).
+- Gates: `cargo test --workspace -q` 229 passed; catalog 0 error / 2
+  pre-existing warnings, validated; `./scripts/docs-check.sh` OK (29 routes,
+  0 undocumented; `api-reference.md` lists no per-capability columns, so it
+  is unchanged); `./scripts/acceptance-check.sh` 41/68 (LOAN-6/7 are
+  dataset-inventory IDs, not counted there). Clippy not re-run: no Rust
+  changed. No layer status in §5 changes; FIN-108/L1C/L2 are not claimed
+  complete. FIN-155 stays blocked by FIN-161/full catalog work, not only by
+  this column.
 
 ### 5.1 Scenario coverage
 

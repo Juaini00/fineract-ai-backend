@@ -75,6 +75,13 @@ if [ -f "$ROOT/.env" ]; then
     set +a
 fi
 
+# Override provider proses (PLANNER_PROVIDER_URL/_PROVIDER/_MODEL) berlaku untuk
+# katalog dan setiap tahap, bukan hanya tahap planner; dotenvy di app tidak
+# menimpa variabel yang sudah ada di environment.
+if [ -n "${PLANNER_PROVIDER_URL:-}" ]; then export LLM_CHAT_COMPLETIONS_URL="$PLANNER_PROVIDER_URL"; fi
+if [ -n "${PLANNER_PROVIDER:-}" ]; then export LLM_PROVIDER="$PLANNER_PROVIDER"; fi
+if [ -n "${PLANNER_MODEL:-}" ]; then export LLM_MODEL="$PLANNER_MODEL"; fi
+
 # Seam cap dataset hanya milik tahap `dataset-capped`. Bila `.env` menyetelnya,
 # dotenvy di app membacanya kembali di SETIAP tahap dan tahap engine gagal
 # dengan pesan yang tidak menunjuk penyebabnya — tolak sejak awal.
@@ -226,7 +233,7 @@ run_folders() {  # $1 = jeda ms, sisanya = folder
             --env-var "plannerMode=${PLANNER_MODE:-real}" \
             --env-var "plannerExpectedFailure=${PLANNER_EXPECTED_FAILURE:-}" \
             --env-var "plannerExpectedAttempts=${PLANNER_EXPECTED_ATTEMPTS:-0}" \
-            "${extra[@]}" \
+            ${extra[@]+"${extra[@]}"} \
             --disable-cookies \
             --delay "$delay" \
             ${BRU_SANDBOX:+--sandbox "$BRU_SANDBOX"} \

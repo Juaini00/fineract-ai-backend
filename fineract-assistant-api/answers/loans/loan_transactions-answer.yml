@@ -21,6 +21,15 @@ runtime:
             expect(document.completeness).to.equal("Complete");
             expect(document.validation_status).to.equal("passed");
           });
+          test("FIN-159 LOAN-6: currency_code per row = source loan currency", function () {
+            const want = require("./.answers/expected.js").rows.loan_transactions;
+            const rows = answers.answerRows(document).rows;
+            expect(rows.length).to.be.above(0);
+            expect(rows.length).to.equal(want.length);
+            rows.forEach((r, i) => expect(r.currency_code, "baris " + i).to.equal(want[i].currency_code));
+            // >= 2 keeps a hardcoded single currency from passing unnoticed.
+            expect(new Set(rows.map((r) => r.currency_code)).size).to.be.at.least(2);
+          });
           test("FIN-108 LOAN-6: allocation reconciles for repayment-type rows", function () {
             const rows = answers.answerRows(document).rows;
             expect(rows.length).to.be.above(0);

@@ -1125,3 +1125,20 @@ oracle. The OVR-6.6 full-chain control moved from `policy-deferred-loan-*`
 `engine/policy-session.yml`). Final run: engine selection 8/8 requests, 7/7
 tests; `answers/loans` 131/131 requests, 184/184 tests; OVR-6.7 zero
 violations.
+
+## 15. FIN-159 / LOAN-6, LOAN-7 — source loan currency added
+
+Both capabilities now output the owning loan's `currency_code` (FIN-107
+decision 1). Two numbers side by side, two writings: production SQL in
+`queries/loan/`, independent oracle in `tests/answers/`, compared row for row
+over HTTP by `answers/loans/<cap>-answer.yml` (see `docs/build-order.md`,
+"Update after FIN-159", for commands and job IDs). HTTP planning in that run
+used a deterministic test-fixture provider, not the real LLM.
+
+| Capability | HTTP page (job) | Oracle page | Source population |
+| --- | --- | --- | --- |
+| `loan_transactions` (last 12 months, limit 100) | AED 71 / USD 29 (`e91c6b86…`) | AED 71 / USD 29 | AED 1,704 / USD 1,121 / EUR 32 / AUD 2 (2,859) |
+| `loan_charges` (limit 100) | AED 46 / EUR 6 / USD 48 (`fdeece29…`) | AED 46 / EUR 6 / USD 48 | AED 155 / USD 48 / EUR 14 (217) |
+
+Limitation: AUD/EUR transactions are outside the default first page and were
+checked by SQL only; no AUD loan charge exists in this deployment.

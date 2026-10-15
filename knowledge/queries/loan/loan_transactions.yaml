@@ -2,7 +2,7 @@ id: loan.loan_transactions
 database: fineract
 sql_file: queries/loan/loan_transactions.sql
 data_areas: [loans_servicing]
-tables: [m_loan_transaction]
+tables: [m_loan_transaction, m_loan]
 metrics: []
 parameters:
   - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
@@ -22,6 +22,7 @@ output_fields:
   - { name: penalty_charges_portion_derived, type: decimal, sensitivity: public_business }
   - { name: overpayment_portion_derived, type: decimal, sensitivity: public_business }
   - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
 grain: [transaction_id]
 guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
 timeout_ms: 3000
@@ -34,3 +35,5 @@ checks:
     rule: SQL must use a bound LIMIT parameter.
   - id: output_columns_match_contract
     rule: Prepared SQL output columns must equal output_fields order.
+  - id: currency_per_row
+    rule: every row carries the owning loan's currency_code.
