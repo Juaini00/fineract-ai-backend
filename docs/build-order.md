@@ -269,6 +269,36 @@ audited calls and strict proposal rejection. FIN-163 now has a targeted real
 planner round-trip and provider-outage proof. This proves one supported
 request and the unavailable-provider path, not complete L2 conformance.
 
+FIN-163 provider correction (working branch, not published or closed):
+`qwen3.8-flash` returns its hidden reasoning in a separate `reasoning_content`
+field beside `content` with `finish_reason=stop`; Rig maps it to a
+`Reasoning` part, so the `complete && only_text` gate in
+`crates/core/src/generation.rs` rejected every valid answer as
+`provider_output_limits` (the earlier 12/12 "empty" and 4/4 FIN-159 failures).
+Reasoning parts are now ignored; the answer must still be exactly one `Text`
+part with `finish_reason=stop` and within the token limits. No validation,
+schema, fence or fallback change. Proof (locked runner, port 3363, real
+`qwen-cloud`/`qwen3.8-flash`, Indonesian request "Tampilkan transaksi pinjaman
+12 bulan terakhir."): job `62aa9bcd-c64d-4679-8358-bf13c662331e`, one planner
+call, `ok`, 288 output tokens, `loan_transactions` with the oracle's parameters,
+100 rows, AED 71 / USD 29 = independent SQL row-for-row; 8/8 Bruno tests.
+This proves one supported request, not complete L2 / PLN conformance.
+
+Second exercised path (current proof, same worktree, real provider, locked runner
+port 3363, Indonesian request "Tampilkan biaya dan denda pinjaman di kantor yang
+saya akses."): job `c0f93842-c8fb-4d20-80d5-7e13aebfd18e`, one planner call
+(`planner.call_finished` ok), `loan_charges` plan persisted, one source node,
+settled `Answered`/`Complete`; 22 requests (4 logical + polls), 8/8 Bruno tests:
+parameters and office scope = SQL oracle, 100 rows AED 46 / EUR 6 / USD 48
+row-for-row with independent SQL, per-row source currency, charged reconciles.
+Negative controls re-run after the reasoning-part change (the fixture now sends
+`reasoning_content` beside the fenced content): `planner-invalid` job
+`0e4378ea-2c58-4b07-903a-1c57593f6874` = `planner_output_invalid`, 2 calls, no
+plan, no source query; `planner-unavailable` job
+`c593fd94-6e99-4838-ac9e-13fc067ebd55` = `planner_unavailable`, 2 calls, no plan,
+no source query (8/8 tests each). Still unexercised: the remaining PLN scenarios
+(see the L2 inventory); this is not a full L2 claim.
+
 ### L3 — Dataset handles and chunks
 
 **Goal**: large results get a storage path, result pagination exists, and an
@@ -2064,8 +2094,9 @@ loan currency; uncommitted worktree deliverable, 2026-10-15):
     `aa96119e-966d-4e90-b252-00d9531a44b7` failed `planner_output_invalid`,
     4/4 model calls `provider_output_limits` with observed usage far below
     limits (306–1,098 output tokens), i.e. the `complete && only_text` gate in
-    `crates/core/src/generation.rs`. This is the open FIN-163 provider
-    problem, not a FIN-159 result; the planner was not changed.
+    `crates/core/src/generation.rs`. This was the FIN-163 provider problem,
+    not a FIN-159 result; the planner was not changed. (Historical: root cause
+    and fix are recorded under "FIN-163 provider correction" below.)
   - All HTTP proof below therefore uses a throwaway deterministic
     OpenAI-compatible **test fixture** provider outside the repo (process-only
     `PLANNER_PROVIDER_URL`, model `test-fixture`) returning grounded proposals
