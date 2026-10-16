@@ -1,0 +1,10 @@
+info:
+  name: teller_cashier
+  seq: 8
+  description: |
+    FIN-115 (D06, D15e): the real configured model answers the four approved
+    teller/cashier capabilities; each answer is compared row for row with an
+    independent SQL in tests/answers (columns, bound parameters, authorized
+    scope). The `-narrow` jobs carry `office_ids: [2, 3]` (partial
+    authorization) and are compared with a second oracle. Recorded cash is not
+    physical cash and no complete cash position is claimed.

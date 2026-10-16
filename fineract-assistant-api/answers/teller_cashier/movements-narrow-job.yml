@@ -1,0 +1,27 @@
+info:
+  name: FIN-115 movements-narrow job
+  type: http
+  seq: 41
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+    - name: Idempotency-Key
+      value: "{{fin115_movements_narrow_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin115_movements_narrow_session}}", "request_text": "Show the cash allocations and settlements recorded for cashiers from January 2026 to March 2026.", "office_ids": [2, 3] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin115_movements_narrow_key", "fin115-movements-narrow-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin115_movements_narrow_job", res.getBody().data.job_id);

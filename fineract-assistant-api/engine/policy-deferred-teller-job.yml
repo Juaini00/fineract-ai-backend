@@ -1,10 +1,12 @@
 info:
-  name: "OVR-6.6 domain gap (teller/cashier, D06) — job"
+  name: "OVR-6.6 gap intent (teller/cashier cash reconciliation, D06) — job"
   type: http
   seq: 38.9989
   description: |
-    Domain `teller_cashier` (`knowledge/domains/teller_cashier.yaml`, gap, FIN-153) —
-    D06 cakupannya disepakati tanpa capability disetujui.
+    FIN-115: teller/cashier assignments and recorded movements are now approved
+    capabilities; cash reconciliation (counted cash vs recorded) stays a
+    `gap_intents` entry of `knowledge/domains/teller_cashier.yaml` (D06): no
+    reconciliation record is read, so it answers Unsupported with `domain_gap`.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -18,7 +20,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show the teller assignment for this branch.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show the cash reconciliation for this teller.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

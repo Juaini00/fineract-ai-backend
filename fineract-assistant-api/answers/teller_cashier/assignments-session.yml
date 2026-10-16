@@ -1,0 +1,22 @@
+info:
+  name: FIN-115 assignments session
+  type: http
+  seq: 10
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-115 assignments" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin115_assignments_session", res.getBody().data.id);

@@ -2563,3 +2563,40 @@ manual step (`cargo run -p app -- catalog --sync --embed`);
 writes `knowledge_index` rows for a version it just created, so re-running the
 backfill against an unchanged catalog does not re-spend the embedding API
 budget.
+
+
+Update for FIN-115 publication (L1C D06 teller/cashier + D15e inter-office cash;
+**ticket remains open; D06/D15e inventory rows stay `gap`**):
+
+- Delivered read contracts: `teller_cashier_assignments`, `cashier_cash_movements`,
+  `cashier_recorded_cash_position`, and `inter_office_cash_transfers`. The live schema
+  disproves the inventory's old "no cash-movement table" observation:
+  `m_cashier_transactions` contains 49 allocation/settlement rows. Source correction
+  and historical attempts are retained in `knowledge/VERIFICATION.md` §17; the
+  owning inventory contract is not silently rewritten.
+- Position is cumulative through `to_date`, with the position before `from_date`.
+  Formula: allocation + cash in - cash out - settlement, per cashier and currency.
+  Derived savings/loan/client cash requires explicit cash payment evidence and
+  creator-staff attribution within assignment dates. Matching assignments are
+  classified before aggregation: ambiguous events enter no amount, are disclosed,
+  and withhold affected positions as NULL rather than duplicating money.
+  Physical cash counts, reconciliation and discrepancies remain unsupported.
+- Final changed-path proof used real `qwen-cloud/qwen3.8-flash` through the locked
+  runner: 58 requests, 28 positive acceptance assertions plus one diagnostic
+  observation (the runner displays 29/29). Position matched independent SQL for
+  16 groups and 4 narrowed groups (`office_ids` [2,3]); assignments matched 5 and
+  2 rows. Cashier 3 / USD is 0, cashier 2 / USD is 20800, and cashier 4 / USD is
+  35970 and AED is 25000 through 2026-04-30. Earlier unchanged journal movement
+  proof matched 31/2 rows; inter-office is proven only as Empty = SQL 0.
+- Six VALUES-only production-SQL regression checks prove ambiguous/adjacent
+  assignments, unauthorized-cashier exclusion, zero positions, NULL currency and
+  unique groups. They read no Fineract table. Workspace unit tests, clippy,
+  catalog validation, docs-check and acceptance-check passed. No numbered L1C
+  scenario, full collection, full D06 or full L2 conformance is claimed.
+- The original assignments wording still fails before a model call when the
+  six-candidate prompt exceeds the 16000-byte input bound. Timeout and verification
+  failures remain recorded, not resolved by later success. Diagnostic requests
+  were archived locally and removed from permanent tests; accepting either
+  success or a known failure is not an acceptance gate. Nonempty attributed
+  loan/client data, journal types 103/104, nonzero inter-office transfers and
+  `full_day = false` remain unproven. No planner limit, retry or verifier was relaxed.

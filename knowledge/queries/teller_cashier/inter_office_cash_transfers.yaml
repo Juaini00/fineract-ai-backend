@@ -1,0 +1,30 @@
+id: teller_cashier.inter_office_cash_transfers
+database: fineract
+sql_file: queries/teller_cashier/inter_office_cash_transfers.sql
+data_areas: [teller_cashier_ops]
+tables: [m_office_transaction]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: office_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: from_office_id, type: bigint, sensitivity: public_business }
+  - { name: to_office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [office_transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: every non-NULL office on the row (from and/or to) is constrained with ANY($1::bigint[]); a row with both NULL is excluded.
+  - id: no_counterpart_leak
+    rule: a transfer with an out-of-scope counterpart office is not returned.
+  - id: no_free_text
+    rule: description is never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY (transaction_date DESC, id DESC).

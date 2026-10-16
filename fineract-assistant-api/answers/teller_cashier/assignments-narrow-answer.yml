@@ -1,0 +1,27 @@
+info:
+  name: FIN-115 assignments-narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin115_assignments_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "teller_cashier_assignments", document, { truthKey: "teller_cashier_assignments__scope_2_3", narrowedTo: 2 });
+          test("FIN-115 assignments-narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-115 D06: narrowing to offices 2 and 3 returns only their cashiers", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.map((row) => row.office_id).sort()).to.deep.equal([2, 3]);
+          });
+        }

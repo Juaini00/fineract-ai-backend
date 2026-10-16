@@ -1,34 +1,57 @@
 id: teller_cashier
-status: gap
+status: approved_mvp
 display_name: Teller and cashier cash operations
+# FIN-115: flipped from `gap`. The earlier statement that no cash-movement table
+# exists is disproved by the live schema (`m_cashier_transactions`, evidence in
+# knowledge/VERIFICATION.md); the inventory rows D06/D15e are not edited here and
+# stay `gap`; physical/counted/reconciled cash remains unsupported.
 description: >-
-  Cashier/teller assignment and cash position — §1 rule + D06
-  (dataset-scope-decisions.md:104-110) and dataset-inventory.md D06. Cashier
-  and teller assignment tables exist (`m_cashiers`, `m_tellers`); no
-  cash-movement/reconciliation table exists in the current schema (verified
-  missing, dataset-inventory.md §11) — cash position/reconciliation stays
-  `gap` with no candidate table, not merely unverified. Agreed baseline scope
-  for assignment; no approved Mode-1 capability exists yet.
+  Cashier/teller assignment, recorded cashier cash movements and inter-office
+  cash transfers — §1 rule + D06 (dataset-scope-decisions.md:104-110) and
+  dataset-inventory.md D06/D15e. Approved Mode-1 capabilities: cashier-to-teller
+  assignments (`m_cashiers`, `m_tellers`), the movements stored in the cashier
+  journal (`m_cashier_transactions`: allocate, settle, and cash in/out when
+  stored), the recorded cash position per cashier and currency, and
+  office-to-office transfers (`m_office_transaction`, D15e, kept separate).
+  Recorded cash is never counted physical cash. The recorded cash position
+  follows Fineract's own formula (allocate + cash in - cash out - settle)
+  through a declared cutoff, with cash in/out from the stored journal plus
+  savings, loan and client cash transactions attributed to the cashier
+  (explicit cash payment type, inferred attribution).
 inventory_refs:
   - D06
   - D15e
-data_areas: []
+data_areas: [teller_cashier_ops]
 concepts:
   - id: teller
     meaning: A till/counter Fineract cash transactions are recorded against.
-    synonyms: [teller assignment, cashier assignment]
+    synonyms: [teller assignment, cashier assignment, teller, tellers, cashier, cashiers, kasir]
+  - id: cashier_cash_movement
+    meaning: A cash allocation to, or settlement from, a cashier recorded in the cashier journal.
+    synonyms: [cash allocation, cash settlement, allocate cash, settle cash, alokasi kas, penyelesaian kas, recorded cash, cash position, posisi kas]
+  - id: inter_office_cash
+    meaning: A recorded cash transfer between two offices, separate from teller/cashier cash and from client transactions.
+    synonyms: [inter-office cash, inter office cash, transfer kas antar kantor]
 supported_intents: []
 gap_intents:
-  - { phrase: "teller assignment", inventory_ref: D06 }
-  - { phrase: "cashier assignment", inventory_ref: D06 }
-  - { phrase: "inter-office cash transaction", inventory_ref: D15e }
+  - { phrase: "physical cash count", inventory_ref: D06 }
+  - { phrase: "cash reconciliation", inventory_ref: D06 }
+  - { phrase: "cash discrepancy", inventory_ref: D06 }
+  - { phrase: "cash shortage", inventory_ref: D06 }
+  - { phrase: "cash overage", inventory_ref: D06 }
 unsupported_intents:
   - { phrase: "open teller shift", exempt: "write_action" }
   - { phrase: "close teller shift", exempt: "write_action" }
+  - { phrase: "allocate cash to cashier", exempt: "write_action" }
+  - { phrase: "settle cash from cashier", exempt: "write_action" }
 default_rules:
-  - Cashier/teller assignment (D06) is agreed baseline scope with no approved capability yet; it answers unsupported with a gap reason.
-  - Cash position/reconciliation has no candidate table in this schema (verified missing) — a future capability cannot promise it without a new decision; recorded cash is never asserted as physical cash.
-  - Inter-office cash movement (D15e, `m_office_transaction`) sits under this domain per the decision's own disposition ("di bawah D06/accounting, ditandai eksplisit"); it is agreed baseline scope, empty on the reference fixture, and must never be conflated with client-facing transactions.
+  - Cashier/teller assignments, recorded cashier cash movements, the recorded cash position and inter-office transfers (D15e) have approved capabilities; each is an explicit date window (the position: a cutoff) within authorized offices.
+  - Recorded cash is what the system holds in `m_cashier_transactions`, never counted physical cash. A cash discrepancy needs a counted-cash or reconciliation record; none is read, so those questions answer unsupported with a gap reason.
+  - The recorded cash position (`cashier_recorded_cash_position`) is allocate + cash in - cash out - settle, cumulative through a declared cutoff, per cashier and currency, zero groups preserved. Cash in/out are the stored journal rows plus Fineract's derived cash: savings deposits/withdrawals, loan repayments (types 2, 5, 8, 17) and disbursements, and client charge payments made by the cashier's staff inside the assignment dates, counted only with an explicit cash payment type and never when reversed or an account transfer. Divergences from the reader are disclosed in every row (payment details that are not explicitly cash are not counted; waivers, write-offs and interest are not cash). The attribution is inferred, not a stored cashier reference. Loan and client branches are implemented to Fineract's rules but have no attributed row locally, so they are unproven by data; every component column is shown so no branch is hidden inside the position.
+  - "`m_cashier_transactions.entity_type`/`entity_id` are not read and no loan or savings linkage is asserted. Names, descriptions and notes are never returned; a staff member is the surrogate staff ID."
+  - Inter-office cash movement (D15e, `m_office_transaction`) is its own capability and is never conflated with teller/cashier cash or client-facing transactions; the reference deployment holds no such transfer, so an empty answer is a no-record answer.
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D06's row moves to inherited.
+  - id: no_physical_cash_claim
+    rule: no capability or intent may describe a recorded position, or allocated less settled alone, as counted, physical or reconciled cash.
+  - id: write_actions_stay_unsupported
+    rule: opening/closing a shift and allocating or settling cash remain write_action unsupported intents.

@@ -716,6 +716,42 @@ PII; nama group, petugas, dan anggota tidak dibaca oleh capability ini.
 Jadwal tidak membuktikan pertemuan terjadi ataupun kehadiran; permintaan
 realisasi/kehadiran tetap `Completed` + `Unsupported`/`domain_gap`.
 
+FIN-115 D06/D15e: domain `teller_cashier` punya empat capability baca
+berjendela tanggal eksplisit dalam office yang berwenang.
+`teller_cashier_assignments` mengembalikan satu baris per penugasan kasir
+(`cashier_id`, `teller_id`, `office_id`, `staff_id`, tanggal/jam penugasan,
+`is_full_day`, `teller_valid_from`/`teller_valid_to`, `teller_state_enum`,
+`teller_state`); batas
+penugasan yang tidak tercatat berupa `NULL` (terbuka), bukan tanggal bawaan.
+`cashier_cash_movements` mengembalikan satu baris per gerakan kas yang tersimpan
+di jurnal kasir (`cashier_transaction_id`, `cashier_id`, `office_id`, `txn_type`,
+`txn_date`, `amount`, `currency_code`); `currency_code=NULL` berarti mata uang
+tidak diketahui.
+`cashier_recorded_cash_position` mengembalikan posisi kas TERCATAT per kasir dan
+per mata uang, kumulatif dari awal sampai `to_date` (cutoff, dikembalikan sebagai
+`as_of_date`), dengan `position_before_window_amount` (posisi sebelum
+`from_date`) dan rumus Fineract: alokasi + kas masuk − kas keluar − penyelesaian
+(`recorded_cash_position_amount`). Kolom komponen ditampilkan terpisah
+(`allocated_amount`, `settled_amount`, `journal_cash_in/out_amount`,
+`savings_cash_in/out_amount`, `loan_cash_in/out_amount`,
+`client_cash_in_amount`). Kas masuk/keluar turunan (savings, loan, client)
+dikaitkan ke kasir secara DISIMPULKAN dari staf pembuat transaksi dan tanggal
+penugasan, hanya tipe pembayaran tunai eksplisit, tanpa transaksi dibalik atau
+transfer akun; detail pembayaran yang tidak eksplisit tunai tidak dihitung
+(berbeda dari pembaca Fineract, dinyatakan pada `position_basis`). Grup
+kasir+mata uang yang bersaldo nol tetap dikembalikan sebagai 0. Cabang loan dan
+client mengikuti aturan Fineract tetapi belum punya baris terkait lokal.
+`inter_office_cash_transfers` (D15e) mengembalikan transfer kas antar-office
+(`office_transaction_id`, `from_office_id`, `to_office_id`, `transaction_date`,
+`amount`, `currency_code`) yang terpisah dari kas teller/kasir; transfer hanya
+tampil bila setiap office pada baris itu berwenang, dan hasil kosong berarti
+tidak ada transfer tercatat pada jendela itu. Semua capability membatasi jendela
+366 hari, memakai batas baris 200 yang diungkap (`row_cap_reached`), dan
+`office_ids` hanya dapat dipersempit. Nama staf/teller, deskripsi, catatan
+gerakan dan tautan `entity_type`/`entity_id` tidak dibaca. Kas tercatat bukan
+kas fisik, terhitung, atau terekonsiliasi; hitung fisik, rekonsiliasi dan selisih
+kas tetap `Completed` + `Unsupported`/`domain_gap`.
+
 #### `evidence_json` — lineage
 
 Dari mana angkanya berasal. Ia **kolom, bukan blok**: blok yang tidak dikenal

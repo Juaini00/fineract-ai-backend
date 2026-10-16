@@ -1,10 +1,10 @@
 info:
-  name: "OVR-6.6 domain gap (inter-office cash transaction, D15e) — job state"
+  name: "OVR-6.6 gap intent (physical cash count, D06) — job state"
   type: http
   seq: 38.998
 http:
   method: get
-  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_office_transaction_job}}"
+  url: "{{baseUrl}}/chat/jobs/{{policy_deferred_cash_position_job}}"
   headers:
     - name: authorization
       value: "Bearer {{engineToken}}"
@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (gap, inter-office cash D15e): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-153 (gap intent, physical cash count D06, FIN-115): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
