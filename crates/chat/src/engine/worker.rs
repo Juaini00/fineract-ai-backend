@@ -345,11 +345,26 @@ async fn run_job(
 
     let plan = match planned {
         Ok(plan) => plan,
+        Err(planner::Unplannable::Interaction(intent)) => {
+            let response = super::understanding::response(intent, catalog);
+            return repository::settle_with_response(
+                pool,
+                job.id,
+                job.session_id,
+                job.owner_user_id,
+                job.lease_token,
+                Validated::unchecked(response),
+                &[],
+            )
+            .await
+            .map_err(Into::into);
+        }
         Err(problem @ planner::Unplannable::PlannerFailure(code)) => {
-            let explanation = if code == "planner_no_fit" {
-                problem.explain()
-            } else {
-                "The planner could not produce a verified plan, so this request was not answered. No source query was run.".to_string()
+            let explanation = match code {
+                "planner_no_fit" => problem.explain(),
+                "planner_unavailable" => "Jarvis could not reach its language-model provider or the request did not finish within its allowed time. No analytical query was run. Please try again later.".to_string(),
+                "planner_abstained" => "Jarvis could not determine your request reliably. Please state the Fineract subject and reporting goal more explicitly. No analytical query was run.".to_string(),
+                _ => "The language model did not produce a response that Jarvis could verify. Your request was not executed and no analytical query was run.".to_string(),
             };
             return settle_failed_with(foundation, job, code, &explanation).await;
         }

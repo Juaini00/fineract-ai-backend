@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "outside response",
+    "type": "http",
+    "seq": 4
+  },
+  "http": {
+    "method": "get",
+    "url": "{{baseUrl}}/chat/jobs/{{assistantJob}}/response",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      }
+    ]
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "test(\"outside: assistant response preserves its evidence boundary\",()=>{expect(res.getStatus()).to.equal(200);const d=res.getBody().data;expect(d.outcome).to.equal(\"Unsupported\"); expect(d.blocks_json.some(b=>[\"metric\",\"table\",\"chart_spec\",\"comparison\",\"finding\"].includes(b.type))).to.equal(false); });console.log(JSON.stringify({scenario:\"outside\",response:res.getBody().data}));"
+      }
+    ]
+  }
+}

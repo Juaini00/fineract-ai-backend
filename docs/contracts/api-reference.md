@@ -348,6 +348,35 @@ Kombinasi yang dilarang (dan tidak akan pernah dikirim): `Empty`/`NotFound`
 dengan `Partial`; `SkippedByUser` dengan `Complete`; lifecycle nonterminal
 dengan `outcome` terisi.
 
+#### Assistant interaction (FIN-164)
+
+All messages still use `POST /chat/jobs`; there is no separate chat endpoint.
+The real configured model proposes a typed intent before any analytical plan.
+Pure greetings, thanks, acknowledgements, identity and help requests produce a
+durable `conversation` response, `Completed` / `Answered` / `Complete`, without
+an analytical plan, dataset or promoted session facts. Complete describes the
+conversational task, not source-data completeness.
+
+Replies use existing English `narrative` blocks. The Engine renders bounded
+speech acts; the model cannot introduce arbitrary prose, numbers or actions.
+Help names available approved catalog capabilities and discloses unavailable
+memory/staged-clarification support. `evidence_json` records `intent`,
+`catalog_content_hash`, `help_capability_ids`, `context_reuse` and the absence
+of analytical queries; it is not fabricated source lineage.
+
+A vague reporting goal receives a conversational question rather than an
+arbitrarily selected report. A request referring to unavailable previous-result
+context receives an explicit limitation, never invented memory. Unrelated
+external services produce `Unsupported` / `Unknown` with reason
+`outside_product_scope`. Non-English prose receives an English restatement
+request. Existing write, PII and scope guards still run first.
+
+Mixed greeting-plus-analysis requests retain the entire original request and
+the existing FIN-162 verification/execution path. Conversational understanding
+never grants permission or substitutes for a failed analytical planner.
+Persistence, idempotency, owner isolation, snapshots and SSE replay use the
+existing job contracts; no unvalidated narrative is streamed.
+
 #### Planner failures (FIN-163)
 
 Admissible analysis requests now use the configured Rig generation client.
@@ -371,8 +400,10 @@ quotes and occurrences, while the Engine computes their UTF-8 spans. The
 current execution path admits one approved capability; multi-node scheduling
 remains outside this integration.
 
-Generation requests use native `json_schema` mode with the closed version-1
-proposal shape supplied by the Engine. Provider grammar support does not
+Generation requests use native `json_schema` mode with a closed understanding
+envelope (`schema_version`, `intent`, `analysis`). The analytical branch embeds
+the unchanged closed FIN-162 version-1 proposal; other branches require an
+explicitly null analysis payload. Provider grammar support does not
 replace duplicate-key rejection, decision/node consistency, catalog validation,
 source grounding or authorization checks. A provider that rejects schema mode
 follows the existing failure path; the client does not downgrade to
@@ -441,7 +472,7 @@ menyimpulkan hasil dari `lifecycle` saja.
 }
 ```
 
-`kind`: `analysis`, `limitation`, atau `skipped`.
+`kind`: `analysis`, `limitation`, `skipped`, or `conversation`.
 
 #### `validation_status` dan kenapa `response_version` dapat bernilai 2
 
@@ -1315,7 +1346,7 @@ di proses ini. Konfigurasi saja tidak menyatakan provider tersambung:
     "timeout_ms": 30000, "max_retries": 3,
     "max_input_tokens": 16000, "max_output_tokens": 2000 },
   "planning": { "implementation": "integrated", "client": "rig",
-    "prompt_version": "planner-v2", "schema_version": 1,
+    "prompt_version": "understanding-v2", "schema_version": 1,
     "execution": "single_capability", "deterministic_selection_fallback": false },
   "narration": { "implementation": "not_integrated" },
   "summarization": { "implementation": "not_integrated" },

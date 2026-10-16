@@ -13,7 +13,7 @@ runtime:
   - type: tests
     code: 'const poll = require("./lib/poll.js");
 
-      if (!(await poll.awaitJob(bru, req, res, job => poll.TERMINAL.includes(job.lifecycle)))) return;
+      if (!(await poll.awaitJob(bru, req, res, job => poll.TERMINAL.includes(job.lifecycle), 150000))) return;
 
       const job = res.getBody().data;
 

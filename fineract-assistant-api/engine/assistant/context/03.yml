@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "context terminal",
+    "type": "http",
+    "seq": 3
+  },
+  "http": {
+    "method": "get",
+    "url": "{{baseUrl}}/chat/jobs/{{assistantJob}}",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      }
+    ]
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "const poll=require(\"./lib/poll.js\");\nif (!(await poll.awaitJob(bru,req,res,j=>poll.TERMINAL.includes(j.lifecycle),150000))) return;\ntest(\"context: correct durable disposition\",()=>{const j=res.getBody().data; expect(j.lifecycle).to.equal(\"Completed\"); expect(j.outcome).to.equal(\"Answered\"); expect(j.plan_version).to.equal(null);});\nconsole.log(JSON.stringify({scenario:\"context\",job:bru.getVar(\"assistantJob\"),snapshot:res.getBody().data}));"
+      }
+    ]
+  }
+}

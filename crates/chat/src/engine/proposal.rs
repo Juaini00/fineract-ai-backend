@@ -184,7 +184,9 @@ impl Source {
         let (start, matched) = if self.occurrence == 0 {
             first
         } else {
-            matches.nth(self.occurrence - 1).ok_or("source_occurrence_not_found")?
+            matches
+                .nth(self.occurrence - 1)
+                .ok_or("source_occurrence_not_found")?
         };
         Ok((start, start + matched.len()))
     }
@@ -276,7 +278,7 @@ impl Proposal {
     }
 }
 
-struct UniqueValue(Value);
+pub(super) struct UniqueValue(pub(super) Value);
 
 impl<'de> Deserialize<'de> for UniqueValue {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {

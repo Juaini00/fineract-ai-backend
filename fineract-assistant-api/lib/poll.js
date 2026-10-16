@@ -7,14 +7,14 @@ const POLL_DEADLINE_MS = 90000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // true bila `done(job)` terpenuhi; false bila request ini dijadwalkan ulang.
-async function awaitJob(bru, req, res, done) {
+async function awaitJob(bru, req, res, done, deadlineMs = POLL_DEADLINE_MS) {
   if (res.getStatus() === 200 && done(res.getBody().data)) return true;
   const requestName = req.getName();
   const key = "jobPollStart_" + requestName.replace(/[^A-Za-z0-9_.-]/g, "_");
   const started = Number(bru.getVar(key) || 0) || Date.now();
   bru.setVar(key, started);
-  if (Date.now() - started > POLL_DEADLINE_MS) {
-    throw new Error(`${requestName}: kondisi job tidak tercapai dalam ${POLL_DEADLINE_MS / 1000} detik`);
+  if (Date.now() - started > deadlineMs) {
+    throw new Error(`${requestName}: kondisi job tidak tercapai dalam ${deadlineMs / 1000} detik`);
   }
   await sleep(POLL_SLEEP_MS);
   bru.setNextRequest(requestName);
