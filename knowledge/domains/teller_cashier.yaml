@@ -1,10 +1,8 @@
 id: teller_cashier
 status: approved_mvp
 display_name: Teller and cashier cash operations
-# FIN-115: flipped from `gap`. The earlier statement that no cash-movement table
-# exists is disproved by the live schema (`m_cashier_transactions`, evidence in
-# knowledge/VERIFICATION.md); the inventory rows D06/D15e are not edited here and
-# stay `gap`; physical/counted/reconciled cash remains unsupported.
+# FIN-115 approves recorded cash only; D06-physical retains the separate gap
+# for counted cash, reconciliation and discrepancies.
 description: >-
   Cashier/teller assignment, recorded cashier cash movements and inter-office
   cash transfers — §1 rule + D06 (dataset-scope-decisions.md:104-110) and
@@ -21,6 +19,7 @@ description: >-
 inventory_refs:
   - D06
   - D15e
+  - D06-physical
 data_areas: [teller_cashier_ops]
 concepts:
   - id: teller
@@ -34,11 +33,11 @@ concepts:
     synonyms: [inter-office cash, inter office cash, transfer kas antar kantor]
 supported_intents: []
 gap_intents:
-  - { phrase: "physical cash count", inventory_ref: D06 }
-  - { phrase: "cash reconciliation", inventory_ref: D06 }
-  - { phrase: "cash discrepancy", inventory_ref: D06 }
-  - { phrase: "cash shortage", inventory_ref: D06 }
-  - { phrase: "cash overage", inventory_ref: D06 }
+  - { phrase: "physical cash count", inventory_ref: D06-physical }
+  - { phrase: "cash reconciliation", inventory_ref: D06-physical }
+  - { phrase: "cash discrepancy", inventory_ref: D06-physical }
+  - { phrase: "cash shortage", inventory_ref: D06-physical }
+  - { phrase: "cash overage", inventory_ref: D06-physical }
 unsupported_intents:
   - { phrase: "open teller shift", exempt: "write_action" }
   - { phrase: "close teller shift", exempt: "write_action" }
