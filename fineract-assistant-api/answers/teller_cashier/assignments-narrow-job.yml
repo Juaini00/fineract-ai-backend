@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{fin115_assignments_narrow_session}}", "request_text": "List the cashier and teller assignments active in February 2026.", "office_ids": [2, 3] }
+      { "session_id": "{{fin115_assignments_narrow_session}}", "request_text": "Show the teller and cashier assignments that overlap February 2026.", "office_ids": [2, 3] }
 runtime:
   scripts:
     - type: before-request
