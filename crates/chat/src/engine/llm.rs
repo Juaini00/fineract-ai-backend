@@ -142,9 +142,7 @@ pub async fn plan(
         // configured full input allowance, plus the capped output, durably;
         // 128 covers the fixed three-message chat template. Actual usage is
         // checked too, and an unobserved call never receives a refund.
-        if SYSTEM.len().saturating_add(input.len()).saturating_add(job.request_text.len()).saturating_add(128) as u64
-            > c.llm_max_input_tokens
-        {
+        if exceeds_input_bound(input.len(), job.request_text.len(), c.llm_max_input_tokens) {
             return Ok(failure("planner_output_invalid"));
         }
         let mut detail = json!({ "provider": c.llm_provider, "model": c.llm_model,
@@ -343,6 +341,12 @@ pub async fn plan(
     unreachable!("bounded loop always returns")
 }
 
+/// Conservative byte-level bound: system prompt, serialized context, request and
+/// the 128-byte chat template must not exceed the configured input allowance.
+fn exceeds_input_bound(input_len: usize, request_len: usize, max: u64) -> bool {
+    SYSTEM.len().saturating_add(input_len).saturating_add(request_len).saturating_add(128) as u64 > max
+}
+
 fn candidate(catalog: &Catalog, id: &str) -> Option<Value> {
     let capability = &catalog
         .capabilities
@@ -359,18 +363,98 @@ fn candidate(catalog: &Catalog, id: &str) -> Option<Value> {
         .entry;
     let parameters: Vec<_> = query.parameters.iter().map(|p| {
         let declared = capability.parameters.get(&p.name);
-        json!({ "name": p.name, "type": p.kind, "required": p.required, "source": p.source,
-            "default": declared.and_then(|p| p.default.as_ref()), "hard_cap": declared.and_then(|p| p.hard_cap),
-            "resolver": declared.and_then(|p| p.probe.as_ref()).map(|probe| json!({
+        // An absent key means "none declared": null members are not repeated per parameter.
+        let mut parameter = json!({ "name": p.name, "type": p.kind, "required": p.required, "source": p.source });
+        for (key, value) in [
+            ("default", declared.and_then(|p| p.default.as_ref()).map(|d| json!(d))),
+            ("hard_cap", declared.and_then(|p| p.hard_cap).map(Value::from)),
+            ("resolver", declared.and_then(|p| p.probe.as_ref()).map(|probe| json!({
                 "arguments": {}, "unfiltered_scoped_probe": true, "output_slot": probe.output_slot,
-            })) })
+            }))),
+        ] {
+            if let Some(value) = value.filter(|v| !v.is_null()) {
+                parameter[key] = value;
+            }
+        }
+        parameter
     }).collect();
+    // Output columns are a header plus one [name, type, sensitivity] row each:
+    // every column is kept, only the repeated member names are not.
+    let rows: Vec<_> = query.output_fields.iter().map(|f| json!([f.name, f.kind, f.sensitivity])).collect();
     Some(
         json!({ "id": capability.id, "meaning": capability.description,
         "supported_intents": capability.supported_intents,
         "unsupported_intents": capability.unsupported_intents,
         "request_shape": capability.request_shape,
         "parameters": parameters, "guards": capability.guards,
-        "output": query.output_fields.iter().map(|f| json!({ "name": f.name, "type": f.kind, "sensitivity": f.sensitivity })).collect::<Vec<_>>() }),
+        "output": { "columns": ["name", "type", "sensitivity"], "rows": rows } }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    const REQUEST: &str = "Show the teller and cashier assignments that overlap February 2026.";
+
+    /// The planner input for a shortlist, with the real eight-office scope.
+    fn input_for(candidates: &[Value]) -> String {
+        json!({
+            "accepted_bindings": {}, "context": [],
+            "calendar": { "timezone": "UTC", "business_today": "2026-10-16" },
+            "authorization": { "office_ids": [1, 2, 3, 4, 5, 6, 8, 9],
+                "global_reference_allowed": true, "pii": false },
+            "remaining_budget": { "model_calls": 8, "tokens": 100000 },
+            "catalog_version_id": Uuid::nil(), "catalog_content_hash": "0".repeat(64),
+            "candidates": candidates, "correction": null,
+        })
+        .to_string()
+    }
+
+    /// The representation `candidate()` produced before the lossless encoding
+    /// (object per output column, null parameter members).
+    fn legacy_candidate(catalog: &Catalog, id: &str) -> Value {
+        let mut c = candidate(catalog, id).expect("approved");
+        let rows = c["output"]["rows"].as_array().unwrap().clone();
+        c["output"] = Value::Array(
+            rows.iter()
+                .map(|r| json!({ "name": r[0], "type": r[1], "sensitivity": r[2] }))
+                .collect(),
+        );
+        for p in c["parameters"].as_array_mut().unwrap() {
+            for key in ["default", "hard_cap", "resolver"] {
+                p[key] = p.get(key).cloned().unwrap_or(Value::Null);
+            }
+        }
+        c
+    }
+
+    /// FIN-115: the six contracts retrieved for the original assignments request
+    /// fit the default bound as a whole; the old representation did not.
+    #[test]
+    fn original_assignments_request_context_fits_only_with_the_lossless_encoding() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "teller_cashier_assignments",
+            "cashier_recorded_cash_position",
+            "cashier_cash_movements",
+            "scheduler_job_definitions",
+            "loan_product_bucket_assignments",
+            "collateral_pledges",
+        ];
+        let compact: Vec<_> = ids.iter().map(|id| candidate(&catalog, id).expect("approved")).collect();
+        let legacy: Vec<_> = ids.iter().map(|id| legacy_candidate(&catalog, id)).collect();
+        let default_bound = 16_000;
+        assert!(exceeds_input_bound(input_for(&legacy).len(), REQUEST.len(), default_bound));
+        assert!(!exceeds_input_bound(input_for(&compact).len(), REQUEST.len(), default_bound));
+    }
+
+    #[test]
+    fn input_genuinely_over_the_bound_is_still_rejected() {
+        assert!(exceeds_input_bound(20_000, REQUEST.len(), 16_000));
+        assert!(!exceeds_input_bound(1, 1, 16_000));
+    }
 }

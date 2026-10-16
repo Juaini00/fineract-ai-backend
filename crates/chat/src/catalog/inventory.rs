@@ -169,7 +169,7 @@ mod tests {
         assert_eq!(rows.get("D15a").map(String::as_str), Some("deferred-onboarding"));
         assert_eq!(rows.get("D15b").map(String::as_str), Some("deferred-onboarding"));
         assert_eq!(rows.get("D15d").map(String::as_str), Some("gap"));
-        assert_eq!(rows.get("D15e").map(String::as_str), Some("gap"));
+        assert_eq!(rows.get("D15e").map(String::as_str), Some("inherited"));
         assert!(!rows.contains_key("FAKE-999"));
         assert!(rows.len() > 50, "expected the real document to yield many rows, got {}", rows.len());
     }

@@ -261,7 +261,7 @@ and states the disposition already fixed by the 2026-09-20 owner decision
 | D03 | Currency and consolidation (`:16`, `:80-86`) | no `exchange_rates`-style table exists in `fineract_default` (verified this session, §4 — searched via `information_schema` for `%exchange%`, only `m_organisation_currency` matched) | n/a | n/a | `XR-CUR` — per-currency totals only until a rate source is chosen | consolidated totals must record `exchange_rate_id`; none exists yet, so consolidation stays fully unsupported | per-currency totals inherited wherever a domain row above states `XR-CUR`; consolidation is `gap` with no candidate table | none | known (negative result) | gap |
 | D04 | Direct client charges (`:88-94`) | `m_client_charge` (0 rows), `m_client_charge_paid_by` (0 rows) — both exist, both **empty** on this fixture (verified §4) | `1:N` client → charge; `1:N` charge → paid-by | via client | n/a | master (PROD-4) vs actual charge vs payment vs waiver vs outstanding must stay separated, mirroring LOAN-7/SAV-7 | resolvable once populated; currently sparse data, not a schema gap — record fixture need as a future owner decision, do not seed data (ticket constraint) | none | known (§4) | gap |
 | D05 | Standing instructions (`:96-102`) | `m_account_transfer_standing_instructions` (61 rows) + `m_account_transfer_standing_instructions_history` (1,219 rows, execution attempts) | `1:N` instruction → history/attempt rows; instruction → `m_account_transfer_details` (LINK-4) | via either linked account's office path | `valid_from/valid_till`, `last_run_date` | absence of a transfer does not prove failure — instruction may be inactive or not yet due (`:102`) | failure claims must trace to a history row with a failure status, never inferred from "no transfer found" | none | known (§4) | gap |
-| D06 | Teller/cashier cash operations (`:104-110`) | `m_cashiers` (6 rows, assignment), `m_tellers` (6 rows); no `m_cash_journal`/cash-movement table was found this session (`m_cash_journal` queried, **missing** — confirmed via `information_schema`, §4) | `N:1` cashier → teller; `N:1` cashier → staff | via teller/office | shift `start_date/end_date`, `start_time/end_time` | recorded cash ≠ physical cash; reconciliation only answerable if a reconciliation record exists — none found | cashier/teller assignment resolvable; cash position/reconciliation is `gap` with **no candidate table found**, not merely unverified | none | known (assignment tables); cash-movement table confirmed absent | gap |
+| D06 | Teller/cashier cash operations (`:104-110`) | `m_cashiers` (6 rows, assignment), `m_tellers` (6 rows), `m_cashier_transactions` (49 rows, the cashier cash-movement table: type 101 allocate = 38, 102 settle = 11, by currency AED/AUD/EUR/USD; no 103/104 rows; `entity_type`/`entity_id` empty; 2025-11-10..2026-04-18); an earlier note that `m_cash_journal` was missing named the wrong table | `N:1` cashier → teller; `N:1` cashier → staff; `1:N` cashier → cashier transaction | via teller/office | shift `start_date/end_date`, `start_time/end_time`; movement `txn_date` | recorded cash ≠ physical cash; reconciliation only answerable if a reconciliation record exists — none found | assignments, stored movements and the recorded position (allocate + cash in − cash out − settle, derived cash attributed by creator staff and assignment dates, explicit cash payment type only) are resolvable; counted physical cash and reconciliation have no record and stay `gap` intents | `teller_cashier_assignments`, `cashier_cash_movements`, `cashier_recorded_cash_position` (FIN-115, Mode-1): `inherited` for these source-supported capabilities only, not full-domain completeness. Counted physical cash, reconciliation, discrepancy/shortage/overage remain explicit domain gap intents. Local rows for 103/104, loan/client-derived cash and part-day assignments are empty; their read semantics are proven by VALUES-only production-SQL smoke, not by real data | known (assignment and cash-movement tables); derived loan/client cash has no attributed local rows | inherited |
 | D07 | Actual provisioning results (`:112-118`) | `m_provisioning_history` (0 rows), `m_loanproduct_provisioning_entry` (0 rows) — both exist, both empty (§4); criteria config is ORG-7 | `N:1` result → criteria/version used | via loan (through the entry detail, once populated) | provisioning is periodic — `XR-ASOF` applies; batch may not have run (D14) | must not multiply current provisioning % config by historical outstanding as a substitute for a real result (`:118`) | resolvable once populated; sparse on this fixture, not a schema gap | none | known (§4) | gap |
 | D08 | Group/center activity, meetings, attendance (`:120-126`) | Fineract's calendar tables (`m_calendar`, `m_calendar_instance`, `m_meeting`/`m_meeting_client` — **not queried this session**, existence unresolved) | `N:1` calendar → group/center; `1:N` meeting → attendance if the table exists | via `m_group.office_id` | scheduled date vs actual meeting date, if attendance table exists | a calendar entry existing does not prove a meeting happened or was attended (`:126`) | schedule resolvable via `m_group`; realization/attendance is `unresolved` pending table verification | none | unresolved — calendar/meeting tables not queried this session | gap |
 | D09 | Fineract user actions / source audit (`:128-134`) | `m_portfolio_command_source` (4,456 rows) | `N:1` command → `m_appuser` (actor), business entity via `resource_get_id`/`resource_id` (columns not individually enumerated this session) | via the target entity's own office path | `created_date` on the command row | the managing officer is not automatically the actor — actor comes from the command row, not from an assignment table (`:134`) | actor/action/reason resolvable per business entity where a command row exists; this is Fineract's own operational audit, distinct from Jarvis's own `audit_events` (database-design.md I8) | none | known (§4) | gap |
@@ -275,7 +275,7 @@ and states the disposition already fixed by the 2026-09-20 owner decision
 | D15b | Credit bureau results | `m_creditreport` (0 rows, "MASUK" per decision) vs `m_creditbureau` (1 row, integration config — explicitly excluded by the decision, `:187`) | `N:1` report → client/loan | via client/loan | n/a | only the **result** table is in scope; the **config** table is excluded — the two must not be conflated | resolvable once `m_creditreport` is populated; currently empty on this fixture | none | known (§4) | deferred-onboarding |
 | D15c | Loan capitalized-income/buy-down-fee balances | duplicate of LOAN-12 (cross-referenced, not re-counted) | — | — | — | — | — | — | — | cross-reference (LOAN-12) |
 | D15d | `m_family_members` — selective, not default | `m_family_members` (1 row) | `1:N` client → family member | via client | n/a | same "selective/not-default" pattern as CLI-6/CLI-8 | excluded by default; row exists to record the exclusion | none | known (§4) | gap |
-| D15e | `m_office_transaction` (inter-office cash) — under D06/accounting, explicitly labeled | `m_office_transaction` (0 rows) | `N:1` from/to office | both `from_office_id`/`to_office_id` | n/a | must be labeled as inter-office cash movement, not conflated with client-facing transactions | resolvable once populated; empty on this fixture | none | known (§4) | gap |
+| D15e | `m_office_transaction` (inter-office cash) — under D06/accounting, explicitly labeled | `m_office_transaction` (0 rows) | `N:1` from/to office | both `from_office_id`/`to_office_id` | n/a | must be labeled as inter-office cash movement, not conflated with client-facing transactions | resolvable once populated; empty on this fixture | `inter_office_cash_transfers` (FIN-115, Mode-1): `inherited` for the recorded transfer rows; every recorded office must be authorized. The local table is empty, so the real answer is an actual Empty; nonzero semantics are proven by VALUES-only production-SQL smoke only | known (§4) | inherited |
 
 **D15 table-count note.** The decision text (`:184`) cites "220 tabel
 `createTable`" from the prior systematic audit. `fineract_default` on this
@@ -352,7 +352,7 @@ not evidence of production tenant behavior.
 | `m_creditbureau` | 1 | `job` | 44 |
 | `job_run_history` | 308,960 | `m_cashiers` | 6 |
 | `m_tellers` | 6 | `m_office_transaction` | 0 |
-| `m_currency` | 164 | | |
+| `m_currency` | 164 | `m_cashier_transactions` | 49 |
 
 **Confirmed missing/absent (not simply zero-row) on this local instance:**
 `m_loan_provisioning_criteria`, `m_product_collateral`, `m_center` (see §4
@@ -360,7 +360,8 @@ group-level note above — center is `m_group.level_id = 1`, not a separate
 table), `m_loan_guarantor` (the real table is `m_guarantor`), `m_loan_recovery_payment`
 (no dedicated table; recovery is a `m_loan_transaction` type), `m_share_account_dividend`
 (the real tables are `m_share_account_dividend_details` /
-`m_share_product_dividend_pay_out`), `m_cash_journal`, `extra_client_details`,
+`m_share_product_dividend_pay_out`), `m_cash_journal` (not a Fineract table; the cashier cash-movement table is `m_cashier_transactions`),
+`extra_client_details`,
 `extra_family_details`, `extra_loan_details` (the ai_report reference example
 names — absent here, see D10). `fineract_default` has **300** public tables
 total (see D15 table-count note, §10).
@@ -384,7 +385,7 @@ total (see D15 table-count note, §10).
 | D03 | D03 | 1 | gap |
 | D04 | D04 | 1 | gap |
 | D05 | D05 | 1 | gap |
-| D06 | D06 | 1 | gap |
+| D06 | D06 | 1 | inherited (FIN-115; physical cash and reconciliation stay gap intents) |
 | D07 | D07 | 1 | gap |
 | D08 | D08 | 1 | gap |
 | D09 | D09 | 1 | gap |
@@ -393,16 +394,16 @@ total (see D15 table-count note, §10).
 | D12 | D12 | 1 | gap |
 | D13 | D13 | 1 | excluded by design |
 | D14 | D14 | 1 | gap |
-| D15 | D15, D15a..D15e | 6 | 1 summary, 2 **deferred-onboarding** (D15a, D15b), 1 cross-reference (D15c→LOAN-12), 2 gap |
+| D15 | D15, D15a..D15e | 6 | 1 summary, 2 **deferred-onboarding** (D15a, D15b), 1 cross-reference (D15c→LOAN-12), 1 inherited (D15e, FIN-115), 1 gap (D15d) |
 
 **Totals:** 79 baseline-domain rows + 20 decision rows (D01–D14 = 14;
 D15 heading + five sub-rows = 6) = **99 inventory rows**, covering all 8
 §1 headings and all 15 decisions (D01–D15) with **zero omissions**.
-Twenty-six rows are `inherited` (an approved Mode-1 capability exists today;
-PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108); three
+Twenty-eight rows are `inherited` (an approved Mode-1 capability exists today;
+PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108, D06 and D15e by FIN-115 for source-supported Mode-1 capabilities only); three
 (D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
 `summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
-65 rows are `gap`: agreed scope lacking a capability, including unresolved
+63 rows are `gap`: agreed scope lacking a capability, including unresolved
 source mappings. Coverage counts requirements, not executable capabilities.
 
 ---
@@ -432,8 +433,8 @@ so FIN-153 does not have to re-scan every table:
 7. The D15 table-count discrepancy (220 vs 300, §10/§11) — needs the owner to
    say which count, and which Fineract build, is authoritative.
 8. Sparse/empty tables recorded as fixture needs, per the ticket's instruction
-   to never seed data: D04 (`m_client_charge`), D06 (no cash-movement table
-   found at all — a different problem than sparse data), D07 (provisioning
+   to never seed data: D04 (`m_client_charge`), D06 (`m_cashier_transactions` holds only
+   101/102 rows; 103/104 and attributed loan/client cash are empty), D07 (provisioning
    results), SHARE-6 (dividends), PROD-7 (product mix), PROD-11 (floating
    rates), D15e (`m_office_transaction`). These are **owner decisions**, not
    engineering follow-ups: whether/how to obtain representative fixture data

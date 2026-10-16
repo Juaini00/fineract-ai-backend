@@ -2593,10 +2593,12 @@ Update for FIN-115 publication (L1C D06 teller/cashier + D15e inter-office cash;
   unique groups. They read no Fineract table. Workspace unit tests, clippy,
   catalog validation, docs-check and acceptance-check passed. No numbered L1C
   scenario, full collection, full D06 or full L2 conformance is claimed.
-- The original assignments wording still fails before a model call when the
-  six-candidate prompt exceeds the 16000-byte input bound. Timeout and verification
-  failures remain recorded, not resolved by later success. Diagnostic requests
-  were archived locally and removed from permanent tests; accepting either
-  success or a known failure is not an acceptance gate. Nonempty attributed
-  loan/client data, journal types 103/104, nonzero inter-office transfers and
-  `full_day = false` remain unproven. No planner limit, retry or verifier was relaxed.
+- Completion revision (FIN-115): the original assignments wording failed before a model call because the six candidate
+  contracts were serialized verbosely (~16.6 KB). Candidates are now encoded losslessly (column rows, no repeated null members);
+  the shortlist, bound, limits, retries, timeout, prompt and verifier are unchanged and a genuinely oversized input is still
+  refused. Real-model locked runs pass the original request and the position capability with rows equal to independent SQL
+  (jobs 5fda7d49…, 04ca8a19…, 6c2eabff…, ae0b5f05…; 45 requests / 28 tests). A VALUES-only smoke (`tests/teller_cash_semantics_smoke.sh`) proves loan/client/journal 103-104/part-day/overlap/
+  inter-office read semantics on unchanged production SQL; local real data for those paths is empty (inter-office is an actual
+  Empty answer) and no nonzero real-data or full-domain claim is made. By owner decision the inventory rows D06 and D15e are now
+  `inherited` for these source-supported Mode-1 capabilities only (physical cash count, reconciliation and discrepancy stay gap
+  intents); this is not an L2 promotion. Earlier FIN-115 failures in this file stay as history. Details: `knowledge/VERIFICATION.md` §17.6.

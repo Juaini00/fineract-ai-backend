@@ -1414,3 +1414,43 @@ The diagnostic chain is not a permanent acceptance test: its request files were 
 The final run's 29 tests include one diagnostic observation, so only 28 are positive acceptance assertions.
 The coordinator independently ran the six VALUES-only attribution checks against the application database;
 the smoke defaults to `jarvis` and reads no Fineract table.
+
+### 17.6 Lossless planner-candidate encoding and the original assignments request (completion revision; additive)
+
+**Defect (code, not data):** `docs/architecture/engine.md` "Input and retrieval" requires each candidate to carry its complete
+typed contract and the input to be bounded. `crates/chat/src/engine/llm.rs` serialized every output column as a three-member object and
+repeated `"default":null,"hard_cap":null,"resolver":null` per parameter. Six candidates for
+"Show the teller and cashier assignments that overlap February 2026." measured ~16.6 KB (observed, jobs `13fbf2fe…`, `1b9efcca…`), so the
+job was refused before any model call (`planner_output_invalid`, 0 model calls) by the conservative byte bound. Earlier text in §17 that
+calls this a catalog-size property or works around it by wording is superseded by this section.
+
+**Fix (encoding only):** output is `{"columns":["name","type","sensitivity"],"rows":[[…],…]}` and a parameter omits `default`,
+`hard_cap` or `resolver` when none is declared. Every column, parameter, intent and guard stays. The bound, shortlist, candidate selection,
+token reservation, usage accounting, limits, retries, timeout, prompt and verifier are unchanged; the conservative rejection when the full
+input genuinely does not fit is kept (`exceeds_input_bound`).
+Regression (`original_assignments_request_context_fits_only_with_the_lossless_encoding`): the six contracts retrieved for the original
+request (assignments, position, movements, scheduler_job_definitions, loan_product_bucket_assignments, collateral_pledges, real eight-office
+scope) exceed 16,000 bytes in the old representation and fit in the new; `input_genuinely_over_the_bound_is_still_rejected` keeps the refusal.
+
+**Runtime proof (real configured qwen-cloud/qwen3.8-flash, locked runner port 3107, main `jarvis` database, login + sessions), final compact-only code:**
+targeted run of the original assignments chain (all offices and `office_ids` [2,3]) plus `answers/teller_cashier_position`: 45 requests / 28 tests PASS (`/tmp/fin115-evidence/final-compact.out`). Assignments jobs `5fda7d49-9c81-4bbd-9e40-598c104be085` (5 rows) and `04ca8a19-35d8-40de-9d4f-4f342ce0c06a` (2 rows): one model call each, observed input 3153 / 3141 tokens; position jobs `6c2eabff-a0df-403f-9c3d-66c6a0f6a3d1` (16 groups) and `ae0b5f05-467f-475e-873c-19618a36ce39` (4 groups): one call each, 2973 / 2961 tokens. Columns, bound parameters, scope and rows equal the independent SQL. Movements, inter-office, savings and scheduler were not re-run: they passed earlier under this same encoding (`completion-run1/2/3.out`; scheduler `65526cc4…` hit 3 provider timeouts then succeeded, unresolved separate class).
+
+**VALUES-only semantics smoke (synthetic proof, NOT source acceptance):** `tests/teller_cash_semantics_smoke.sh` executes the unchanged
+production SQL with every Fineract table shadowed by inline `VALUES` (no Fineract table read, no fixture): loan repayment-type in /
+disbursement out, loan `end_date + 1` boundary, client PAY_CHARGE in, journal 103/104, unrecognized journal type (counted, not summed),
+exclusion of non-cash, NULL payment detail, reversed, account-transfer, waiver and out-of-scope-office rows (position 1925 USD,
+before-window 1190, 0 ambiguous); a `full_day = false` assignment and two overlapping assignments of one staff member each returned once;
+nonzero inter-office rows with out-of-scope and office-less transfers hidden. 4 checks ok.
+
+**Exact acceptance scope:** Mode-1 read semantics for assignments, stored movements, recorded position (with ambiguity withholding) and
+inter-office transfers are proven by (a) real HTTP answers equal to independent SQL on the local data and (b) deterministic unchanged-SQL
+VALUES smokes for branches the local data leaves empty. No nonzero real data exists locally for 103/104 rows, attributed loan/client cash,
+`full_day = false` assignments or inter-office transfers (the real HTTP answer for inter-office is an actual Empty = SQL 0); no fixture was
+created and no real-data nonzero claim is made. Counted physical cash and reconciliation stay unsupported gap intents. Scheduler
+provider-timeout behaviour (separate FIN-124/161 class) is unresolved and unrelated to this fix.
+
+**Inventory (owner-authorized docs commit, separate from the code):** `docs/data/dataset-inventory.md` now records the observed source mapping
+(D06 named the wrong table; `m_cashier_transactions` exists) and moves D06 and D15e from `gap` to `inherited` for the approved,
+source-supported Mode-1 capabilities ONLY. This is not full-domain completeness: counted physical cash, reconciliation and
+discrepancy/shortage/overage remain explicit gap intents, and no L2 promotion or numbered scenario is claimed. The earlier statements in
+this section that the rows stay `gap` were written before that owner decision and are history.
