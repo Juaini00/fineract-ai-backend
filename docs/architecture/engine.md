@@ -26,6 +26,15 @@ authenticate/validate → persist accepted job → acquire work
 
 Missing information suspends the same job through [clarification](../contracts/clarifications.md). Live facts may trigger a bounded, versioned re-plan. All paths use the same budgets and policy guards. Public progress is a projection through [SSE](../contracts/sse.md), not an alternate execution flow.
 
+## Conversational understanding (FIN-164)
+
+The owner approved the [conversational understanding design](conversation.md)
+on 2026-10-16. It extends this Engine's planning boundary, persistence and
+interaction semantics without introducing another agent loop. The FIN-162
+schema below remains the analytical proposal contract; it is not a contract
+for classifying every user message as analysis. Conversation implementation
+requires the approved documentation change and real-provider readiness gate.
+
 ## LLM planner contract (FIN-162)
 
 **Owner decision, 2026-10-12:** use a compact typed graph, not a model-authored
