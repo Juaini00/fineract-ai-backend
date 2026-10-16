@@ -1,6 +1,6 @@
 # Conversational understanding (FIN-164)
 
-Status: owner-approved design, 2026-10-16. Implementation and real-model readiness are separate gates. Publication is not authorized by design approval. English is the only supported product language.
+Status: owner-approved design, 2026-10-16; scope clarified by the owner in the same session: implement the assistant boundary, not the independent clarification, memory or narration subsystems. English is the only supported product language. Implementation, real-model readiness and publication remain separate gates.
 
 ## Authority and boundaries
 
@@ -20,21 +20,24 @@ SSE carries only genuine existing phases and durable events. No invented data ex
 
 Use one closed versioned understanding-or-analysis proposal at the existing planning boundary, with branches for social interaction, capability help, analysis, goal clarification, result explanation, unsupported-scope candidate, abstention and no-fit. Reject unknown/duplicate fields, inconsistent branch payloads, invalid references, ungrounded values and budget overflow. Confidence is diagnostic only.
 
+The closed understanding envelope has exactly `schema_version` (integer `1`), `intent` and `analysis`. `intent` is one of `analysis`, `greeting`, `thanks`, `acknowledgement`, `identity`, `help`, `clarify_goal`, `explain_result`, `scope_help`, `english_required`. For `analysis`, the payload is the unchanged FIN-162 version-1 proposal; otherwise `analysis` is explicitly null. Unknown or duplicate keys, missing fields and a non-null analytical payload on a social intent are invalid. The nested planner retains its abstention and no-fit decisions; neither is an unsupported-scope classification.
+
+
 Analysis embeds the existing FIN-162 compact grounded proposal. Preserve the original request, including a mixed greeting, for slot quotes and verification. Do not strip the greeting by phrase matching or replace the request with a lossy model summary. Every explicit operation/date/currency/grouping/scope constraint survives or receives an explicit refusal/clarification; never silently answer a supported subset.
 
 Social interaction selects a bounded speech act: greeting, thanks, acknowledgement or assistant identity. The Engine renders concise English text without invented facts, actions or human identity. Deterministic rendering is permitted; deterministic phrase-based intent routing is not. A renderer cannot stand in for a failed model-understanding call.
 
 Help references active approved capability IDs and catalog version/hash, reviewed English descriptions/examples, and verified implementation limitations. The Engine checks every selected reference against current authorization and execution/output support. Related tracker status is not capability evidence. Do not automatically translate catalog prose, promise unavailable features or claim general reliability from a successful example.
 
-Goal clarification identifies missing goal dimensions within an Engine-owned vocabulary. It cannot guess a report, identity or analytical binding. Result explanation selects only an authorized supplied durable response/version and evidence references. Unsupported is only a candidate classification until an Engine-verified product-boundary or catalog-coverage reason exists. A retrieval miss or no_fit cannot prove unsupported scope.
+Goal clarification identifies missing reporting dimensions without guessing a report, identity or analytical binding. If a previous result is not supplied through an implemented authorized context path, result explanation must disclose that limitation and ask the user to identify the result; it must not invent memory. Scope help explains the fixed read-only Fineract product boundary; it grants no actions or analytical capability. A retrieval miss or analytical `no_fit` cannot prove unsupported scope.
 
 Every call reuses existing Rig transport, admission/audit, cancellation, deadlines and shared absolute model/token budgets, outside commit transactions. Existing bounded repair policy applies; no new retry loop or speculative timeout increase. Policy violations cannot be repaired by asking the model to grant permission.
 
-## Ambiguity and same-job continuation
+## Goal questions and existing clarification
 
-An unclear reporting goal opens a versioned intent-purpose form on the same job before an analytical plan is admitted. Its plan association is null, not a fabricated plan. Accepted goal inputs have explicit provenance and are reused in continued understanding; the original request remains preserved. All currently known missing dimensions are batched. Existing submission ownership, revision, idempotency and validation apply. Invalid/stale answers do not resume or cause a new LLM call.
+An unclear reporting goal receives an ordinary conversational question asking for the subject, period and constraints. It does not execute an arbitrary report, create a fictitious analytical plan or claim to implement staged clarification. A new user request is independently authorized through the existing submission contract.
 
-Identity ambiguity still requires an approved authorized resolver and K5 cardinality. Goal clarification does not prove CLR-3. Subsequent data-dependent forms retaining prior answers and completed outputs require FIN-75. No infinite loop: existing clarification rounds/deadlines/cancellation/expiry apply. Newly accepted goal data and verified understanding must be durably correlated so recovery cannot silently change intent or discard bindings.
+Once a verified analytical capability requires missing parameters or identity resolution, existing clarification and K5 behavior remain in force. FIN-75 owns subsequent data-dependent forms; this assistant change does not implement or claim that ticket.
 
 ## Context and explanation dependencies
 
@@ -42,7 +45,7 @@ FIN-88 owns actual relevance/recency-bounded reading of history, valid session f
 
 FIN-100 owns additive narration after deterministic composition, using bounded authorized evidence. Proposed explanation claims carry evidence references and approved derivations, with facts distinguished from hypotheses. D1–D3 validation precedes inclusion. Numeric matching alone does not justify causal or other unsupported prose; bounded supported statement forms must prevent unsupported claims. Failure drops invalid narration, preserves valid structured data and discloses the limitation. Deterministic fallback never calls the model.
 
-FIN-75, FIN-88 and FIN-100 retain their build-ladder prerequisites. FIN-164 completion includes dependent behavior; it cannot be claimed from a standalone greeting slice or a substitute implementation under a different name.
+FIN-75, FIN-88 and FIN-100 remain independently owned work with their existing prerequisites. Their missing mechanisms do not block greetings, acknowledgement, identity or catalog-grounded help. The assistant must disclose unavailable context/clarification/explanation support instead of fabricating it. No completion of those tickets is implied by FIN-164.
 
 ## English-only behavior
 
@@ -54,7 +57,7 @@ Before constructing dependent flows, exercise the effective configured provider/
 
 Each observation retains revision, effective provider/model, prompt/schema/catalog versions and hashes, exact request, session/job/call identity, all attempts, latency, observed usage or explicit unknown/reservation, validation, durable response/outcome, correlated event/audit and source-query counts. Authorization reads and analytical queries are separate. Preserve all failures after later success.
 
-Before reliability results, freeze and review 40 English prompts: five variants in each of greeting, help, thanks, mixed analysis, vague goal, prior-result explanation, unsupported action and forbidden write. Include the eight exact FIN-164 owner examples. Freeze wording, expected semantic checks, SQL oracles, configuration and ordering seed before execution. Run three fresh-session observations per prompt (120). Explanation cases establish the intended authorized prior result. No unrecorded tuning loop.
+Before reliability results, freeze and review 40 English prompts: five variants in each of greeting, help, thanks, mixed analysis, vague goal, unavailable prior-result context, unsupported action and forbidden write. Include the eight exact FIN-164 owner examples. Freeze wording, expected semantic checks, SQL oracles, configuration and ordering seed before execution. Run three fresh-session observations per prompt (120). Prior-result cases prove honest context limitations, not FIN-88 or FIN-100 acceptance. No unrecorded tuning loop.
 
 Passing threshold: at least 114/120 correct first attempts, at least 14/15 in every class and all eight canonical examples 3/3. Zero unauthorized access, source writes, unverified execution, scope widening, cross-user leakage or fabricated numerical results regardless of aggregate rate. Failures stay in the denominator; repaired success is separate. This establishes only the reviewed corpus, not population reliability. Measure latency p50/p95; existing deadlines apply without a newly invented latency SLO.
 
