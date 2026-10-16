@@ -1,0 +1,8 @@
+info:
+  name: teller_cashier_position
+  seq: 9
+  description: |
+    FIN-115 completion correction (D06): the real configured model answers
+    `cashier_recorded_cash_position` (cumulative through a declared cutoff) and the
+    answer is compared row for row with independent SQL, including a job narrowed
+    to offices 2 and 3. Not physical, counted or reconciled cash.

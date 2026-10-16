@@ -1,0 +1,31 @@
+info:
+  name: FIN-115 assignments answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin115_assignments_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "teller_cashier_assignments", document);
+          test("FIN-115 assignments: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-115 D06: assignments are rows, not cash; no staff or teller names", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+            for (const forbidden of ["staff_display_name", "teller_name", "description"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+            expect(got.rows.some((row) => row.cashier_id === 4), "cashier 4 ended before the window").to.equal(false);
+          });
+        }

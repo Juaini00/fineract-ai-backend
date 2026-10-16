@@ -1,0 +1,33 @@
+id: teller_cashier.cashier_cash_movements
+database: fineract
+sql_file: queries/teller_cashier/cashier_cash_movements.sql
+data_areas: [teller_cashier_ops]
+tables: [m_cashier_transactions, m_cashiers, m_tellers]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: cashier_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: cashier_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: txn_type, type: string, sensitivity: public_business }
+  - { name: txn_date, type: date, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [cashier_transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_tellers.office_id with ANY($1::bigint[]).
+  - id: date_filter_is_bound
+    rule: SQL filters m_cashier_transactions.txn_date BETWEEN $2::date AND $3::date.
+  - id: no_note_or_linkage
+    rule: txn_note, entity_type and entity_id are never selected; no loan/savings linkage is asserted.
+  - id: currency_never_defaulted
+    rule: currency_code is the stored value; NULL stays NULL.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY (txn_date DESC, id DESC).

@@ -1,0 +1,31 @@
+info:
+  name: FIN-115 movements answer versus independent SQL
+  type: http
+  seq: 32
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin115_movements_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "cashier_cash_movements", document);
+          test("FIN-115 movements: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-115 D06: recorded movements carry their own currency and no note or linkage", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+            expect(got.columns).to.include("currency_code");
+            for (const forbidden of ["txn_note", "entity_type", "entity_id", "created_date"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

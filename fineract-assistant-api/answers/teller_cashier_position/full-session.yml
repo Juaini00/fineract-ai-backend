@@ -1,0 +1,22 @@
+info:
+  name: FIN-115 position full session
+  type: http
+  seq: 10
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin115posToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-115 position full" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin115pos_full_session", res.getBody().data.id);

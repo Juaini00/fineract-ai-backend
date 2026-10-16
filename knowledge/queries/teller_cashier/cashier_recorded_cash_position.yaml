@@ -1,0 +1,62 @@
+id: teller_cashier.cashier_recorded_cash_position
+database: fineract
+sql_file: queries/teller_cashier/cashier_recorded_cash_position.sql
+data_areas: [teller_cashier_ops]
+tables:
+  - m_cashier_transactions
+  - m_cashiers
+  - m_tellers
+  - m_savings_account_transaction
+  - m_savings_account
+  - m_loan_transaction
+  - m_loan
+  - m_client_transaction
+  - m_appuser
+  - m_payment_detail
+  - m_payment_type
+  - m_account_transfer_transaction
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: cashier_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: window_start_date, type: date, sensitivity: public_business }
+  - { name: as_of_date, type: date, sensitivity: public_business }
+  - { name: position_before_window_amount, type: decimal, sensitivity: public_business }
+  - { name: allocated_amount, type: decimal, sensitivity: public_business }
+  - { name: settled_amount, type: decimal, sensitivity: public_business }
+  - { name: journal_cash_in_amount, type: decimal, sensitivity: public_business }
+  - { name: journal_cash_out_amount, type: decimal, sensitivity: public_business }
+  - { name: savings_cash_in_amount, type: decimal, sensitivity: public_business }
+  - { name: savings_cash_out_amount, type: decimal, sensitivity: public_business }
+  - { name: loan_cash_in_amount, type: decimal, sensitivity: public_business }
+  - { name: loan_cash_out_amount, type: decimal, sensitivity: public_business }
+  - { name: client_cash_in_amount, type: decimal, sensitivity: public_business }
+  - { name: recorded_cash_position_amount, type: decimal, sensitivity: public_business }
+  - { name: ambiguous_event_count, type: bigint, sensitivity: public_business }
+  - { name: position_status, type: string, sensitivity: public_business }
+  - { name: unrecognized_type_count, type: bigint, sensitivity: public_business }
+  - { name: position_basis, type: string, sensitivity: public_business }
+grain: [cashier_id, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 15000
+checks:
+  - id: office_filter_is_bound
+    rule: every branch of the flow CTE constrains m_tellers.office_id (and, for derived branches, the transaction's own office_id) with ANY($1::bigint[]) before grouping.
+  - id: cumulative_through_cutoff
+    rule: every branch filters its date <= $3 (to_date, the declared cutoff); there is no lower bound, so the position is cumulative, not a window delta. from_date ($2) only splits out position_before_window_amount (cumulative before the window start).
+  - id: zero_groups_preserved
+    rule: a group exists when any flow row exists; the position is SUM of signed rows, so a cashier/currency that nets to zero is returned as 0.
+  - id: formula_matches_fineract_reader
+    rule: position = allocate + cash in - cash out - settle, with cash in/out = stored journal 103/104 plus attributed savings, loan and client cash (Fineract TellerManagementReadPlatformServiceImpl).
+  - id: anti_fanout_attribution
+    rule: each derived event is classified before summing by the number of matching cashier assignments (counted over all assignments); exactly one match is admitted, more than one is ambiguous, added to no amount, counted in ambiguous_event_count of every in-scope candidate group and the position (and position_before_window) of such a group is NULL with position_status withheld_ambiguous_attribution. Only candidates whose teller office is authorized are returned.
+  - id: explicit_cash_only
+    rule: derived branches count only is_cash_payment = true; NULL payment details are not counted (divergence from the reader, disclosed in position_basis).
+  - id: child_aggregated_before_attributes
+    rule: flow rows are leaf transactions grouped once by cashier, office and currency; no measure is multiplied by a join.

@@ -134,15 +134,19 @@ async function awaitResponse(bru, req, res) {
 // meta.office_ids yang dipakai `scripts/answer-expectations.sh` untuk
 // menghitung SQL pembanding, supaya scope job dan scope SQL pembanding
 // dibuktikan sama, bukan cuma diasumsikan.
-function expectOfficeIds(test, expect, capabilityId, document, truth) {
-  test(`FIN-52 ${capabilityId}: office_ids = seluruh office yang berwenang`, function () {
+function expectOfficeIds(test, expect, capabilityId, document, truth, narrowedTo) {
+  // FIN-115: `narrowedTo` (a count) proves a job whose body narrowed office_ids
+  // below the caller's authorization; its oracle hard-codes the same offices.
+  const wanted = narrowedTo === undefined ? officeCount(truth) : narrowedTo;
+  const label = narrowedTo === undefined ? "all authorized offices" : `narrowed to ${narrowedTo} offices`;
+  test(`FIN-52 ${capabilityId}: office_ids = ${label}`, function () {
     const param = document.evidence_json.lineage[0].parameters.find((p) => p.name === "office_ids");
     expect(param, "parameter office_ids tidak ada di lineage").to.exist;
-    expect(param.value).to.equal(`${officeCount(truth)} authorized offices`);
+    expect(param.value).to.equal(`${wanted} authorized offices`);
   });
 }
 
-function expectScope(test, expect, capabilityId, document, truth) {
+function expectScope(test, expect, capabilityId, document, truth, narrowedTo) {
   // FIN-124 / D14 (owner decision): operational scheduler data is tenant-wide for
   // an admin, declared separately from org_wide_reference — no office parameter
   // is bound and the scope/meaning disclosure travels with the answer.
@@ -165,14 +169,14 @@ function expectScope(test, expect, capabilityId, document, truth) {
     });
     return;
   }
-  expectOfficeIds(test, expect, capabilityId, document, truth);
+  expectOfficeIds(test, expect, capabilityId, document, truth, narrowedTo);
 }
 
 // Kolom jawaban job (dikurangi yang ditahan) harus SAMA PERSIS dengan kolom
 // baris acuan — bukan cuma superset/subset. `columns` adalah daftar nama
 // kolom SQL pembanding (biasanya `Object.keys` baris pertama).
 function expectColumnSet(test, expect, capabilityId, document, columns) {
-  test(`FIN-52 ${capabilityId}: kolom jawaban job = kolom SQL langsung`, function () {
+  test(`FIN-52 ${capabilityId}: job answer columns = direct SQL columns`, function () {
     const got = answerRows(document);
     const keys = columns.filter((k) => !got.withheld.includes(k));
     for (const column of got.columns) {
@@ -191,18 +195,21 @@ function expectColumnSet(test, expect, capabilityId, document, columns) {
 // supaya urutan hasil planner (plan luck) tidak membuat gate ini flaky.
 function check(test, expect, capabilityId, document, options) {
   const truth = expected();
-  const want = truth.rows[capabilityId];
-  const assumed = truth.params[capabilityId];
+  // FIN-115: `truthKey` names a second oracle for the same capability (e.g. a
+  // job narrowed to fewer offices); `narrowedTo` is that job's office count.
+  const truthKey = (options && options.truthKey) || capabilityId;
+  const want = truth.rows[truthKey];
+  const assumed = truth.params[truthKey];
   const sortBy = options && options.sortBy;
 
-  test(`FIN-52 ${capabilityId}: dijawab oleh capability yang benar`, function () {
-    expect(want, "tests/answers/" + capabilityId + ".sql belum ada").to.be.an("array");
+  test(`FIN-52 ${capabilityId}: answered by the right capability`, function () {
+    expect(want, "tests/answers/" + truthKey + ".sql belum ada").to.be.an("array");
     expect(document.kind).to.equal("analysis");
     expect(["Answered", "Empty"]).to.include(document.outcome);
     expect(document.evidence_json.lineage[0].capability_id).to.equal(capabilityId);
   });
 
-  test(`FIN-52 ${capabilityId}: parameter job = parameter SQL langsung`, function () {
+  test(`FIN-52 ${capabilityId}: job parameters = direct SQL parameters`, function () {
     const bound = {};
     for (const p of document.evidence_json.lineage[0].parameters) {
       if (p.name !== "office_ids") bound[p.name] = p.value;
@@ -210,10 +217,10 @@ function check(test, expect, capabilityId, document, options) {
     expect(bound).to.deep.equal(assumed);
   });
 
-  expectScope(test, expect, capabilityId, document, truth);
+  expectScope(test, expect, capabilityId, document, truth, options && options.narrowedTo);
   expectColumnSet(test, expect, capabilityId, document, (want || []).length > 0 ? Object.keys(want[0]) : []);
 
-  test(`FIN-52 ${capabilityId}: jawaban job = SQL langsung`, function () {
+  test(`FIN-52 ${capabilityId}: job answer = direct SQL`, function () {
     const got = answerRows(document);
     expect(got.rows.length, "jumlah baris").to.equal(want.length);
     const wantRows = sortRows(want, sortBy);
@@ -239,14 +246,14 @@ function checkSubset(test, expect, capabilityId, document, cap) {
   const population = truth.rows[capabilityId];
   const expectedCount = population ? Math.min(population.length, cap) : cap;
 
-  test(`FIN-52 ${capabilityId}: dijawab oleh capability yang benar`, function () {
+  test(`FIN-52 ${capabilityId}: answered by the right capability`, function () {
     expect(population, "tests/answers/" + capabilityId + ".sql belum ada").to.be.an("array");
     expect(document.kind).to.equal("analysis");
     expect(["Answered", "Empty"]).to.include(document.outcome);
     expect(document.evidence_json.lineage[0].capability_id).to.equal(capabilityId);
   });
 
-  test(`FIN-52 ${capabilityId}: parameter job = parameter SQL langsung`, function () {
+  test(`FIN-52 ${capabilityId}: job parameters = direct SQL parameters`, function () {
     const bound = {};
     for (const p of document.evidence_json.lineage[0].parameters) {
       if (p.name !== "office_ids") bound[p.name] = p.value;
@@ -257,7 +264,7 @@ function checkSubset(test, expect, capabilityId, document, cap) {
   expectScope(test, expect, capabilityId, document, truth);
   expectColumnSet(test, expect, capabilityId, document, (population || []).length > 0 ? Object.keys(population[0]) : []);
 
-  test(`FIN-52 ${capabilityId}: setiap baris jawaban ada di populasi SQL langsung`, function () {
+  test(`FIN-52 ${capabilityId}: every answer row is in the direct SQL population`, function () {
     const got = answerRows(document);
     expect(got.rows.length).to.equal(expectedCount);
     const key = (row) => JSON.stringify(got.columns.map((c) => canon(row[c])));
@@ -280,7 +287,7 @@ function checkSubset(test, expect, capabilityId, document, cap) {
 // true, tanpa derived_from). Bila populasi <= cap: tidak ada pemotongan,
 // jadi tidak boleh ada blok itu dan completeness harus Complete.
 function expectRowCap(test, expect, capabilityId, document, cap, populationSize) {
-  test(`FIN-52 ${capabilityId}: row cap ${cap} — kelengkapan mengikuti ukuran populasi (${populationSize})`, function () {
+  test(`FIN-52 ${capabilityId}: row cap ${cap} — completeness follows the population size (${populationSize})`, function () {
     const limitation = (document.blocks_json || []).find((b) => b.block_id === "row_cap_reached");
     if (populationSize > cap) {
       expect(document.completeness, "completeness").to.equal("Partial");

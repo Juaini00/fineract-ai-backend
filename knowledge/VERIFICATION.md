@@ -1235,3 +1235,182 @@ second scoped run; the first run failed at the run-history form (provider timeou
 date-slot quote ("April 2026") was a demonstrated verifier gap and is now bound; the
 run-history `no_fit` and the uncaptured rejection are provider-reliability limits, not a
 catalog defect. This is not a claim that planning is reliable.
+
+
+## 17. FIN-115 / D06, D15e — teller/cashier assignments, recorded cash and inter-office transfers
+
+**Correction to the inventory (recorded here; the contract rows are not edited).** `dataset-inventory.md`
+D06 says no cash-movement table exists. The live schema disproves it: `m_cashier_transactions`
+(49 rows: 38 × type 101 allocate, 11 × type 102 settle, no 103/104; `entity_type` empty and
+`entity_id` NULL on every row; `currency_code` never NULL here; `txn_date` 2025-11-10..2026-04-18),
+6 `m_cashiers` (teller FK, staff FK, own start/end date, `full_day`), 6 `m_tellers`
+(office 2,3,4,5,6,8; `state` 300) and 0 `m_office_transaction` rows. No reconciliation or counted-cash
+table exists, so physical cash and cash discrepancy stay `gap_intents`.
+
+**Upstream semantics** (apache/fineract `develop`, `CashierTxnType`, `CashierTransaction`,
+`TellerManagementReadPlatformServiceImpl`): 101 Allocate, 102 Settle, 103 Cash In, 104 Cash Out. The
+reader's summary UNIONs the stored journal with SAVINGS, LOAN and CLIENT transactions attributed to a
+cashier through `created_by -> m_appuser.staff_id -> m_cashiers.staff_id` inside the cashier's
+`[start_date, end_date]`, excluding reversed and account-transfer rows and accepting
+`payment_detail_id IS NULL OR is_cash_payment`; it also labels waivers, write-offs and interest as cash
+out. Allocation minus settlement is therefore NOT the complete cashier position. Local evidence: loans
+0 attributed rows; savings 14 attributed rows, 6 are internal transfers (excluded) and 8 have an
+explicit cash payment type (USD in 3370, USD out 130, AED out 20 — cashier 2 USD in 800; cashier 3 USD
+in 800 / out 130; cashier 4 USD in 1770, AED out 20); client transactions 0.
+
+**Built (all Mode 1, explicit window, bound `office_ids`, limit hard cap 200 with disclosed row cap):**
+`teller_cashier_assignments` (grain cashier), `cashier_cash_movements` (grain journal row),
+`cashier_recorded_cash_summary` (grain cashier + currency; journal only; every row carries
+`source_coverage`), `cashier_savings_cash_summary` (grain cashier + currency; the savings branch only,
+explicit cash payment type, inferred attribution stated on every row, never added to the journal
+totals) and `inter_office_cash_transfers` (D15e, separate; visible only when every recorded office is
+authorized). Not built, kept as `gap_intents`: physical cash count, cash reconciliation, cash
+discrepancy/shortage/overage, the complete cash position and loan/client derived cash. Staff is the
+surrogate `staff_id`; staff/teller names, descriptions and `txn_note` are never selected.
+
+### 17.1 Production vs independent SQL (HTTP, real model, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{teller_cashier_assignments,cashier_cash_movements,
+cashier_recorded_cash_summary,cashier_savings_cash_summary,inter_office_cash_transfers}.sql` (+ `__scope_2_3`
+variants). Locked run 3 (`answers/teller_cashier`): 127 requests / 63 tests, columns, bound parameters,
+scope count and every row equal.
+
+| Capability | Window | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| teller_cashier_assignments | February 2026 | 5 (cashier 4 ended 2025-12-31, absent) | 2 | 8a185302… / 9c7745b1… |
+| cashier_cash_movements | Jan–Mar 2026 | 31 | 2 | 5d92aa01… / 93875cc8… |
+| cashier_recorded_cash_summary | Nov 2025–Apr 2026 | 16 | 4 | 357c7d4b… / 38516773… |
+| cashier_savings_cash_summary | Nov–Dec 2025 | 4 (USD in 3370, out 130; AED out 20) | 1 | 7bbe1307… / 992f5371… |
+| inter_office_cash_transfers | Jan–Jun 2026 | 0 (`Empty`) | n/a | 8d25ea9c… |
+
+### 17.2 Failed evidence (retained, not rerun blindly)
+
+- Run 1 (`/tmp/fin115-evidence/run1-*`): summary job `08f5a855…` `planner_output_invalid`, 0 model calls.
+- Run 2 (`run2-*`): assignments job `90b37fde…` same failure. Cause (read from
+  `crates/chat/src/engine/llm.rs`): before any model call the planner refuses when
+  `SYSTEM + input + request + 128 > LLM_MAX_INPUT_TOKENS` (default 16000, byte-counted). With the
+  shortlist of 6 the five new, similarly worded capabilities (~2.1-2.3 KB of candidate JSON each) pushed
+  the prompt over. No planner or limit change was made; the descriptions, supported intents and four
+  redundant output columns were shortened, and test requests keep the shortlist inside the budget.
+  Open risk: any unusually worded cashier request whose shortlist is filled by long candidates can still
+  hit this pre-model refusal; that is a catalog-size/planner-budget property, not a data error.
+- Process-only override used: `PLANNER_PROVIDER_URL=.../compatible-mode/v1/chat/completions` because the
+  checkout `.env` `LLM_CHAT_COMPLETIONS_URL` lacks the `/chat/completions` suffix and fails config
+  validation; `.env` was not edited.
+
+### 17.3 CARRY-OVER rules
+
+1. Examples run end to end through the real model (above). 2. Prose matches SQL (reviewed per query
+manifest `checks`). 3. All output fields are `public_business` ids, dates, amounts, currency codes and
+constant disclosure strings. 4. Semantics: closed `txn_date` window, no as-of snapshot, no balance claim.
+
+Unproven: nonzero inter-office transfers (empty fixture, no fixtures added), 103/104 journal rows, loan
+and client derived cash, an assignment with `full_day=false`, a staff with overlapping assignments, a
+savings transaction created at an out-of-scope office by an in-scope cashier.
+
+### 17.4 Completion correction — recorded cash POSITION (additive; supersedes the narrower window summaries)
+
+**Formula (local Fineract source, `TellerManagementReadPlatformServiceImpl`, independently confirmed by the
+coordinator):** position = allocate (101) + cash in − cash out − settle (102) per cashier and currency,
+where cash in/out are the stored journal rows (103/104) plus the cash derived from savings, loan and client
+transactions attributed through `created_by -> m_appuser.staff_id -> m_cashiers.staff_id` inside the
+cashier's assignment dates (savings `end_date`; loan/client `end_date + 1 day`, as the reader does).
+
+**Built:** `cashier_recorded_cash_position` (grain cashier + currency). `to_date` is the cutoff and the
+position is cumulative from the beginning; `from_date` only splits out `position_before_window_amount`
+(the planner contract requires both slots for an explicit period, so both carry meaning). All component
+columns are returned (journal, savings, loan, client in/out), so no branch is hidden. A group exists when
+any flow row exists and the position is the signed SUM, so a group that nets to zero is returned as 0.
+Not physical, counted or reconciled cash; no reconciliation record is read.
+
+**Superseded and removed:** `cashier_recorded_cash_summary` (journal-only window totals) and
+`cashier_savings_cash_summary` (savings-only window totals), with their oracles and Bruno cases. Their
+figures are now columns of the position; their §17.1 proofs stay as history of the earlier slice. Kept:
+`teller_cashier_assignments`, `cashier_cash_movements` (row-level journal movements),
+`inter_office_cash_transfers`.
+
+**Declared divergences from the Fineract reader (disclosed in `position_basis`):** only
+`is_cash_payment = true` counts (the reader also counts `payment_detail_id IS NULL`); waivers, write-offs and
+interest are not cash (the reader labels them cash out); attribution is inferred, not a stored link; the
+journal is cumulative by `txn_date` (the reader filters `created_date` against the assignment dates, except
+allocations).
+
+**Proof (cutoff 2026-04-30, window start 2026-04-01; independent SQL `tests/answers/cashier_recorded_cash_position.sql`
+and `__scope_2_3`):** 16 groups for all authorized offices `{1,2,3,4,5,6,8,9}`, 4 groups for `office_ids` [2,3].
+Required values hold: cashier 3 / USD = 0 (journal 26000 − 26670 = −670, plus savings cash in 800 and out 130),
+cashier 2 / USD = 20800, cashier 4 / USD = 35970 and AED = 25000; cashier 6 shows a real window movement
+(USD 0 before April, 10000 at the cutoff). Real-model jobs: `994d8df8-e939-4540-93cd-f79ea0f64a29` (all offices) and
+`5e8851f1-1ed8-4025-9d64-1cdb94b2bb53` (narrowed); locked run `answers/teller_cashier_position` +
+`answers/teller_cashier_diagnostic`: 33 requests / 14 tests passed (`/tmp/fin115-evidence/position-run5-pass.out`).
+The eight explicit savings cash events (cashier 2 USD in 800; cashier 3 USD in 800, out 20 and 110; cashier 4
+USD in 800, 100 and 870, AED out 20) are inside these totals.
+
+**Failed attempts kept (not rerun blindly), `/tmp/fin115-evidence/position-run{1..4}-*`:**
+- `b74bcd50…` pre-model `planner_output_invalid`, 0 model calls: with six teller capabilities the candidate
+  prompt exceeded the 16000-byte input budget (the position candidate is ~3.0 KB). Resolved by removing the two
+  superseded summaries, not by dropping fields or changing limits.
+- `aee9b29f…`, `2b50e077…` (model called, `static_verification_rejected`): the first shape exposed only `to_date`,
+  but the planner contract requires both date slots for an explicit period; then the wording "through April 2026"
+  was rejected after four attempts (three provider timeouts at 30 s, then an invalid proposal). The accepted chain
+  asks "for April 2026". Cause of the second rejection is inferred (model quote), not captured.
+- `98cd75a2…`: four `planner_unavailable` provider timeouts (30 s each), no usage recorded.
+
+**Retained diagnostic (not acceptance):** the original English assignments request "Show the teller and cashier
+assignments that overlap February 2026." (job `13fbf2fe-4a9a-42a2-9729-2367ab4fca8c`) now reaches the model
+(3584 input tokens, so the budget is no longer the cause) but its proposal is `static_verification_rejected`
+(`planner_output_invalid`). It is recorded honestly; wording was not used to turn it green.
+
+**Remaining limits:** loan and client branches follow the Fineract rules but have 0 attributed rows locally, so
+they are unproven by data; journal types 103/104 have no local rows; a staff member with overlapping
+assignments would be counted for each (fan-out) and this is unproven; `full_day = false` assignments;
+nonzero inter-office transfers; counted physical cash and reconciliation remain gap intents.
+
+
+### 17.5 Final integration correction — anti-fanout attribution (current revision; additive)
+
+**Defect found in review:** all three derived branches of `cashier_recorded_cash_position.sql` joined `m_cashiers` on the creator's
+staff and the date bounds, so a staff member holding overlapping assignments would put the same financial event into several
+cashiers' positions. The earlier statement that overlap was merely "unproven" was wrong: the contract forbids double counting, so
+this was a defect, not a missing fixture. The oracle `tests/answers/cashier_recorded_cash_position.sql` shared the same join shape.
+
+**Fix (current revision):** every derived event (savings, loan, client) is classified BEFORE summing by the number of cashier
+assignments that match it, counted over ALL assignments (ambiguity is a property of the event). Exactly one match = admitted.
+More than one = ambiguous: added to no cashier's amount, counted in `ambiguous_event_count` of each in-scope candidate group, and
+the group's `recorded_cash_position_amount` (and `position_before_window_amount` when an ambiguous event predates the window)
+is NULL with `position_status = 'withheld_ambiguous_attribution'`; otherwise `'complete'`. Scope: the event's own office must be
+authorized and only candidate cashiers whose teller office is authorized are returned, so no out-of-scope cashier, amount or count
+is exposed (an out-of-scope candidate still makes the event ambiguous, which is the safe direction). The oracle was rewritten
+independently (correlated scalar subquery for the match count) and still yields the original values: cashier 3 / USD = 0,
+cashier 2 / USD = 20800, cashier 4 / USD = 35970 and AED = 25000, all `complete` with 0 ambiguous events locally.
+
+**Deterministic smoke (no Fineract table read, no fixture):** `tests/position_attribution_smoke.sh` runs the production SQL text
+unchanged with every Fineract table shadowed by an inline `VALUES` CTE. Verified: two overlapping assignments of one staff
+→ event ambiguous, both groups withheld with count 2 (not a fake 0); a June event that also matches a cashier in an unauthorized
+office stays ambiguous and nothing of that cashier is returned; two non-overlapping adjacent assignments of another staff →
+each event admitted to exactly one cashier; a cashier netting exactly 0 is returned as 0; a NULL-currency journal row is its
+own group; no duplicate group. 6 checks ok.
+
+**Assignments prose/output agreement:** `teller_cashier_assignments` again returns `teller_state_enum` next to `teller_state`
+(oracles and api-reference updated), matching the description "teller validity and state". Other columns trimmed earlier for
+the planner budget on `cashier_cash_movements` (teller_id, staff_id, txn_type_enum) were NOT restored in this correction.
+
+**Runtime proof of the current revision (real model, locked run, targeted):** `answers/teller_cashier_position` (+ the changed
+assignments path + diagnostic) 58 requests / 29 tests passed (`/tmp/fin115-evidence/final-run1-pass.out`). Position jobs
+`e9d6b12e-c518-46d3-92ac-313f17b3356e` (all offices, 16 rows) and `7933fcb2-8fdc-45dd-b8c7-ea995ff0ccf7` (`office_ids` [2,3], 4 rows);
+assignments `edc68cc7-99af-45f3-8f5d-220423376e0d` (5 rows) and `dd5a6662-a0ae-4ea6-b313-0443f24e0314` (2 rows). The
+old-revision jobs `994d8df8…`/`5e8851f1…` belong to the previous revision (without ambiguity columns) and are history.
+Diagnostic job `1b9efcca-4b4a-4f18-aeed-11464ce033fc`: the original assignments request now fails BEFORE any model call
+(`planner_output_invalid`, 0 model calls) because the larger position candidate (two more columns) pushes the six-candidate prompt over
+the 16000-byte planner input budget (offline estimate ~16.6 KB). Recorded, not worked around.
+
+**Exact remaining limits:** loan and client branches have no nonempty acceptance proof (0 attributed locally); the VALUES smoke
+executes their empty branches and proves savings attribution ambiguity, not nonzero loan/client semantics. Journal types 103/104
+have no local rows; `full_day = false` assignments; nonzero inter-office rows;
+NULL payment details are not counted; counted physical cash and reconciliation stay unsupported. Graph after this correction:
+`graphify-out/graph.json` 2754 nodes / 5712 edges / 365 communities.
+
+The diagnostic chain is not a permanent acceptance test: its request files were archived at
+`/tmp/fin115-evidence/diagnostic-requests-20261016.tgz` and removed from the collection after observation.
+The final run's 29 tests include one diagnostic observation, so only 28 are positive acceptance assertions.
+The coordinator independently ran the six VALUES-only attribution checks against the application database;
+the smoke defaults to `jarvis` and reads no Fineract table.

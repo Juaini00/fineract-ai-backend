@@ -1,0 +1,43 @@
+id: cashier_cash_movements
+status: approved_mvp
+domain: teller_cashier
+display_name: Cashier Cash Movements
+description: >-
+  List cash allocations and settlements recorded in the cashier journal for a date
+  window and authorized offices, newest first: movement, cashier and office IDs,
+  type, date, amount, currency (empty = unknown). Journal rows only. No notes.
+  Recorded, not counted physical cash.
+data_areas: [teller_cashier_ops, organization_foundation]
+required_api_capability: cashier_cash_movements
+query_id: teller_cashier.cashier_cash_movements
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: cashier_cash_movement, grouping: none, output: list, pii: none }
+examples:
+  - Show the cash allocations and settlements recorded for cashiers in my offices from November 2025 to December 2025.
+  - List recorded cashier cash movements from January 2026 to March 2026.
+  - Tampilkan alokasi dan penyelesaian kas kasir yang tercatat dari Januari 2026 sampai Maret 2026.
+supported_intents:
+  - list recorded cashier cash allocations and settlements
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: recorded_not_physical
+    rule: rows come only from m_cashier_transactions; they are recorded movements, never counted physical cash.
+  - id: no_invented_linkage
+    rule: entity_type and entity_id are not selected and no loan or savings linkage is claimed.

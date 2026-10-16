@@ -1,0 +1,50 @@
+id: cashier_recorded_cash_position
+status: approved_mvp
+domain: teller_cashier
+display_name: Cashier Recorded Cash Position
+description: >-
+  Recorded cash position per cashier and currency, cumulative from the beginning
+  through the end date of the requested period (the cutoff) for authorized
+  offices, plus the position before the period start: allocated, settled, cash in
+  and out from the journal and from savings, loan and client cash transactions
+  attributed to the cashier, and the position (allocated plus cash in minus cash
+  out minus settled). Attribution is inferred from the creating user's staff and
+  the assignment dates; only explicit cash payment types count. An event that
+  matches more than one assignment is counted as ambiguous, added to no amount,
+  and the position of the affected cashier and currency is withheld (empty) with
+  a status. A
+  cashier and currency that nets to zero is shown as 0. Recorded system data, not
+  counted physical cash.
+data_areas: [teller_cashier_ops, organization_foundation]
+required_api_capability: cashier_recorded_cash_position
+query_id: teller_cashier.cashier_recorded_cash_position
+metrics: []
+output_mode: list
+request_shape: { operation: summary, subject: cashier_cash_position, grouping: cashier_currency, output: table, pii: none }
+examples:
+  - What is the recorded cash position of each cashier by currency through April 2026?
+  - Show the recorded cash position per cashier and currency as of the end of March 2026.
+  - Tampilkan posisi kas tercatat per kasir dan mata uang sampai April 2026.
+supported_intents:
+  - recorded cash position per cashier and currency through a cutoff date
+guards:
+  require_office_scope: true
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: cutoff_declared
+    rule: to_date is the cutoff; the position is cumulative from the beginning through it and is returned as as_of_date; from_date only marks the period start for position_before_window_amount.
+  - id: not_physical_cash
+    rule: the position is recorded system data; it is never described as counted, physical or reconciled cash.

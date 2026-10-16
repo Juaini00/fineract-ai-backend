@@ -1,0 +1,41 @@
+id: teller_cashier_assignments
+status: approved_mvp
+domain: teller_cashier
+display_name: Teller and Cashier Assignments
+description: >-
+  List cashier-to-teller assignments overlapping a date window (default today) for
+  authorized offices: cashier, teller, office and staff IDs, assignment dates and
+  times, full-day flag, teller validity and state. An unrecorded date bound is
+  empty (open). No names. Not a cash movement or balance.
+data_areas: [teller_cashier_ops, organization_foundation]
+required_api_capability: teller_cashier_assignments
+query_id: teller_cashier.cashier_assignments
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: cashier_assignment, grouping: none, output: list, pii: none }
+examples:
+  - Which cashiers are assigned to which tellers in my authorized offices today?
+  - List the cashier and teller assignments active in February 2026.
+  - Tampilkan penugasan teller dan kasir yang berlaku hari ini untuk kantor saya.
+supported_intents:
+  - list teller and cashier assignments in a date window
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii: { returns_pii: false }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: business_today }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: assignment_not_cash
+    rule: assignments (m_cashiers) and teller validity are returned as separate facts; no cash amount or balance is derived from them.

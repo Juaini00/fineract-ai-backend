@@ -510,19 +510,19 @@ mod tests {
             // Products masters moved to approved under FIN-109.
             "Show the recurring deposit contribution for this account.",
             "Show the actual account transfer between these two accounts.",
-            "Show the teller assignment for this branch.",
+            "Show the cash reconciliation for this teller.",
+            "Show the physical cash count for this teller.",
             "Show the standing instruction execution history for this account.",
             "Show the provisioning result history for this loan.",
             "Show the batch job status for interest posting last night.",
             "Show the group meeting attendance for this center.",
             // FIN-153 (second review pass) — D04 client charge, D10 custom
             // datatable, D15a/b survey/credit bureau, D15d family member,
-            // D15e inter-office cash, and D01/D02/D03/D11 narrow phrases.
+            // and D01/D02/D03/D11 narrow phrases. (D15e inter-office cash and the D06 assignment/movement questions are approved since FIN-115; only the D06 gap intents stay guarded.)
             "Show the client charge for this account.",
             "Show the custom datatable EmploymentDetails for this client.",
             "Show the credit bureau report for this client.",
             "Show the family member detail for this client.",
-            "Show the inter-office cash transaction between these branches.",
             "Reproduce the published report for last month.",
             "Show the historical office as of a past date for this client.",
             "Show the consolidated total across currencies for this branch.",
@@ -530,6 +530,30 @@ mod tests {
             "Tampilkan saldo akun buku besar.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
+        }
+    }
+
+    /// FIN-115 (D06/D15e): teller/cashier assignments, recorded movements and
+    /// inter-office transfers are approved capabilities, so their questions are
+    /// not guarded; counted cash and reconciliation remain gap intents.
+    #[test]
+    fn teller_cashier_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show the teller and cashier assignments that overlap February 2026.",
+            "Show the cash allocations and settlements recorded for cashiers from January 2026 to March 2026.",
+            "What is the recorded cash position of each cashier by currency through April 2026?",
+            "List the recorded cash transfers between my offices from January 2026 to June 2026.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        for gap in [
+            "Show the cash reconciliation for this teller.",
+            "Is there a cash discrepancy for this cashier?",
+            "Show the physical cash count for this teller.",
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, "domain_gap", "{gap}");
         }
     }
 

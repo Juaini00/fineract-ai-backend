@@ -1,0 +1,44 @@
+info:
+  name: FIN-115 position full answer
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin115pos_full_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin115posToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "cashier_recorded_cash_position", document);
+          test("FIN-115 D06: the position nets to zero for cashier 3 / USD and is not dropped or negative", function () {
+            const got = answers.answerRows(document);
+            const row = (cashier, currency) => got.rows.find((r) => r.cashier_id === cashier && r.currency_code === currency);
+            expect(Number(row(3, "USD").recorded_cash_position_amount)).to.equal(0);
+            expect(Number(row(2, "USD").recorded_cash_position_amount)).to.equal(20800);
+            expect(Number(row(4, "USD").recorded_cash_position_amount)).to.equal(35970);
+            expect(Number(row(4, "AED").recorded_cash_position_amount)).to.equal(25000);
+          });
+          test("FIN-115 D06: position is recorded system data with its basis stated, never physical cash", function () {
+            const got = answers.answerRows(document);
+            for (const row of got.rows) {
+              expect(String(row.position_basis)).to.include("not counted physical cash");
+              expect(String(row.as_of_date)).to.include("2026-04-30");
+            }
+            expect(document.completeness).to.equal("Complete");
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-115 D06: no event is ambiguously attributed locally, so every position is complete and numeric", function () {
+            const got = answers.answerRows(document);
+            for (const row of got.rows) {
+              expect(Number(row.ambiguous_event_count)).to.equal(0);
+              expect(row.position_status).to.equal("complete");
+              expect(row.recorded_cash_position_amount).to.not.equal(null);
+            }
+          });
+        }

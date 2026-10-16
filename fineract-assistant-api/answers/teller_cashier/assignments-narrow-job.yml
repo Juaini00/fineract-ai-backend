@@ -1,0 +1,27 @@
+info:
+  name: FIN-115 assignments-narrow job
+  type: http
+  seq: 21
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+    - name: Idempotency-Key
+      value: "{{fin115_assignments_narrow_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin115_assignments_narrow_session}}", "request_text": "List the cashier and teller assignments active in February 2026.", "office_ids": [2, 3] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin115_assignments_narrow_key", "fin115-assignments-narrow-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        bru.setVar("fin115_assignments_narrow_job", res.getBody().data.job_id);

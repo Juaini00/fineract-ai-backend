@@ -1,0 +1,22 @@
+info:
+  name: FIN-115 interoffice session
+  type: http
+  seq: 90
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-115 interoffice" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        bru.setVar("fin115_interoffice_session", res.getBody().data.id);

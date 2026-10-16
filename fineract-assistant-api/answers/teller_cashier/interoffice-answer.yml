@@ -1,0 +1,27 @@
+info:
+  name: FIN-115 interoffice answer versus independent SQL
+  type: http
+  seq: 92
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin115_interoffice_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin115Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          const document = res.getBody().data;
+          answers.check(test, expect, "inter_office_cash_transfers", document);
+          test("FIN-115 interoffice: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-115 D15e: no recorded inter-office transfer is an Empty answer, not zero cash", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }

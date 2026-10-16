@@ -22,6 +22,7 @@ included_areas:
   - loans_reschedule_recovery
   - loans_capitalized_balances
   - savings_transactions
+  - teller_cashier_ops
 conditional_areas:
   - group_center_foundation
 secondary_areas:

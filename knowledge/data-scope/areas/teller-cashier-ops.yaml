@@ -1,0 +1,49 @@
+id: teller_cashier_ops
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#d06--operasional-kas-tellerkasir
+inventory_refs:
+  - D06
+  - D15e
+description: >-
+  Teller/cashier operations (D06) and inter-office cash transfers (D15e), per
+  Fineract's organisation/teller module: cashier-to-teller assignments
+  (`m_cashiers`, `m_tellers`), the cashier cash journal (`m_cashier_transactions`,
+  stored types 101 allocate, 102 settle, 103 cash in, 104 cash out) and
+  office-to-office cash transfers (`m_office_transaction`). Office scope is the
+  teller's office (`m_tellers.office_id`); a transfer is in scope only when every
+  recorded office on it is authorized. Recorded cash is not counted physical cash
+  and no reconciliation record is read. FIN-115 evidence (knowledge/VERIFICATION.md)
+  corrects the earlier inventory statement that no cash-movement table exists:
+  `m_cashier_transactions` is present in the live schema.
+included_tables:
+  - m_cashiers
+  - m_tellers
+  - m_cashier_transactions
+  - m_office_transaction
+  # Savings branch of the derived cashier cash (cashier_recorded_cash_position):
+  # these tables belong to other areas; they are listed because this area's
+  # query reads them. m_appuser is read ONLY to map created_by to staff_id.
+  - m_savings_account_transaction
+  - m_savings_account
+  - m_appuser
+  # Loan and client branches of the recorded cash position
+  # (cashier_recorded_cash_position); 0 attributed rows locally.
+  - m_loan_transaction
+  - m_loan
+  - m_client_transaction
+  - m_payment_detail
+  - m_payment_type
+  - m_account_transfer_transaction
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [teller_cashier]
+default_rules:
+  - Assignments, recorded cash movements and inter-office transfers are separate facts; no query joins two of them into a balance.
+  - Fineract also derives a cashier's cash in/out at read time from loan, savings and client transactions attributed through the creating user's staff and the cashier's assignment window. The savings, loan and client branches are read with an explicit cash payment type only (inferred attribution, stated on every row) by the recorded cash position; the position is recorded system data, never counted physical cash.
+  - Staff and teller names, descriptions, the cashier transaction note and the office transaction description are never returned.
+  - m_cashier_transactions.entity_type/entity_id are not read and no loan or savings linkage is asserted.
+checks:
+  - id: office_path_declared
+    rule: cashier facts are scoped through m_cashiers.teller_id -> m_tellers.office_id; inter-office transfers require every recorded office to be in scope.
+  - id: no_free_text
+    rule: description, txn_note and names never appear in approved query outputs.
