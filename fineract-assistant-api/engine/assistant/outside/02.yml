@@ -1,0 +1,37 @@
+{
+  "info": {
+    "name": "outside submit",
+    "type": "http",
+    "seq": 2
+  },
+  "http": {
+    "method": "post",
+    "url": "{{baseUrl}}/chat/jobs",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      },
+      {
+        "name": "content-type",
+        "value": "application/json"
+      }
+    ],
+    "body": {
+      "type": "json",
+      "data": "{\"session_id\": \"{{assistantSession}}\", \"request_text\": \"Book a flight for me.\"}"
+    }
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "before-request",
+        "code": "req.setHeader(\"Idempotency-Key\", \"assistant-\"+Date.now()+\"-\"+Math.random().toString(36).slice(2));"
+      },
+      {
+        "type": "tests",
+        "code": "test(\"Assistant turn durably accepted\",()=>expect(res.getStatus()).to.equal(202)); bru.setVar(\"assistantJob\",res.getBody().data.job_id);"
+      }
+    ]
+  }
+}

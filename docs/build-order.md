@@ -2602,3 +2602,47 @@ Update for FIN-115 publication (L1C D06 teller/cashier + D15e inter-office cash;
   Empty answer) and no nonzero real-data or full-domain claim is made. By owner decision the inventory rows D06 and D15e are now
   `inherited` for these source-supported Mode-1 capabilities only (physical cash count, reconciliation and discrepancy stay gap
   intents); this is not an L2 promotion. Earlier FIN-115 failures in this file stay as history. Details: `knowledge/VERIFICATION.md` §17.6.
+
+### FIN-165 catalog reference repair
+
+The D06 inventory promotion exposed five invalid gap references at catalog
+startup (job-level blocker for every locked run). `D06-physical` now records
+the still-unimplemented physical count, reconciliation and discrepancy scope as
+its own gap row; the five domain gap intents cite it. D06 stays `inherited`
+for recorded cash only; the validator is unchanged. Catalog validation: zero
+errors (two pre-existing resolver warnings). HTTP proof: "Show physical cash
+count." remains `Completed` + `Unsupported` with `plan_version = null`
+(job `2b9213bc-0cc9-4391-8a00-8a4e611629d6`, 4 requests / 4 tests).
+
+### FIN-166 deposit request-shape correction
+
+The readiness probe for "Hi, show savings deposits for April 2026 by currency."
+failed with a valid model `no_fit` (job `77cbc77d-4452-4ff8-9548-bbbbe01c90fa`,
+one call, 25077 ms, retained) because `savings_deposit_total` declared
+`grouping: none, output: scalar` while its approved query manifest declares
+grain `[currency_code]` with currency output. Only that request_shape was
+corrected to match the existing SQL — no prompt, retrieval, timeout, retry or
+schema change. After the correction the same request planned on attempt 1
+(job `12cc9d8c-7055-4a1a-a297-1eb91ede8425`, call 14939 ms, usage 2752 in /
+712 out) and its three rows (AED 154 / 176248, EUR 8 / 4553, USD 60 / 15740,
+1–30 April) matched an independently authored DBX SQL exactly. This does not
+prove general planner reliability and does not promote L2.
+
+### FIN-164 conversational assistant (this change)
+
+Real-model readiness gate first: the original greeting baseline was reproduced
+(job `bf4dde1a-…` → `planner_no_fit`, zero calls) and the plain deposit
+positive passed (12 tests) before dependent work, with every failure retained.
+The Engine now proposes one closed understanding envelope (intent + optional
+FIN-162 analysis payload) through the same Rig client, admission/audit,
+budgets and repair bounds; the original request is never rewritten. Analysis
+branches are verified and executed exactly as before; social/help/goal-question/
+honest-limitation turns settle a durable `conversation` response document with
+zero analytical nodes and zero promoted session facts; `scope_help` maps to the
+existing Unsupported limitation, and the write/PII/scope guards still run
+before any model call (permanent `engine/assistant` Bruno scenarios: greeting,
+help, thanks, goal, context, outside, write, mixed-rows-vs-SQL). The frozen
+40-prompt / 120-observation real-model reliability sweep result is recorded in
+the Linear completion note, not here. No numbered L2/PLN or L7 scenario is
+promoted; FIN-75 / FIN-88 / FIN-100 remain open and their behaviors are not
+claimed — the assistant states their unavailability instead.

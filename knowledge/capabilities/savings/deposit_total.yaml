@@ -17,8 +17,8 @@ output_mode: total
 request_shape:
   operation: total
   subject: savings_transaction
-  grouping: none
-  output: scalar
+  grouping: currency_code
+  output: table
   pii: none
 examples:
 - What is the total deposit this month?

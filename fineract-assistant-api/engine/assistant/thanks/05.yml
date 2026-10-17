@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "thanks audit",
+    "type": "http",
+    "seq": 5
+  },
+  "http": {
+    "method": "get",
+    "url": "{{baseUrl}}/settings/audit?job_id={{assistantJob}}&limit=200",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      }
+    ]
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "test(\"thanks: real model understanding is audited\",()=>{const e=res.getBody().data.events;const a=e.filter(x=>x.action===\"planner.call_admitted\");const f=e.filter(x=>x.action===\"planner.call_finished\");expect(f.some(x=>x.result===\"ok\")).to.equal(true);for(const x of f)expect(a.some(y=>y.model_call_id===x.model_call_id&&y.job_id===x.job_id)).to.equal(true);});"
+      }
+    ]
+  }
+}

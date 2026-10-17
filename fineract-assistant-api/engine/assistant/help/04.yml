@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "help response",
+    "type": "http",
+    "seq": 4
+  },
+  "http": {
+    "method": "get",
+    "url": "{{baseUrl}}/chat/jobs/{{assistantJob}}/response",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      }
+    ]
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "test(\"help: assistant response preserves its evidence boundary\",()=>{expect(res.getStatus()).to.equal(200);const d=res.getBody().data;expect(d.outcome).to.equal(\"Answered\"); expect(d.blocks_json.some(b=>[\"metric\",\"table\",\"chart_spec\",\"comparison\",\"finding\"].includes(b.type))).to.equal(false);expect(d.evidence_json.help_capability_ids).to.have.length(6);expect(d.evidence_json.context_reuse).to.equal(\"not_available\"); });console.log(JSON.stringify({scenario:\"help\",response:res.getBody().data}));"
+      }
+    ]
+  }
+}

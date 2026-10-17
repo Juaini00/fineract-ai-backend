@@ -28,7 +28,10 @@ class Handler(BaseHTTPRequestHandler):
         self.rfile.read(int(self.headers.get("Content-Length", "0")))
         attempts += 1
         decision = "no_fit" if args.mode == "no-fit" else "abstain"
-        content = json.dumps({"schema_version": 1, "decision": decision, "confidence": "low", "nodes": []})
+        content = json.dumps({
+            "schema_version": 1, "intent": "analysis",
+            "analysis": {"schema_version": 1, "decision": decision, "confidence": "low", "nodes": []},
+        })
         if args.mode == "invalid" or (args.mode == "repair" and attempts == 1):
             content = "```json\n" + content + "\n```"
         payload = json.dumps({

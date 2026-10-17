@@ -1,0 +1,33 @@
+{
+  "info": {
+    "name": "write session",
+    "type": "http",
+    "seq": 1
+  },
+  "http": {
+    "method": "post",
+    "url": "{{baseUrl}}/chat/sessions",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      },
+      {
+        "name": "content-type",
+        "value": "application/json"
+      }
+    ],
+    "body": {
+      "type": "json",
+      "data": "{\"title\": \"FIN-164 write\"}"
+    }
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "test(\"Session accepted\",()=>expect(res.getStatus()).to.equal(201)); bru.setVar(\"assistantSession\",res.getBody().data.id);"
+      }
+    ]
+  }
+}

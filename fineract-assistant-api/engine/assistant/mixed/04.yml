@@ -1,0 +1,25 @@
+{
+  "info": {
+    "name": "mixed response",
+    "type": "http",
+    "seq": 4
+  },
+  "http": {
+    "method": "get",
+    "url": "{{baseUrl}}/chat/jobs/{{assistantJob}}/response",
+    "headers": [
+      {
+        "name": "authorization",
+        "value": "Bearer {{manualPlannerToken}}"
+      }
+    ]
+  },
+  "runtime": {
+    "scripts": [
+      {
+        "type": "tests",
+        "code": "test(\"mixed: assistant response preserves its evidence boundary\",()=>{expect(res.getStatus()).to.equal(200);const d=res.getBody().data;expect(d.outcome).to.equal(\"Answered\"); const t=d.blocks_json.find(b=>b.type===\"table\");expect(t.columns).to.deep.equal([\"from_date\",\"to_date\",\"currency_code\",\"total_deposit_amount\",\"deposit_count\"]);expect(t.rows).to.deep.equal([[\"2026-04-01\",\"2026-04-30\",\"AED\",\"176248\",154],[\"2026-04-01\",\"2026-04-30\",\"EUR\",\"4553\",8],[\"2026-04-01\",\"2026-04-30\",\"USD\",\"15740\",60]]); });console.log(JSON.stringify({scenario:\"mixed\",response:res.getBody().data}));"
+      }
+    ]
+  }
+}

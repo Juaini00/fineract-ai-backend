@@ -124,6 +124,7 @@ impl Plan {
 /// alasan yang dinyatakan pada response — tidak ada kegagalan senyap (I5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Unplannable {
+    Interaction(super::understanding::Intent),
     PlannerFailure(&'static str),
     InvalidSource(&'static str),
     /// Tenant-wide master access is limited to an active admin of this tenant.
@@ -199,6 +200,7 @@ impl Unplannable {
     /// Alasan pendek yang aman ditulis ke `completeness_reason`.
     pub fn reason(&self) -> String {
         match self {
+            Self::Interaction(_) => "conversation".to_string(),
             Self::PlannerFailure(code) => (*code).to_string(),
             Self::InvalidSource(_) => "planner_output_invalid".to_string(),
             Self::GlobalReferenceUnauthorized => "global_reference_not_authorized".to_string(),
@@ -223,6 +225,7 @@ impl Unplannable {
     /// Kalimat untuk blok `limitation`. Bahasa Inggris: teks produk publik.
     pub fn explain(&self) -> String {
         match self {
+            Self::Interaction(_) => "This turn does not request an analytical query.".to_string(),
             Self::PlannerFailure("planner_no_fit") => "No single approved capability fits this request as asked, so it was not answered and no source query was run. A request that combines facts an approved capability can read (for example job run observations) with a claim no approved capability can establish (for example that a business period or every account is covered or current) is not answered from the supported part alone.".to_string(),
             Self::PlannerFailure(_) | Self::InvalidSource(_) => "The planner could not produce a verified plan; no source query was run.".to_string(),
             Self::GlobalReferenceUnauthorized => {

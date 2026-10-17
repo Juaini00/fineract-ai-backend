@@ -17,6 +17,7 @@ pub mod resolver;
 pub mod validate;
 pub mod worker;
 pub mod write_intent;
+mod understanding;
 
 use std::{sync::Arc, time::Duration};
 
