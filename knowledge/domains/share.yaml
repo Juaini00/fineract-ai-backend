@@ -1,15 +1,15 @@
 id: share
-status: gap
+status: approved_mvp
 display_name: Share accounts
 description: >-
   Share account identity/lifecycle, effective terms, ownership by status,
-  purchase/redemption, charges, dividends, evidenced settlement, and
-  history/corrections — §2 "Share" (dataset-scope-decisions.md:29) and
-  dataset-inventory.md SHARE-1..8. This is one of the three account types
-  covered by client baseline scope CLI-5 (loan, savings, share); it stays a
-  separate domain so a share question is never misrouted to the generic
-  savings capability. Agreed baseline scope; no approved Mode-1 capability
-  exists yet.
+  purchase/redemption, charges, payment allocations, dividends, and
+  history/corrections — §2 "Share" (dataset-scope-decisions.md:29, :44-53) and
+  dataset-inventory.md SHARE-1..8. Five approved Mode-1 capabilities deliver
+  identity/terms/ownership (share_accounts), purchases/redemptions/corrections
+  (share_account_transactions), charges (share_account_charges), charge payment
+  allocations (share_charge_payment_allocations), and dividends (share_account_dividends).
+  Per-transaction evidenced settlement proof (SHARE-7 residual) remains a gap intent.
 inventory_refs:
   - SHARE-1
   - SHARE-2
@@ -19,20 +19,51 @@ inventory_refs:
   - SHARE-6
   - SHARE-7
   - SHARE-8
-data_areas: []
+data_areas:
+  - share_accounts
+  - organization_foundation
 concepts:
   - id: share_account
     meaning: Client or group ownership of shares in a share product.
-    synonyms: [share account, share, saham]
+    synonyms: [saham]
   - id: dividend
     meaning: Distribution paid to share account holders.
     synonyms: [dividend, dividen]
-supported_intents: []
+supported_intents:
+  - { phrase: "share accounts in authorized offices", inventory_ref: SHARE-1 }
+  - { phrase: "share account effective terms", inventory_ref: SHARE-2 }
+  - { phrase: "share ownership by status", inventory_ref: SHARE-3 }
+  - { phrase: "share account transactions and purchases", inventory_ref: SHARE-4 }
+  - { phrase: "share account charges", inventory_ref: SHARE-5 }
+  - { phrase: "share charge payment allocations", inventory_ref: SHARE-5 }
+  - { phrase: "share account dividends", inventory_ref: SHARE-6 }
+  - { phrase: "share transaction history and corrections", inventory_ref: SHARE-8 }
 gap_intents:
-  - { phrase: "share purchase and redemption", inventory_ref: SHARE-4 }
-  - { phrase: "share account balance", inventory_ref: SHARE-3 }
+  - { phrase: "settled share purchases and redemptions", inventory_ref: SHARE-7 }
+unsupported_intents:
+  - { phrase: "create share account", exempt: "write_action" }
+  - { phrase: "future dividend estimates", exempt: "out_of_scope" }
+  - { phrase: "share mark to market valuation", exempt: "out_of_scope" }
 default_rules:
-  - Share accounts are agreed baseline scope with no approved capability yet (dataset-inventory.md SHARE-1..8, every row `gap`); every share request answers unsupported with a gap reason, never routed to an unrelated approved capability (mis. savings).
+  - Units are distinct from money; historical unit_price is distinct from current product or market price (§2 Share rule).
+  - Pending purchase is not counted as ownership (SHARE-3); ownership measure uses approved shares only, with pending reported separately.
+  - A dividend counts as paid only when status is posted AND savings_transaction_id is not null; both components must be visible.
+  - Linked savings account (savings_account_id) surfaces as linkage only and never proves settlement of any purchase or redemption (SHARE-7). Standalone settlement proof remains a gap intent.
+  - Corrections follow is_active evidence; no reversal columns are assumed or invented (SHARE-8).
+  - No future-dividend estimates or mark-to-market calculations without source/contract (§2 Share rule).
+  - Allocation amount (pb.amount) is the safe grain measure for charge payment allocations; transaction amounts are not summed across allocations (anti-fanout).
+  - Account-number masking follows the savings convention; account_no and external_id are never returned.
+  - Office authorization path is the client's office (m_client.office_id) bound inside SQL; transaction office does not confer authorization.
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to `inherited`.
+  - id: data_area_exists
+    rule: data_areas must reference share_accounts.
+  - id: units_distinct_from_money
+    rule: units (total_shares) are distinct from money amounts.
+  - id: historical_price_distinct_from_current
+    rule: historical transaction unit_price is recorded price without backfilling current product price.
+  - id: paid_dividend_requires_both
+    rule: paid dividend requires both posted status and savings_transaction_id.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: office_path_scoped
+    rule: authorization is scoped through m_client.office_id.

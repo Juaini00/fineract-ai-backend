@@ -1,0 +1,53 @@
+id: share_accounts
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#2-batas-fdrd-dan-share-yang-tetap-disepakati
+inventory_refs:
+  - SHARE-1
+  - SHARE-2
+  - SHARE-3
+  - SHARE-4
+  - SHARE-5
+  - SHARE-6
+  - SHARE-7
+  - SHARE-8
+description: >-
+  Share account identity/lifecycle, effective terms, ownership by status,
+  purchase/redemption, charges, payment allocations, dividends, and
+  history/corrections — §2 "Share" (dataset-scope-decisions.md:29, :44-53) and
+  dataset-inventory.md SHARE-1..8. Master share product definition (m_share_product)
+  is separated from account holdings and transactions. Office scope is the client's
+  office (m_client.office_id). Units are distinct from money amounts; historical
+  transaction unit_price is distinct from current product price. Pending purchases
+  are not ownership. Dividends require both posted status and savings transaction
+  reference to count as paid. Linked savings account surfaces as linkage only and
+  does not prove per-transaction settlement. Corrections follow is_active evidence.
+  Account numbers and external IDs are never returned.
+included_tables:
+  - m_share_account
+  - m_share_account_transactions
+  - m_share_account_charge
+  - m_share_account_charge_paid_by
+  - m_share_account_dividend_details
+  - m_share_product
+  - m_share_product_dividend_pay_out
+  - m_charge
+  - m_client
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [share]
+default_rules:
+  - Units (total_shares) are distinct from money amounts; historical unit_price is distinct from current product or market price.
+  - Pending purchase is not counted as ownership (SHARE-3); ownership measure uses approved shares only, with pending reported separately.
+  - A dividend counts as paid only when status is posted AND savings_transaction_id is not null; both components must be visible.
+  - Linked savings account (savings_account_id) surfaces as linkage only and never proves settlement of any purchase or redemption (SHARE-7).
+  - Corrections follow is_active evidence; no reversal columns are assumed or invented (SHARE-8).
+  - Allocation amount (pb.amount) is the safe grain measure for charge payment allocations; transaction amounts are not summed across allocations (anti-fanout).
+  - Office authorization path is the client's office (m_client.office_id) bound inside SQL; transaction office does not confer authorization.
+  - Account numbers and external IDs are never selected (pii safe).
+checks:
+  - id: office_path_declared
+    rule: share facts are scoped through m_client.office_id.
+  - id: units_distinct_from_money
+    rule: units (total_shares) are distinct from money amounts.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.

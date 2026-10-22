@@ -20,7 +20,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show the share account balance for this client.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show the client share account roster for this client.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

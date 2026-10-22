@@ -1,0 +1,30 @@
+info:
+  name: FIN-111 share account charges answer versus independent SQL
+  type: http
+  seq: 32
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin111_share_charges_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin111Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "share_account_charges", document);
+          test("FIN-111 share account charges: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-111 SHARE-3: positive non-zero share charge rows", function () {
+            expect(document.outcome).to.equal("Answered");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(2);
+          });
+        }

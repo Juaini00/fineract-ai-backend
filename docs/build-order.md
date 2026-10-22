@@ -2373,6 +2373,15 @@ stays `gap`; the ticket is not closed here**):
 - Deterministic synthetic proof: `tests/fdrd_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 5 semantic checks (type filtering, projection and preclosure terms, funding reading, anti-fanout contributions, batch shortfall facts with NULL preservation).
 - Gates: catalog validated with 0 errors; 210 `chat` unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-111 (share accounts: ownership, purchase/redemption, charges, allocations, and dividends):**
+
+- Delivered 5 curated Mode-1 capabilities for domain `share` (SHARE-1..8): `share_accounts`, `share_account_transactions`, `share_account_charges`, `share_charge_payment_allocations`, `share_account_dividends`.
+- Live `fineract_default` database facts: 2 share accounts (`m_share_account`), 3 share transactions (`m_share_account_transactions`), 2 share charges (`m_share_account_charge`), 2 share charge payment allocations (`m_share_account_charge_paid_by`), 0 share dividends (`m_share_account_dividend_details`).
+- Underlying settlement proof (SHARE-7): not recorded in Fineract data model; retained as explicit gap intent (`gap_intents`) for domain `share`.
+- HTTP proof (`answers/share`): 33 requests / tests against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population test in office 2 (`outcome = "Empty"`).
+- Deterministic synthetic proof: `tests/share_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 5 semantic checks (account scope & status, transaction date & type, charges & NULL preservation, allocations anti-fanout & evidence IDs, dividends lifecycle & Empty outcome).
+- Gates: catalog validated with 0 errors; 211 `chat` unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

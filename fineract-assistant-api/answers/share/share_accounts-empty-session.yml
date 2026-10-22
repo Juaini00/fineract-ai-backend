@@ -1,0 +1,23 @@
+info:
+  name: FIN-111 share accounts empty session
+  type: http
+  seq: 16
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin111Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-111 share accounts empty" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin111_share_accounts_empty_session", res.getBody().data.id);

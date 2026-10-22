@@ -1,0 +1,53 @@
+id: share_account_transactions
+status: approved_mvp
+domain: share
+display_name: Share Account Transactions
+description: >-
+  List share account transactions: transaction ID, account ID, client ID, office ID,
+  transaction date, total shares (units), unit price at transaction time, transaction amount,
+  charge amount, amount paid, status enum, type enum (purchase/redemption), and active flag.
+  Units are strictly distinct from money amounts; unit price is the historical price recorded
+  at transaction time and never backfilled with current product or market price. Corrections
+  follow is_active evidence; no reversal fields are assumed. Governed by client office.
+data_areas: [share_accounts, organization_foundation]
+required_api_capability: share_account_transactions
+query_id: share.share_account_transactions
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: share_account_transaction, grouping: none, output: list, pii: none }
+examples:
+  - Show share account transactions from November 2025 to April 2026.
+  - List share purchase and redemption transactions in my authorized offices.
+  - Tampilkan transaksi pembelian dan penebusan saham dari November 2025 sampai April 2026.
+supported_intents:
+  - list share account transactions in a date window
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: units_distinct_from_money
+    rule: units (total_shares) are distinct from money amounts (amount, charge_amount, amount_paid).
+  - id: historical_price_recorded_only
+    rule: unit_price is recorded price at transaction time, never joined or backfilled with current product or market price.
+  - id: corrections_follow_is_active
+    rule: corrections are surfaced via is_active evidence; no reversal columns are assumed.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

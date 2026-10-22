@@ -1,0 +1,34 @@
+id: share.share_account_dividends
+database: fineract
+sql_file: queries/share/share_account_dividends.sql
+data_areas: [share_accounts]
+tables: [m_share_account_dividend_details, m_share_account, m_client, m_share_product_dividend_pay_out]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: dividend_detail_id, type: bigint, sensitivity: public_business }
+  - { name: dividend_pay_out_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: status, type: bigint, sensitivity: public_business }
+  - { name: savings_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: dividend_period_start_date, type: date, sensitivity: public_business }
+  - { name: dividend_period_end_date, type: date, sensitivity: public_business }
+grain: [dividend_detail_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: paid_requires_posted_and_savings_tx
+    rule: status and savings_transaction_id are surfaced together; paid dividend requires both posted status and non-null savings_transaction_id.
+  - id: anti_fanout_payout_join
+    rule: payout join on dividend_pay_out_id = payout PK is 1:1, surfacing period dates without fan-out.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

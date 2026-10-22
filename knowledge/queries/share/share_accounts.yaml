@@ -1,0 +1,51 @@
+id: share.share_accounts
+database: fineract
+sql_file: queries/share/share_accounts.sql
+data_areas: [share_accounts]
+tables: [m_share_account, m_client, m_share_product]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: product_name, type: string, sensitivity: public_business }
+  - { name: product_currency_code, type: string, sensitivity: public_business }
+  - { name: status_enum, type: bigint, sensitivity: public_business }
+  - { name: submitted_date, type: date, sensitivity: public_business }
+  - { name: approved_date, type: date, sensitivity: public_business }
+  - { name: rejected_date, type: date, sensitivity: public_business }
+  - { name: activated_date, type: date, sensitivity: public_business }
+  - { name: closed_date, type: date, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: currency_digits, type: integer, sensitivity: public_business }
+  - { name: currency_multiplesof, type: integer, sensitivity: public_business }
+  - { name: total_approved_shares, type: bigint, sensitivity: public_business }
+  - { name: total_pending_shares, type: bigint, sensitivity: public_business }
+  - { name: minimum_active_period_frequency, type: numeric, sensitivity: public_business }
+  - { name: minimum_active_period_frequency_enum, type: bigint, sensitivity: public_business }
+  - { name: lockin_period_frequency, type: numeric, sensitivity: public_business }
+  - { name: lockin_period_frequency_enum, type: bigint, sensitivity: public_business }
+  - { name: allow_dividends_inactive_clients, type: boolean, sensitivity: public_business }
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+grain: [account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: product_reference_join_only
+    rule: join to m_share_product is reference join only (covering PROD-3) surfacing product name and currency.
+  - id: approved_shares_measure_only
+    rule: ownership measure counts approved shares only; total_pending_shares is reported separately.
+  - id: linked_savings_not_settlement
+    rule: savings_account_id is surfaced as linkage only, never proving settlement of purchases or redemptions.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
