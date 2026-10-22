@@ -2752,7 +2752,7 @@ Readiness continuation, 2026-10-19 (base `607d020`, no application changes):
   unproven; publication does not close FIN-164 or promote L2/L7.
   Runtime log: `/tmp/jarvis-fin164-live-20261022.log`.
 
-### FIN-113 direct client charges (D04: assessments and payment allocations; uncommitted worktree deliverable)
+### FIN-113 direct client charges (D04: assessments and payment allocations)
 
 - **Delivered Mode-1 curated query capabilities**: `client_charge_assessments` and `client_charge_payment_allocations` under domain `client` and data area `client_charges` (`knowledge/data-scope/areas/client-charges.yaml`).
 - **Semantic invariants enforced**:
