@@ -2641,8 +2641,114 @@ honest-limitation turns settle a durable `conversation` response document with
 zero analytical nodes and zero promoted session facts; `scope_help` maps to the
 existing Unsupported limitation, and the write/PII/scope guards still run
 before any model call (permanent `engine/assistant` Bruno scenarios: greeting,
-help, thanks, goal, context, outside, write, mixed-rows-vs-SQL). The frozen
-40-prompt / 120-observation real-model reliability sweep result is recorded in
-the Linear completion note, not here. No numbered L2/PLN or L7 scenario is
+help, thanks, goal, context, outside, write, mixed-rows-vs-SQL). The required
+40-prompt / 120-observation real-model reliability sweep has no verified result
+in the Linear records reviewed on 2026-10-19; FIN-164 remains incomplete.
+No numbered L2/PLN or L7 scenario is
 promoted; FIN-75 / FIN-88 / FIN-100 remain open and their behaviors are not
 claimed — the assistant states their unavailability instead.
+
+Readiness continuation, 2026-10-19 (base `607d020`, no application changes):
+
+- One locked run on port 3364, checkout database `jarvis`, ran
+  `engine/assistant/auth` and `engine/assistant/mixed`. Build and catalog preflight
+  passed (91 capabilities, 94 manifests, zero errors / two existing warnings).
+  The run executed five HTTP requests including two terminal-state polls:
+  three of four tests passed; the response-read request was skipped after bail.
+- The exact mixed April request produced job
+  `47888ac8-b38c-44b5-9829-b60ac6836af6`, terminal `Failed` /
+  `OperationalFailure` / `planner_output_invalid`, no plan. Durable audit records
+  the effective application provider/model as `gemini/gemini-3.5-flash-lite`;
+  no provider, model, endpoint, key, timeout, retry or verifier was changed.
+  This is not the coding-agent model.
+- Attempt 1 (`01a151da-bf32-71f5-a18f-83aa9e69f51b`) failed `invalid_schema`
+  after 1,807 ms (2,754 input / 242 output tokens). Attempt 2
+  (`01a151da-c64e-7611-b3b6-365187ae6ba0`) failed
+  `static_verification_rejected` after 1,419 ms (2,770 input / 162 output).
+  Provider reachability is proven; valid analytical planning is not.
+- Independent read-only SQL reproduced April totals/counts:
+  AED 176248 / 154, EUR 4553 / 8, USD 15740 / 60.
+  No new HTTP analytical result exists to compare with those rows.
+- Readiness remains blocked under `architecture/conversation.md` §Readiness
+  and acceptance. No sweep, full suite, retry run or dependent feature build
+  was performed. Existing failures and historical successful proofs remain valid
+  only for their recorded revisions/configurations. Runtime log:
+  `/tmp/jarvis-fin164-resume-20261019.log`; durable job/call IDs above survive
+  loss of the local log.
+
+### FIN-164 analytical slot protocol clarification, 2026-10-21 (unpublished)
+
+- **Observed failure, not a parser bypass.** The initial eight-scenario retest
+  passed seven scenarios; mixed job `f8a08c1e-25c0-4c96-bf69-d76318c078c9`
+  exhausted four calls with `invalid_schema`, no plan and zero source queries.
+  A diagnostic-only run (`e1378375-2963-4b90-9f8d-72cefae67bb8`) retained
+  the actual rejected proposal: a date slot used `kind: date` with `value`;
+  subsequent output used `date_phrase` but still carried the forbidden `value`.
+  The unchanged closed parser correctly rejects both. Temporary completion
+  capture was removed before the positive proofs.
+- **Change.** `engine/llm.rs` now states all four existing slot encodings and
+  their exact fields in the system instruction, including date phrases carrying
+  only `kind` and `source`, and probe arguments carrying only `value` and
+  `source`. Parameter types are not slot-kind names. The audited prompt version
+  is `understanding-v3`; the schema remains version 1. There is no input
+  normalization, alias, phrase/capability routing, verifier relaxation, new
+  retry loop, provider/model switch or contract change.
+- **Real-provider readiness now passes on this revision/configuration.**
+  Locked runs on port 3364, database `jarvis`, used the same effective
+  `gemini/gemini-3.5-flash-lite` and catalog `a969bb327b0ee38c6c1f09421a566868e0cd4934989692f66776b86645e92a82`.
+  The exact mixed April request is job
+  `1d7b203f-2c10-4c7a-acb5-75af995e6437`; the plain request
+  "Show savings deposits for April 2026 by currency." is job
+  `4148efbe-dd13-4a2f-adfe-66fb356bed27`. Both settle
+  `Completed`/`Answered`/`Complete`, plan version 1, one successful first-attempt
+  model call and one source query. Model durations are 2,811/2,674 ms; observed
+  token totals are 3,120/3,118. Both served tables equal independently authored
+  read-only SQL row-for-row for 1–30 April: AED amount 176248/count 154,
+  EUR 4553/8, USD 15740/60. The existing mixed Bruno assertions failed before
+  and pass after the instruction correction; parsing/grounding assertions were
+  not changed.
+- **Scoped regressions.** All eight exact canonical assistant requests pass
+  once, plus the plain analytical request: 59 executed HTTP requests including
+  polls, 51/51 tests. Canonical help uses "What can you help me with?".
+  Six non-analytical model paths each use one successful first attempt and zero
+  source queries; the write refusal uses no model call or source query.
+  Existing `planner-invalid`, `planner-unavailable`, `planner-no-fit` and
+  `planner-repair` controls pass, 34 requests / 32 tests; fixtures are negative
+  proof only, never positive real-model evidence. Throwaway plain/help request
+  files were removed; the permanent assistant chains remain unchanged.
+- **Deterministic gates.** Workspace tests pass (208 chat + 41 foundation),
+  clippy passes for all workspace targets with warnings denied, docs-check
+  reports zero broken links and all 29 routes documented, and acceptance-check
+  reports the unchanged 41/68 scenario-reference inventory. No new permanent
+  prompt-wording or schema-copy test was added; the existing mixed HTTP chain
+  supplies the failing-before/passing-after regression.
+- **Limits.** This is readiness plus a single observation per canonical request,
+  not the frozen 40-prompt/120-observation reliability gate, full collection or
+  full FIN-164/L2 conformance. No layer is promoted and the ticket is not
+  closed. No commit, push, PR or merge was performed. Local evidence:
+  `/tmp/jarvis-fin164-schema-fix-20261021-130732/`; earlier failed evidence
+  remains retained separately.
+
+### FIN-164 targeted publication check, 2026-10-22
+
+- The owner requested continuation and publication/merge without whole-application
+  retesting. Existing 2026-10-21 canonical, failure-path and deterministic evidence
+  above is retained, not rerun or represented as new evidence.
+- One current locked run (`engine/assistant/auth`, `engine/assistant/mixed`,
+  port 3364, checkout database `jarvis`) passed: six executed HTTP requests,
+  five tests, zero I1 log violations. Job
+  `362269f8-fd0a-43c7-8e4f-7cab8f4782dd` settled
+  `Completed` / `Answered` / `Complete`, plan version 1, one source query.
+  Model call `01a16152-5130-7363-9f1a-cd88b3b292ff` succeeded on attempt 1:
+  1,845 ms, 2,907 input / 213 output tokens, effective
+  `gemini/gemini-3.5-flash-lite`, prompt `understanding-v3`, schema 1,
+  unchanged catalog hash `a969bb327b0ee38c6c1f09421a566868e0cd4934989692f66776b86645e92a82`.
+- The served April rows match newly executed independent read-only SQL:
+  AED amount 176248 / count 154, EUR 4553 / 8, USD 15740 / 60.
+  This proves the current mixed-request path through Engine verification and
+  execution, not merely a direct provider response.
+- No further source fix, configuration switch, full collection or reliability
+  sweep was needed for this check. The 40-prompt / 120-observation gate remains
+  unproven; publication does not close FIN-164 or promote L2/L7.
+  Runtime log: `/tmp/jarvis-fin164-live-20261022.log`.
+
