@@ -1,0 +1,9 @@
+info:
+  name: client_charges
+  seq: 10
+  description: |
+    FIN-113 (D04): direct client charge assessments and recorded payment allocations.
+    Both tables (m_client_charge, m_client_charge_paid_by) exist and are empty on this
+    fixture; the real answer is an actual Empty (0 rows) with Complete completeness.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).

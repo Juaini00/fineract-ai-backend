@@ -1,0 +1,39 @@
+id: client.client_charge_payment_allocations
+database: fineract
+sql_file: queries/client/client_charge_payment_allocations.sql
+data_areas: [client_charges]
+tables: [m_client_charge_paid_by, m_client_charge, m_client, m_charge, m_client_transaction]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: allocation_id, type: bigint, sensitivity: public_business }
+  - { name: client_charge_id, type: bigint, sensitivity: public_business }
+  - { name: client_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: allocation_amount, type: numeric, sensitivity: public_business }
+  - { name: charge_currency, type: string, sensitivity: public_business }
+  - { name: transaction_currency, type: string, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: transaction_type_enum, type: bigint, sensitivity: public_business }
+  - { name: is_reversed, type: boolean, sensitivity: public_business }
+  - { name: client_office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_office_id, type: bigint, sensitivity: public_business }
+grain: [allocation_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]); transaction office does not confer authorization.
+  - id: allocation_amount_is_grain
+    rule: allocation grain is one m_client_charge_paid_by row; amount is pb.amount, avoiding transaction sum fan-out.
+  - id: per_currency_only
+    rule: charge currency and transaction currency are surfaced separately; no cross-currency conversion or consolidation.
+  - id: reversal_labeled_not_netted
+    rule: transaction reversal status (is_reversed) is surfaced explicitly, never silently netted or filtered.
+  - id: no_names_or_free_text
+    rule: client names and free-text descriptions are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

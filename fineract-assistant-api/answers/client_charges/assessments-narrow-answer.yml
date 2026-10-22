@@ -1,0 +1,29 @@
+info:
+  name: FIN-113 assessments-narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin113_assessments_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin113Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_charge_assessments", document, { truthKey: "client_charge_assessments__scope_2_3", narrowedTo: 2 });
+          test("FIN-113 assessments-narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-113 D04: narrowing to offices 2 and 3 returns actual Empty on this fixture", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }

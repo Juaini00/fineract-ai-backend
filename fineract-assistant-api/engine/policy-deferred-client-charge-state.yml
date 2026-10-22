@@ -1,5 +1,5 @@
 info:
-  name: "OVR-6.6 domain gap (client charge, D04) — job state"
+  name: "OVR-6.6 gap intent (client loan account roster, CLI-5) — job state"
   type: http
   seq: 38.9972
 http:
@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (gap, client charge D04): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-153 (gap intent, client loan roster CLI-5, FIN-113): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");
