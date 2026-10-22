@@ -1,5 +1,5 @@
 info:
-  name: "OVR-6.6 domain gap (FD/RD, FDRD-8) — job state"
+  name: "OVR-6.6 gap intent (FD/RD schedule, FDRD-9) — job state"
   type: http
   seq: 38.9986
 http:
@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (gap, FD/RD FDRD-8): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-153 (gap intent, RD schedule FDRD-9, FIN-110): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");

@@ -1,0 +1,37 @@
+id: fixed_recurring_deposit.fd_rd_funding
+database: fineract
+sql_file: queries/fixed_recurring_deposit/fd_rd_funding.sql
+data_areas: [fixed_recurring_deposit]
+tables: [m_savings_account_transaction, m_savings_account, m_client]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: transaction_id, type: bigint, sensitivity: public_business }
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: deposit_type_enum, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: amount, type: numeric, sensitivity: public_business }
+  - { name: submittedon_date, type: date, sensitivity: public_business }
+  - { name: activatedon_date, type: date, sensitivity: public_business }
+  - { name: is_reversed, type: boolean, sensitivity: public_business }
+grain: [transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: funding_is_reading_not_event
+    rule: funding is described as recorded deposit transactions near activation, not a distinct event type.
+  - id: reversals_surfaced_or_filtered
+    rule: reversed transactions are excluded (NOT is_reversed) and boolean flag is projected.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

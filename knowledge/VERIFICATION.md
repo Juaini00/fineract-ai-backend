@@ -1507,3 +1507,75 @@ All 5 assertion checks pass cleanly.
 `knowledge/domains/client.yaml` updated: `client charge` moved from `gap_intents` to `supported_intents` as two capabilities (`client charge assessments` and `client charge payment allocations`).
 `fineract-assistant-api/engine/policy-deferred-client-charge-job.yml` updated to assert remaining client domain gap: `client loan account roster` (CLI-5).
 
+
+
+## 19. FIN-110 / FDRD-1..10 — fixed and recurring deposits: identity, terms, funding, contributions, and shortfall
+
+**Context & Scope.** `dataset-inventory.md` §12 rows FDRD-1..10 cover the domain `fixed_recurring_deposit`. In the local `fineract_default` database:
+- `m_savings_account`: 36 FD/RD accounts (`deposit_type_enum` 200 = Fixed Deposit: 14 accounts; 300 = Recurring Deposit: 22 accounts; 100 = Savings: 171 accounts).
+- `m_deposit_account_term_and_preclosure`: 36 rows (1:1 with FD/RD accounts). All `deposit_period_frequency_enum` and `min_deposit_term_type_enum` are 2 (`MONTHS`). `maturity_amount` is a projection, not an actual payout. `on_account_closure_enum` is 100 (`WITHDRAW_DEPOSIT`), 200 (`TRANSFER_TO_SAVINGS`), 300 (`REINVEST_PRINCIPAL_AND_INTEREST`), 400 (`REINVEST_PRINCIPAL_ONLY`); in local data, 35 are NULL and 1 is 200 (surfaced faithfully as instruction, never presumed as payout).
+- `m_deposit_account_recurring_detail`: 22 rows (1:1 with RD accounts). All have `is_calendar_inherited = false`.
+- `m_savings_account_transaction`: initial funding deposits (`transaction_type_enum = 1`) occur at `activatedon_date` with `is_reversed = false`.
+- FDRD-9 schedule table source confirmed in Fineract: `m_mandatory_savings_schedule` (727 rows, all `deposit_type_enum = 300`). Generated via `RecurringDepositAccount.java:1162` (`generateSchedule`), `RecurringDepositScheduleInstallment.java:39`, and `GenerateRdScheduleTasklet.java:58`. Confirmed as underlying source and kept as explicit gap intent (`gap_intents`) for a standalone schedule query.
+
+**Built (Mode 1, explicit window, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `fd_rd_accounts` (FDRD-1 / FDRD-4):
+   - Lists FD and RD accounts in authorized client offices (`c.office_id = ANY($1::bigint[])`).
+   - Grain: `savings_account_id`.
+   - Distinct from savings accounts (`deposit_type_enum IN (200, 300)`).
+   - Identity & privacy: `account_no` and `external_id` are never returned.
+2. `fd_rd_term_preclosure` (FDRD-2 / FDRD-6):
+   - Fixed and recurring deposit terms and preclosure conditions.
+   - Grain: `term_id` (`m_deposit_account_term_and_preclosure.id`).
+   - Surfaces `deposit_amount`, `maturity_amount` (projection), `maturity_date`, deposit periods and frequencies, penal interest flags and rates, and `on_account_closure_enum` instruction.
+3. `fd_rd_funding` (FDRD-3):
+   - Recorded deposit transactions near submission/activation (`transaction_type_enum = 1`, `transaction_date >= submittedon_date`, within 30 days of `activatedon_date`).
+   - Grain: `transaction_id`.
+   - Reversals excluded from actual funding and surfaced via `is_reversed`.
+   - Prosa: "funding" is an operational reading of recorded deposits, not a distinct Fineract event type.
+4. `rd_contributions` (FDRD-8 / FDRD-9):
+   - Recurring deposit contributions comparing expected configuration (`mandatory_recommended_deposit_amount`) and actual recorded deposits (`SUM(amount)`).
+   - Expected vs actual kept strictly in separate columns, never blended into a performance score.
+   - Anti-fanout: scalar subquery on transactions preserves account grain (`savings_account_id`).
+   - Surfaces `deposit_period`, frequency, `is_calendar_inherited`, and `is_mandatory`.
+5. `rd_shortfall` (FDRD-10):
+   - Total overdue amount and number of overdue installments from `m_deposit_account_recurring_detail`.
+   - Stored batch-computed facts, strictly distinct from loan arrears (never touches loan tables).
+   - Nullable overdue amounts stay NULL if uncomputed, never coerced to 0.
+
+### 19.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{fd_rd_accounts,fd_rd_term_preclosure,fd_rd_funding,rd_contributions,rd_shortfall}.sql` (+ `__scope_2_3` variants).
+Locked run (`answers/fd_rd`): 60 requests / 71 tests passed (`OVR-6.7: nol pelanggaran isolasi commit`), columns, bound parameters, scope count, and row-for-row equality asserted.
+
+| Capability | Window | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| fd_rd_accounts | 2026-01-01..2026-03-31 | 23 | 5 | 8847d4e5… / 06d15f1a… |
+| fd_rd_term_preclosure | 2026-04-01..2026-06-30 | 9 | 1 | 8c9b9ec2… / 3b22295d… |
+| fd_rd_funding | 2026-01-01..2026-03-31 | 13 | 4 | dcc4c619… / 3fe8ba6c… |
+| rd_contributions | 2026-01-01..2026-03-31 | 16 | 2 | efa2e896… / c0334e32… |
+| rd_shortfall | 2026-01-01..2026-03-31 | 16 | 2 | 26fa45d6… / caa9df9a… |
+
+In addition, office 2 empty population tested (`fd_rd_accounts`): 0 rows returned with `outcome = "Empty"`.
+
+### 19.2 VALUES-only semantics smoke (`tests/fdrd_semantics_smoke.sh`)
+
+`tests/fdrd_semantics_smoke.sh` shadows all underlying Fineract tables (`m_savings_account`, `m_client`, `m_deposit_account_term_and_preclosure`, `m_deposit_account_recurring_detail`, `m_savings_account_transaction`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Accounts Scope & Type Filtering**: Includes FD (200) and RD (300) in authorized office 2; filters out savings accounts (100) and accounts in unauthorized office 99.
+2. **Term & Preclosure Semantics**: Includes terms within maturity date window; projects `maturity_amount` (25000.00), penal interest, and `on_account_closure_enum` (200); filters out terms outside the date window.
+3. **Funding Initial Deposit & Reversals**: Includes deposit transaction at activation; filters out reversed deposit (`is_reversed = true`) and out-of-window deposits; excludes account numbers.
+4. **Contributions Anti-Fanout & Granularity**: Scalar subquery aggregates multiple transactions (2 deposits totaling 3000.00) without fan-out; preserves expected (`1500.00`) vs actual (`3000.00`) in separate columns; projects `is_calendar_inherited = false`.
+5. **Shortfall Batch Facts & NULL Preservation**: Surfaces `total_overdue_amount` and `no_of_overdue_installments`; uncomputed account retains `NULL` (never coerced to 0); distinct from loan arrears.
+All 5 assertion checks pass cleanly.
+
+### 19.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/fd_rd`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, dates, amounts, currency codes, and flags are returned; `account_no` and `external_id` are never returned.
+4. **Semantics**: Explicit date windows, client office authorization, no delinquency confusion with loan arrears, maturity amount treated as projection.
+
+### 19.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` rows FDRD-1..4, 6, 8, 10 moved to `inherited`. Shared rows FDRD-5 and FDRD-7 reference existing savings capabilities. FDRD-9 installment schedule confirmed to originate from `m_mandatory_savings_schedule` and kept as explicit `gap_intents` in `knowledge/domains/fixed_recurring_deposit.yaml`.
+`fineract-assistant-api/engine/policy-deferred-fdrd-job.yml` updated to assert remaining FDRD-9 gap intent ("Show the recurring deposit installment schedule for this account.").

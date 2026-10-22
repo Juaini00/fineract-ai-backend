@@ -1,0 +1,48 @@
+id: fd_rd_accounts
+status: approved_mvp
+domain: fixed_recurring_deposit
+display_name: Fixed and Recurring Deposit Accounts
+description: >-
+  List fixed and recurring deposit accounts: account ID, client/office/product IDs, deposit type,
+  status, currency, balance, interest rules, lock-in date, and dates. Governed by client office.
+  Account numbers and external IDs are never returned.
+data_areas: [fixed_recurring_deposit, organization_foundation]
+required_api_capability: fd_rd_accounts
+query_id: fixed_recurring_deposit.fd_rd_accounts
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: fixed_recurring_deposit_account, grouping: none, output: list, pii: none }
+examples:
+  - Show fixed and recurring deposit accounts from January 2026 to March 2026.
+  - List term deposit accounts submitted this month in my authorized offices.
+  - Tampilkan rekening deposito berjangka dan tabungan berencana dari Januari 2026 sampai Maret 2026.
+supported_intents:
+  - list fixed and recurring deposit accounts in a date window
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: deposit_types_resolved
+    rule: deposit_type_enum is filtered to 200 (fixed deposit) and 300 (recurring deposit) as confirmed by live DB.
+  - id: no_schedule_imposed
+    rule: total_interest_posted_derived is returned as recorded derived, no schedule imposed on FD.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

@@ -32,7 +32,10 @@ pub const KNOWN_STATUSES: &[&str] = &[
 /// tidak dimulai dengan kosakata yang dikenal sama sekali (dianggap tidak
 /// terparse, bukan ditebak).
 pub fn category(raw: &str) -> Option<&'static str> {
-    KNOWN_STATUSES.iter().find(|&&known| raw.starts_with(known)).copied()
+    KNOWN_STATUSES
+        .iter()
+        .find(|&&known| raw.starts_with(known))
+        .copied()
 }
 
 /// Ambang jumlah baris minimal yang dianggap sehat. Dokumen sungguhan
@@ -155,23 +158,35 @@ mod tests {
     /// membaca `docs/data/dataset-inventory.md`, bukan hanya fixture di atas.
     #[test]
     fn parses_the_real_dataset_inventory_document() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/data/dataset-inventory.md");
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/data/dataset-inventory.md");
         let markdown = std::fs::read_to_string(&path).expect("dataset-inventory.md terbaca");
         let rows = parse(&markdown);
 
         assert_eq!(rows.get("ORG-1").map(String::as_str), Some("inherited"));
         assert_eq!(rows.get("CLI-5").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("CLI-6").map(String::as_str), Some("gap"));
-        assert_eq!(rows.get("FDRD-8").map(String::as_str), Some("gap"));
+        assert_eq!(rows.get("FDRD-8").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("FDRD-9").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D09").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D12").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D13").map(String::as_str), Some("excluded"));
-        assert_eq!(rows.get("D15a").map(String::as_str), Some("deferred-onboarding"));
-        assert_eq!(rows.get("D15b").map(String::as_str), Some("deferred-onboarding"));
+        assert_eq!(
+            rows.get("D15a").map(String::as_str),
+            Some("deferred-onboarding")
+        );
+        assert_eq!(
+            rows.get("D15b").map(String::as_str),
+            Some("deferred-onboarding")
+        );
         assert_eq!(rows.get("D15d").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D15e").map(String::as_str), Some("inherited"));
         assert!(!rows.contains_key("FAKE-999"));
-        assert!(rows.len() > 50, "expected the real document to yield many rows, got {}", rows.len());
+        assert!(
+            rows.len() > 50,
+            "expected the real document to yield many rows, got {}",
+            rows.len()
+        );
     }
 
     #[test]

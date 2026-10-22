@@ -1,0 +1,29 @@
+info:
+  name: FIN-110 shortfall narrow answer versus independent SQL
+  type: http
+  seq: 55
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin110_shortfall_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin110Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "rd_shortfall", document, { truthKey: "rd_shortfall__scope_2_3", narrowedTo: 2 });
+          test("FIN-110 shortfall narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-110 shortfall narrow: row count matches scope 2,3", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(answers.answerRows(document).rows.length).to.equal(2);
+          });
+        }

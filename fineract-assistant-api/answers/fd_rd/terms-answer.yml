@@ -1,0 +1,33 @@
+info:
+  name: FIN-110 terms answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin110_terms_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin110Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "fd_rd_term_preclosure", document);
+          test("FIN-110 terms: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-110 FDRD-2/FDRD-6: maturity projection and preclosure terms present", function () {
+            expect(document.outcome).to.equal("Answered");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(9);
+            expect(got.columns).to.include("maturity_amount");
+            expect(got.columns).to.include("pre_closure_penal_applicable");
+            expect(got.columns).to.include("on_account_closure_enum");
+          });
+        }

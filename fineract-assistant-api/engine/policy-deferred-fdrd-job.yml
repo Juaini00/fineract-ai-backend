@@ -1,11 +1,12 @@
 info:
-  name: "OVR-6.6 domain gap (FD/RD, FDRD-8) — job"
+  name: "OVR-6.6 gap intent (FD/RD schedule, FDRD-9) — job"
   type: http
   seq: 38.9985
   description: |
-    Domain `fixed_recurring_deposit` (`knowledge/domains/fixed_recurring_deposit.yaml`,
-    gap, FIN-153) — RD contribution (FDRD-8) cakupannya disepakati tanpa capability
-    disetujui.
+    FIN-110: RD contributions (FDRD-8) are now approved; recurring deposit
+    installment schedule stays a `gap_intents` entry of
+    `knowledge/domains/fixed_recurring_deposit.yaml` (FDRD-9): it answers
+    Unsupported with `domain_gap`.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -19,7 +20,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show the recurring deposit contribution for this account.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show the recurring deposit installment schedule for this account.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request
