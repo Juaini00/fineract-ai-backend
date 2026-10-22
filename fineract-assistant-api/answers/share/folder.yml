@@ -1,0 +1,8 @@
+info:
+  name: share
+  seq: 12
+  description: |
+    FIN-111 (SHARE-1..8): share accounts, transactions, charges, allocations, and dividends.
+    Fixture rows exist in the database (2 accounts, 3 transactions, 2 charges, 2 allocations, 0 dividends);
+    answer tests assert real columns and row-for-row equality with direct SQL oracles in tests/answers,
+    plus narrowed-scope tests (offices [2, 3] and office [2] Empty for share_accounts).

@@ -1579,3 +1579,84 @@ All 5 assertion checks pass cleanly.
 
 `docs/data/dataset-inventory.md` rows FDRD-1..4, 6, 8, 10 moved to `inherited`. Shared rows FDRD-5 and FDRD-7 reference existing savings capabilities. FDRD-9 installment schedule confirmed to originate from `m_mandatory_savings_schedule` and kept as explicit `gap_intents` in `knowledge/domains/fixed_recurring_deposit.yaml`.
 `fineract-assistant-api/engine/policy-deferred-fdrd-job.yml` updated to assert remaining FDRD-9 gap intent ("Show the recurring deposit installment schedule for this account.").
+
+## 20. FIN-111 / SHARE-1..8 — share accounts, transactions, charges, payment allocations, and dividends
+
+**Context & Scope.** `dataset-inventory.md` §11 rows SHARE-1..8 cover the domain `share`. In the local `fineract_default` database:
+- `m_share_account`: 2 share accounts (`status_enum` 300 = Active: 2 accounts). `submitted_date` 2025-11-01 and 2025-12-01. Total approved shares: 500 and 1000.
+- `m_share_account_transactions`: 3 transactions (`type_enum` 500 = Purchase, `status_enum` 300 = Approved). Transaction dates in 2025-11 and 2025-12.
+- `m_share_account_charge`: 2 charges assessed (`charge_time_enum` 13 = Activation).
+- `m_share_account_charge_paid_by`: 2 allocation rows (`pb.amount` 50.00 and 100.00), linking share charges and share transactions.
+- `m_share_account_dividend_details`: 0 dividend rows in local database. Genuine Empty outcome with `completeness = Complete`.
+- SHARE-7 settlement proof: not tracked in Fineract data model; retained as explicit gap intent (`gap_intents`) for domain `share`.
+
+**Built (Mode 1, explicit window for accounts/transactions, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `share_accounts` (SHARE-1):
+   - Lists share accounts in authorized client offices (`c.office_id = ANY($1::bigint[])`).
+   - Grain: `share_account_id` (`m_share_account.id`).
+   - Bounded by submission date window: `$2::date <= sa.submitted_date AND sa.submitted_date <= $3::date`.
+   - Distinct lifecycle status enums: 100=Submitted, 200=Approved, 300=Active, 500=Rejected, 600=Closed (`ShareAccountStatusType.java:30`).
+   - Surfaces `total_approved_shares` and `total_pending_shares`.
+   - Identity & privacy: `client_name`, `account_no`, and `external_id` are never returned.
+2. `share_account_transactions` (SHARE-2):
+   - Share purchases, redemptions, and charge payments on share accounts in authorized offices.
+   - Grain: `transaction_id` (`m_share_account_transactions.id`).
+   - Bounded by transaction date window: `$2::date <= st.transaction_date AND st.transaction_date <= $3::date`.
+   - Distinct transaction type enums: 500=Purchase, 600=Redeem, 700=Charge Payment (`PurchasedSharesStatusType.java:23`, `ShareAccountTransaction.java:49-53`).
+   - Surfaces `total_shares`, `unit_price`, `amount`, and `charge_amount`.
+3. `share_account_charges` (SHARE-3):
+   - Fee charges assessed on share accounts in authorized client offices.
+   - Grain: `charge_id` (`m_share_account_charge.id`).
+   - Parameters: `office_ids` + `limit` (no date column on source table).
+   - Surfaces `charge_time_type`, `charge_calculation_type`, `charge_payment_mode` (`ChargeTimeType.java:25`).
+   - Preserves NULL for derived amounts (never coalesced to 0).
+4. `share_charge_payment_allocations` (SHARE-5):
+   - Payment allocations against share account charges (`m_share_account_charge_paid_by`).
+   - Grain: `allocation_id` (`m_share_account_charge_paid_by.id`).
+   - Parameters: `office_ids` + `limit`.
+   - Anti-fanout: allocation grain directly surfaces `pb.amount` as the only money measure, avoiding sum of transaction fan-outs.
+   - Surfaces `share_transaction_id` and `charge_transaction_id` as evidence columns.
+   - Authorization via the share account's client office (`c.office_id = ANY($1::bigint[])`).
+5. `share_account_dividends` (SHARE-4):
+   - Dividends declared and posted on share accounts (`m_share_account_dividend_details`).
+   - Grain: `dividend_id` (`m_share_account_dividend_details.id`).
+   - Parameters: `office_ids` + `limit`.
+   - Status: 100=Initiated, 300=Posted (`ShareAccountDividendStatusType.java:23`).
+   - Fixture fact: 0 rows in database, verified as genuine `outcome = "Empty"` with `completeness = "Complete"`.
+
+### 20.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{share_accounts,share_account_transactions,share_account_charges,share_charge_payment_allocations,share_account_dividends}.sql` (+ `__scope_2_3` variants).
+Locked run (`answers/share`): 33 requests / tests against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population test in office 2 (`outcome = "Empty"`).
+
+| Capability | Window / Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| share_accounts | 2025-11-01..2026-04-30 | 2 | 0 | live Bruno run |
+| share_account_transactions | 2025-11-01..2026-04-30 | 3 | 0 | live Bruno run |
+| share_account_charges | office_ids + limit | 2 | 0 | live Bruno run |
+| share_charge_payment_allocations | office_ids + limit | 2 | 0 | live Bruno run |
+| share_account_dividends | office_ids + limit | 0 | 0 | live Bruno run |
+
+In addition, office 2 empty population tested (`share_accounts`): 0 rows returned with `outcome = "Empty"`.
+
+### 20.2 VALUES-only semantics smoke (`tests/share_semantics_smoke.sh`)
+
+`tests/share_semantics_smoke.sh` shadows all underlying Fineract tables (`m_share_account`, `m_client`, `m_share_product`, `m_share_account_transactions`, `m_share_account_charge`, `m_charge`, `m_share_account_charge_paid_by`, `m_share_account_dividend_details`, `m_office`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Accounts Scope & Status Filtering**: Includes active share accounts in authorized office 1; filters out accounts in unauthorized office 99; filters out accounts outside submission date window; hides account numbers and PII.
+2. **Transactions Scope & Date Filtering**: Includes purchase and redemption transactions within date window in authorized office; filters out transactions outside window; filters out unauthorized offices.
+3. **Charges Semantics & Null Preservation**: Includes charges in authorized office; preserves NULL derived amounts; maps charge time, calculation, and payment mode enums.
+4. **Allocations Anti-Fanout & Granularity**: Surfaces exact allocation rows (`m_share_account_charge_paid_by.id`); preserves link to share transaction and charge transaction without summing fan-out.
+5. **Dividends Lifecycle & Status**: Surfaces initiated and posted dividend records in authorized office; filters out unauthorized offices; validates Empty semantics when no records match.
+All 5 assertion checks pass cleanly.
+
+### 20.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/share`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, dates, quantities, amounts, currency codes, and status strings are returned; `account_no`, `external_id`, and `client_name` are never returned.
+4. **Semantics**: Explicit date windows for account submissions and transactions, client office authorization for all capabilities, anti-fanout allocations, genuine Empty outcome for dividends.
+
+### 20.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` rows SHARE-1..6, 8 moved to `inherited` (SHARE-6, 8 shared with client/general capabilities). SHARE-7 (evidence of settled share purchase/redemption) confirmed as gap intent (`gap_intents`) in `knowledge/domains/share.yaml`.
+`fineract-assistant-api/engine/policy-deferred-share-job.yml` created to assert remaining SHARE-7 gap intent ("Show settled share purchases and redemptions for this client.").

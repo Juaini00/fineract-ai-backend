@@ -497,8 +497,9 @@ mod tests {
             "Show journal entries for this month.",
             // FIN-153 — client address (CLI-6, selektif/gap, bukan ditolak kebijakan).
             "Show every client address in Head Office.",
-            // FIN-153 — share domain (SHARE-1..8, gap).
-            "Show the share account balance for this client.",
+            // FIN-153 — share domain: approved share capabilities under FIN-111;
+            // residual per-transaction settlement proof (SHARE-7) stays gap.
+            "Show settled share purchases and redemptions for this client.",
             // FIN-153 — group/center di luar savings (CLI-4/CLI-5, gap).
             "Show the group savings summary for this branch.",
             "Show the center savings summary for this branch.",
@@ -600,6 +601,26 @@ mod tests {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
         let gap = "Show the recurring deposit installment schedule for this account.";
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, "domain_gap", "{gap}");
+    }
+
+    /// FIN-111 (SHARE-1..8): share accounts, transactions, charges, payment allocations,
+    /// and dividends are approved capabilities, so their window questions are not guarded;
+    /// residual per-transaction settlement proof (SHARE-7 residual) remains gap/unsupported.
+    #[test]
+    fn share_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show share accounts from November 2025 to April 2026.",
+            "Show share account transactions from November 2025 to April 2026.",
+            "Show share account charges in my authorized offices.",
+            "Show share charge payment allocations in my authorized offices.",
+            "Show share account dividends in my authorized offices.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        let gap = "Show settled share purchases and redemptions for this client.";
         let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
         assert_eq!(term.source, "domain_gap", "{gap}");
     }

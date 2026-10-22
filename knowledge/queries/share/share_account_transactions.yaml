@@ -1,0 +1,41 @@
+id: share.share_account_transactions
+database: fineract
+sql_file: queries/share/share_account_transactions.sql
+data_areas: [share_accounts]
+tables: [m_share_account_transactions, m_share_account, m_client]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: transaction_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: total_shares, type: bigint, sensitivity: public_business }
+  - { name: unit_price, type: decimal, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: charge_amount, type: decimal, sensitivity: public_business }
+  - { name: amount_paid, type: decimal, sensitivity: public_business }
+  - { name: status_enum, type: bigint, sensitivity: public_business }
+  - { name: type_enum, type: bigint, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: units_distinct_from_money
+    rule: units (total_shares) are distinct from money amounts.
+  - id: historical_price_recorded_only
+    rule: unit_price is recorded price at transaction time without current-price backfill.
+  - id: corrections_follow_is_active
+    rule: corrections are surfaced via is_active evidence; no reversal columns are assumed.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

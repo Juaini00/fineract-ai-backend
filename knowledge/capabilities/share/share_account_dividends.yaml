@@ -1,0 +1,48 @@
+id: share_account_dividends
+status: approved_mvp
+domain: share
+display_name: Share Account Dividends
+description: >-
+  List share account dividend distributions: dividend detail ID, dividend payout ID, account ID,
+  client ID, office ID, dividend amount, status (raw enum), savings transaction ID (nullable),
+  and payout period start and end dates. A dividend counts as paid only when status is posted
+  AND savings_transaction_id is not null; both components are surfaced. Period dates come via
+  1:1 PK join to m_share_product_dividend_pay_out. No future dividend estimates or mark-to-market.
+  Governed by client office. Account numbers and external IDs are never returned.
+data_areas: [share_accounts, organization_foundation]
+required_api_capability: share_account_dividends
+query_id: share.share_account_dividends
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: share_account_dividend, grouping: none, output: list, pii: none }
+examples:
+  - Show share account dividends in my authorized offices.
+  - List share account dividend details across authorized offices.
+  - Tampilkan dividen rekening saham pada kantor berizin.
+supported_intents:
+  - list share account dividends in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: paid_requires_posted_and_savings_tx
+    rule: paid dividend requires both posted status and non-null savings_transaction_id; both components are surfaced.
+  - id: anti_fanout_payout_join
+    rule: payout join on dividend_pay_out_id = payout PK is 1:1, surfacing period dates without fan-out.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

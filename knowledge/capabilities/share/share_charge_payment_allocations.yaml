@@ -1,0 +1,48 @@
+id: share_charge_payment_allocations
+status: approved_mvp
+domain: share
+display_name: Share Charge Payment Allocations
+description: >-
+  List payment allocations recorded against share account charges: allocation ID, charge transaction ID,
+  share transaction ID, account ID, client ID, office ID, charge currency, allocation amount,
+  charge time enum, transaction date, transaction type enum, and active flag. Allocation grain
+  is one m_share_account_charge_paid_by row; amount is pb.amount, avoiding transaction sum fan-out.
+  Share transaction and charge transaction IDs are surfaced as evidence columns. Governed by client office.
+  Account numbers and external IDs are never returned.
+data_areas: [share_accounts, organization_foundation]
+required_api_capability: share_charge_payment_allocations
+query_id: share.share_charge_payment_allocations
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: share_charge_payment_allocation, grouping: none, output: list, pii: none }
+examples:
+  - Show share charge payment allocations in my authorized offices.
+  - List payment allocations for share account charges across authorized offices.
+  - Tampilkan alokasi pembayaran biaya saham pada kantor berizin.
+supported_intents:
+  - list share charge payment allocations in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: allocation_amount_is_grain
+    rule: allocation grain is one m_share_account_charge_paid_by row; amount is pb.amount, avoiding transaction sum fan-out.
+  - id: evidence_columns_surfaced
+    rule: share_transaction_id and charge_transaction_id are surfaced as evidence columns.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

@@ -1,0 +1,42 @@
+id: share.share_account_charges
+database: fineract
+sql_file: queries/share/share_account_charges.sql
+data_areas: [share_accounts]
+tables: [m_share_account_charge, m_share_account, m_client, m_charge]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: share_account_charge_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: charge_id, type: bigint, sensitivity: public_business }
+  - { name: charge_name, type: string, sensitivity: public_business }
+  - { name: charge_currency, type: string, sensitivity: public_business }
+  - { name: charge_time_enum, type: bigint, sensitivity: public_business }
+  - { name: charge_calculation_enum, type: bigint, sensitivity: public_business }
+  - { name: charge_payment_mode_enum, type: bigint, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: amount_paid_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_waived_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_writtenoff_derived, type: decimal, sensitivity: public_business }
+  - { name: amount_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: is_paid_derived, type: boolean, sensitivity: public_business }
+  - { name: waived, type: boolean, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [share_account_charge_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: master_separate_from_assessment
+    rule: master charge definition (m_charge) is joined for name and currency, distinct from assessment.
+  - id: nullable_derived_preserved
+    rule: derived amounts are returned as recorded; NULL values remain NULL and are never coerced to zero.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

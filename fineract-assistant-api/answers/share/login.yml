@@ -1,0 +1,21 @@
+info:
+  name: FIN-111 share answer login
+  type: http
+  seq: 0
+http:
+  method: post
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: content-type
+      value: application/json
+  body:
+    type: json
+    data: |
+      { "username": "{{username}}", "password": "{{password}}" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(200);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin111Token", res.getBody().data.access_token);

@@ -25,6 +25,7 @@ included_areas:
   - teller_cashier_ops
   - client_charges
   - fixed_recurring_deposit
+  - share_accounts
 conditional_areas:
   - group_center_foundation
 secondary_areas:

@@ -1,0 +1,48 @@
+id: share_account_charges
+status: approved_mvp
+domain: share
+display_name: Share Account Charges
+description: >-
+  List share account charges: share account charge ID, account ID, client ID, office ID,
+  charge master ID, charge name, charge currency, charge time/calculation/payment mode enums,
+  charge amount, paid/waived/written-off/outstanding derived amounts, paid flag, waived flag,
+  and active flag. Master charge definition is kept separate from actual assessment. Nullable
+  derived amounts remain null and are never coerced to zero. No date column exists on this table.
+  Governed by client office. Account numbers and external IDs are never returned.
+data_areas: [share_accounts, organization_foundation]
+required_api_capability: share_account_charges
+query_id: share.share_account_charges
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: share_account_charge, grouping: none, output: list, pii: none }
+examples:
+  - Show share account charges in my authorized offices.
+  - List share account charge assessments for all authorized offices.
+  - Tampilkan biaya rekening saham pada kantor berizin.
+supported_intents:
+  - list share account charges in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: master_separate_from_assessment
+    rule: master charge definition (m_charge) is kept separate from actual assessment (m_share_account_charge).
+  - id: nullable_derived_preserved
+    rule: stored derived amounts preserve NULL values and are never coerced to zero.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

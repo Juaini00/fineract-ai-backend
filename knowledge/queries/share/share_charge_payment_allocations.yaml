@@ -1,0 +1,36 @@
+id: share.share_charge_payment_allocations
+database: fineract
+sql_file: queries/share/share_charge_payment_allocations.sql
+data_areas: [share_accounts]
+tables: [m_share_account_charge_paid_by, m_share_account_charge, m_share_account, m_client, m_charge, m_share_account_transactions]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: allocation_id, type: bigint, sensitivity: public_business }
+  - { name: share_account_charge_id, type: bigint, sensitivity: public_business }
+  - { name: share_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: charge_currency, type: string, sensitivity: public_business }
+  - { name: allocation_amount, type: decimal, sensitivity: public_business }
+  - { name: charge_time_enum, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: transaction_type_enum, type: bigint, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+grain: [allocation_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: allocation_amount_is_grain
+    rule: allocation grain is one m_share_account_charge_paid_by row; amount is pb.amount, avoiding transaction sum fan-out.
+  - id: evidence_columns_surfaced
+    rule: share_transaction_id and charge_transaction_id are surfaced as evidence columns.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
