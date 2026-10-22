@@ -2752,3 +2752,23 @@ Readiness continuation, 2026-10-19 (base `607d020`, no application changes):
   unproven; publication does not close FIN-164 or promote L2/L7.
   Runtime log: `/tmp/jarvis-fin164-live-20261022.log`.
 
+### FIN-113 direct client charges (D04: assessments and payment allocations; uncommitted worktree deliverable)
+
+- **Delivered Mode-1 curated query capabilities**: `client_charge_assessments` and `client_charge_payment_allocations` under domain `client` and data area `client_charges` (`knowledge/data-scope/areas/client-charges.yaml`).
+- **Semantic invariants enforced**:
+  - Master vs Assessment: Reads operational client charge assessments (`m_client_charge`) and allocations (`m_client_charge_paid_by`), not charge masters (`m_charge`).
+  - Office authorization: Client office authorization (`$1::bigint[]` filtering `c.office_id`) is strictly enforced; transaction office (`ccp.office_id`) is preserved as audit evidence, never used for authorization.
+  - Derived amounts & non-zero semantics: Nullable derived amounts (`amount_outstanding_derived`, etc.) are left NULL when uncomputed, never coerced to 0.00.
+  - Allocation grain: Allocations are at `allocation_id` grain (`ccp.id`), avoiding fan-out.
+  - Currency separation: Multi-currency records are reported per row with explicit `currency_code`, never cross-currency aggregated.
+  - Reversals: Reversals/waives are surfaced explicitly (`is_reversed`, `is_waived`), not filtered out silently.
+  - PII exclusion: Client names, notes, and external identifiers excluded; only IDs and financial data returned.
+- **Verification evidence**:
+  - Direct SQL oracles in `tests/answers/client_charge_*.sql` computed on the local database (empty population = empty response verified row-for-row).
+  - Values-only CTE test suite `tests/client_charge_semantics_smoke.sh` exercises non-zero semantics on identical SQL logic, verifying lack of fan-out, reversal surfacing, per-currency separation, and NULL preservation.
+  - Locked Bruno integration runs (`answers/client_charges`) passed 21 requests, 28 tests (zero commit isolation violations).
+  - Gap intent updated: `client.yaml` moved `client charge` from `gap_intents` to `supported_intents` as two capabilities; `policy-deferred-client-charge-job.yml` updated to assert remaining gap `client loan account roster` (CLI-5).
+  - `dataset-inventory.md` row D04 updated to `inherited` (empty fixture wording mirroring D15e).
+- L1C remains open; §5.1 scenario coverage remains 41/68 (no numbered scenario for D04).
+
+

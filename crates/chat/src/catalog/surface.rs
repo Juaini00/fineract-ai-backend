@@ -516,10 +516,11 @@ mod tests {
             "Show the provisioning result history for this loan.",
             "Show the batch job status for interest posting last night.",
             "Show the group meeting attendance for this center.",
-            // FIN-153 (second review pass) — D04 client charge, D10 custom
-            // datatable, D15a/b survey/credit bureau, D15d family member,
-            // and D01/D02/D03/D11 narrow phrases. (D15e inter-office cash and the D06 assignment/movement questions are approved since FIN-115; only the D06 gap intents stay guarded.)
-            "Show the client charge for this account.",
+            // FIN-153 (second review pass) — D10 custom datatable, D15a/b
+            // survey/credit bureau, D15d family member, and D01/D02/D03/D11
+            // narrow phrases. (D04 client charges approved under FIN-113; D15e
+            // inter-office cash and the D06 assignment/movement questions are approved since FIN-115;
+            // only the gap intents stay guarded.)
             "Show the custom datatable EmploymentDetails for this client.",
             "Show the credit bureau report for this client.",
             "Show the family member detail for this client.",
@@ -551,6 +552,31 @@ mod tests {
             "Show the cash reconciliation for this teller.",
             "Is there a cash discrepancy for this cashier?",
             "Show the physical cash count for this teller.",
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, "domain_gap", "{gap}");
+        }
+    }
+
+    /// FIN-113 (D04): direct client charge assessments and payment allocations
+    /// are approved capabilities, so their window questions are not guarded;
+    /// other client gap intents remain guarded.
+    #[test]
+    fn client_charge_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show client charge assessments from January 2026 to March 2026.",
+            "Show client charge payment allocations from January 2026 to March 2026.",
+            "List client charge assessments due this month in my authorized offices.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        for gap in [
+            "Show the client loan account roster for this client.",
+            "Show the client share account roster for this client.",
+            "Show every client address in Head Office.",
+            "Show the family member detail for this client.",
+            "Show the historical office as of a past date for this client.",
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
             assert_eq!(term.source, "domain_gap", "{gap}");

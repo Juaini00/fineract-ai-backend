@@ -1,0 +1,38 @@
+id: client_charges
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#d04--biaya-langsung-pada-client
+inventory_refs:
+  - D04
+description: >-
+  Direct client charges (D04): charge assessments on clients (`m_client_charge`)
+  and recorded payment allocations (`m_client_charge_paid_by` -> `m_client_transaction`).
+  Charge definition (`m_charge`) is separated from the actual assessment. Office scope
+  is the client's office (`m_client.office_id`). Allocation grain is one allocation row;
+  transactions may back multiple allocations without fan-out. Amounts are per-currency
+  with no consolidation. Stored derived amounts are recorded facts, never recomputed,
+  and NULL stays NULL. Client names and free-text descriptions are never selected.
+included_tables:
+  - m_client_charge
+  - m_client_charge_paid_by
+  - m_charge
+  - m_client
+  - m_client_transaction
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [client]
+default_rules:
+  - Master charge definition is separated from actual assessment, payment, waiver, and outstanding balances.
+  - A client with no assessed charges is not delinquent; absence of charges is not evidence of delinquency.
+  - Nullable derived amounts (amount_paid_derived, amount_waived_derived, amount_writtenoff_derived, amount_outstanding_derived) are returned as recorded and never coerced to zero.
+  - Currency is per-currency only with no cross-currency consolidation; charge currency comes from m_charge.currency_code and transaction currency from m_client_transaction.currency_code.
+  - Allocation grain is one m_client_charge_paid_by row; summing m_client_transaction.amount across joined allocations is forbidden to prevent fan-out and double counting.
+  - Office authorization path is the client's office (m_client.office_id); transaction office (m_client_transaction.office_id) is recorded evidence and does not confer authorization.
+  - Transaction reversal (is_reversed) is surfaced explicitly, never silently netted or filtered.
+  - Client names and free-text descriptions are never selected (id-only output).
+checks:
+  - id: office_path_declared
+    rule: client charge facts are scoped through m_client.office_id; transaction office is evidence only.
+  - id: allocation_grain_no_fanout
+    rule: payment allocations are measured by m_client_charge_paid_by.amount, not transaction amount.
+  - id: no_names_or_free_text
+    rule: client names and free-text descriptions are never selected.

@@ -23,6 +23,7 @@ included_areas:
   - loans_capitalized_balances
   - savings_transactions
   - teller_cashier_ops
+  - client_charges
 conditional_areas:
   - group_center_foundation
 secondary_areas:

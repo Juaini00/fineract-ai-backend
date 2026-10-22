@@ -1,0 +1,23 @@
+info:
+  name: FIN-113 allocations-narrow session
+  type: http
+  seq: 40
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin113Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-113 allocations-narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin113_allocations_narrow_session", res.getBody().data.id);

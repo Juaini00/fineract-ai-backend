@@ -1,10 +1,11 @@
 info:
-  name: "OVR-6.6 domain gap (client charge, D04) — job"
+  name: "OVR-6.6 gap intent (client loan account roster, CLI-5) — job"
   type: http
   seq: 38.9971
   description: |
-    Client charge (D04, `gap_intents` di `knowledge/domains/client.yaml`, FIN-153) —
-    cakupannya disepakati tanpa capability disetujui.
+    FIN-113: client charge assessments and payment allocations (D04) are now approved
+    capabilities; client loan account roster stays a `gap_intents` entry of
+    `knowledge/domains/client.yaml` (CLI-5): it answers Unsupported with `domain_gap`.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -18,7 +19,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show the client charge for this account.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show the client loan account roster for this client.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

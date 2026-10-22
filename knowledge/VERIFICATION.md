@@ -1454,3 +1454,56 @@ provider-timeout behaviour (separate FIN-124/161 class) is unresolved and unrela
 source-supported Mode-1 capabilities ONLY. This is not full-domain completeness: counted physical cash, reconciliation and
 discrepancy/shortage/overage remain explicit gap intents, and no L2 promotion or numbered scenario is claimed. The earlier statements in
 this section that the rows stay `gap` were written before that owner decision and are history.
+
+## 18. FIN-113 / D04 — direct client charges: assessments and payment allocations
+
+**Context & Scope.** `dataset-inventory.md` row D04 covers direct client charges (`m_client_charge` and `m_client_charge_paid_by`). Local `fineract_default` database has 0 rows in both tables. As required by FIN-113 and mirroring FIN-115 / D15e, capabilities are delivered as Mode-1 curated queries with independent SQL oracles for the Empty population, plus an inline VALUES-only CTE test script (`tests/client_charge_semantics_smoke.sh`) proving positive non-zero semantics on unmodified production SQL.
+
+**Built (Mode 1, explicit window, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `client_charge_assessments` (grain client charge assessment, `[client_charge_id]`, sorting `due_date DESC, client_charge_id DESC`):
+   - Assesses operational charges (`m_client_charge`) joined to charge masters (`m_charge`) and clients (`m_client`).
+   - Office scope: strictly authorizes on client office (`c.office_id = ANY($1::bigint[])`), matching data-scope boundaries.
+   - Derived amounts: nullable derived columns (`amount_outstanding_derived`, `amount_paid_derived`, `amount_waived_derived`, `amount_writtenoff_derived`) are left NULL if uncomputed, never coerced to 0.00.
+   - Reversals & waives: surfaced explicitly via `is_reversed` and `is_waived` boolean flags, never filtered out silently.
+   - Multi-currency: reported per row with explicit `currency_code`, never cross-currency aggregated.
+   - PII exclusion: client names, notes, and external identifiers are excluded; only `client_id` and charge identifiers are returned.
+2. `client_charge_payment_allocations` (grain payment allocation, `[allocation_id]`, sorting `transaction_date DESC, allocation_id DESC`):
+   - Allocations from client payments to assessed charges (`m_client_charge_paid_by` `ccp` joined to `m_client_charge` `cc`, `m_client_transaction` `ct`, `m_client` `c`, and `m_charge` `ch`).
+   - Grain preservation: one row per allocation (`ccp.id`), avoiding Cartesian product / fan-out.
+   - Office scope & audit evidence: authorized on client office (`c.office_id = ANY($1::bigint[])`); transaction office (`ccp.office_id`) is projected as audit evidence, never used for authorization.
+   - Reversals: transaction reversal (`ct.is_reversed`) surfaced explicitly.
+   - Currency: reported with charge currency (`ch.currency_code`), matching financial allocation grain.
+
+### 18.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{client_charge_assessments,client_charge_payment_allocations}.sql` (+ `__scope_2_3` variants).
+Locked run (`answers/client_charges`): 21 requests / 28 tests passed (`OVR-6.7: nol pelanggaran isolasi commit`), columns, bound parameters, scope count, and row-for-row equality asserted.
+
+| Capability | Window | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| client_charge_assessments | 2025-10-15..2026-10-15 | 0 (`Empty`) | 0 (`Empty`) | 83b48ce0… / eba9d519… |
+| client_charge_payment_allocations | 2025-10-15..2026-10-15 | 0 (`Empty`) | 0 (`Empty`) | 3beeb9a2… / a1fa33f3… |
+
+### 18.2 VALUES-only semantics smoke (`tests/client_charge_semantics_smoke.sh`)
+
+Because production tables have 0 rows in the local database, `tests/client_charge_semantics_smoke.sh` shadows all underlying Fineract tables (`m_client_charge`, `m_charge`, `m_client`, `m_client_charge_paid_by`, `m_client_transaction`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Grain & No Fan-Out**: Multiple allocations (2 payment rows for charge 101) return distinct rows with exact allocation IDs (`201`, `202`) and individual allocation amounts (`50.00`, `25.00`), never summing or multiplying.
+2. **Reversals Surfaced**: Reversed assessment (`is_reversed = true`) and waived assessment (`is_waived = true`), as well as reversed payment transaction (`is_reversed = true`), are projected faithfully with explicit boolean flags.
+3. **Office Authorization vs Audit**: Client in authorized office 2 is included; client in unauthorized office 99 is filtered out, even if payment transaction was handled in office 2.
+4. **Per-Currency Separation**: Charges in USD and EUR are returned as distinct rows with their own `currency_code`, never cross-currency aggregated.
+5. **NULL Preservation**: Nullable derived amounts (`amount_outstanding_derived = NULL`) remain `NULL`, not converted to `0.00`.
+All 5 assertion checks pass cleanly.
+
+### 18.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/client_charges`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only `public_business` identifiers, dates, amounts, currency codes, and boolean flags are returned; client personal data is excluded.
+4. **Semantics**: Explicit date windows (`due_date` / `transaction_date`), client office authorization, no delinquency inference, no balance sheet claim.
+
+### 18.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D04 moved to `inherited` (mirroring D15e fixture wording).
+`knowledge/domains/client.yaml` updated: `client charge` moved from `gap_intents` to `supported_intents` as two capabilities (`client charge assessments` and `client charge payment allocations`).
+`fineract-assistant-api/engine/policy-deferred-client-charge-job.yml` updated to assert remaining client domain gap: `client loan account roster` (CLI-5).
+
