@@ -1,0 +1,43 @@
+id: fixed_recurring_deposit.fd_rd_term_preclosure
+database: fineract
+sql_file: queries/fixed_recurring_deposit/fd_rd_term_preclosure.sql
+data_areas: [fixed_recurring_deposit]
+tables: [m_deposit_account_term_and_preclosure, m_savings_account, m_client]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: term_id, type: bigint, sensitivity: public_business }
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: deposit_type_enum, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: deposit_amount, type: numeric, sensitivity: public_business }
+  - { name: maturity_amount, type: numeric, sensitivity: public_business }
+  - { name: maturity_date, type: date, sensitivity: public_business }
+  - { name: min_deposit_term, type: integer, sensitivity: public_business }
+  - { name: min_deposit_term_type_enum, type: bigint, sensitivity: public_business }
+  - { name: deposit_period, type: integer, sensitivity: public_business }
+  - { name: deposit_period_frequency_enum, type: bigint, sensitivity: public_business }
+  - { name: pre_closure_penal_applicable, type: boolean, sensitivity: public_business }
+  - { name: pre_closure_penal_interest, type: numeric, sensitivity: public_business }
+  - { name: pre_closure_penal_interest_on_enum, type: bigint, sensitivity: public_business }
+  - { name: on_account_closure_enum, type: bigint, sensitivity: public_business }
+grain: [term_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: maturity_is_projected
+    rule: maturity_amount is labeled and treated as a projected figure, not evidence of actual payout.
+  - id: closure_instruction_not_payout
+    rule: on_account_closure_enum is surfaced as instruction/config, not executed payout or transfer.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

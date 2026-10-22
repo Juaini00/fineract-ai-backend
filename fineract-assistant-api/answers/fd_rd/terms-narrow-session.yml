@@ -1,0 +1,23 @@
+info:
+  name: FIN-110 terms narrow session
+  type: http
+  seq: 23
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin110Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-110 terms narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin110_terms_narrow_session", res.getBody().data.id);

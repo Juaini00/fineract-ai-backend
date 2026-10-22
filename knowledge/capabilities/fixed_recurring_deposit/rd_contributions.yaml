@@ -1,0 +1,50 @@
+id: rd_contributions
+status: approved_mvp
+domain: fixed_recurring_deposit
+display_name: Recurring Deposit Contributions
+description: >-
+  List recurring deposit contributions: expected mandatory deposit amount vs actual recorded deposits
+  in date window, kept in separate columns. Governed by client office. Account numbers and
+  external IDs are never returned.
+data_areas: [fixed_recurring_deposit, organization_foundation]
+required_api_capability: rd_contributions
+query_id: fixed_recurring_deposit.rd_contributions
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: recurring_deposit_contribution, grouping: none, output: list, pii: none }
+examples:
+  - Show recurring deposit contributions from January 2026 to March 2026.
+  - List RD expected versus actual contributions this month in my authorized offices.
+  - Tampilkan setoran tabungan berencana diharapkan versus aktual dari Januari 2026 sampai Maret 2026.
+supported_intents:
+  - list recurring deposit contributions in a date window
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: expected_vs_actual_separated
+    rule: expected mandatory configuration and actual recorded deposits remain distinct columns, never merged.
+  - id: anti_fanout_subquery
+    rule: transaction aggregation is conducted in a scalar subquery to preserve account grain without fan-out.
+  - id: calendar_linkage_surfaced
+    rule: deposit_period, frequency, and is_calendar_inherited are surfaced.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

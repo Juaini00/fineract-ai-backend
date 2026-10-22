@@ -1,0 +1,33 @@
+info:
+  name: FIN-110 accounts answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin110_accounts_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin110Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "fd_rd_accounts", document);
+          test("FIN-110 accounts: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-110 FDRD-1: positive non-zero account rows and no account numbers", function () {
+            expect(document.outcome).to.equal("Answered");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+            for (const forbidden of ["account_no", "external_id", "client_name"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

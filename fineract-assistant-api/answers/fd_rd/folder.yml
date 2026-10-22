@@ -1,0 +1,9 @@
+info:
+  name: fd_rd
+  seq: 11
+  description: |
+    FIN-110 (FDRD-1..10): fixed and recurring deposit accounts, terms/preclosure,
+    funding, RD contributions, and RD shortfall.
+    Fixture rows exist in the database; answer tests assert real columns and
+    row-for-row equality with the direct SQL oracle in tests/answers, plus
+    narrowed-scope tests (offices [2, 3] and office [2] Empty).

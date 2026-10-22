@@ -507,8 +507,9 @@ mod tests {
             // FIN-153 — cakupan tambahan yang koordinator minta dipetakan:
             // FD/RD, linking resources, teller/cashier, standing
             // instructions, provisioning, scheduler, group meeting (D08).
-            // Products masters moved to approved under FIN-109.
-            "Show the recurring deposit contribution for this account.",
+            // Products masters moved to approved under FIN-109;
+            // FD/RD identity/terms/funding/contributions/shortfall approved under FIN-110 (FDRD-9 schedule stays gap).
+            "Show the recurring deposit installment schedule for this account.",
             "Show the actual account transfer between these two accounts.",
             "Show the cash reconciliation for this teller.",
             "Show the physical cash count for this teller.",
@@ -581,6 +582,26 @@ mod tests {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
             assert_eq!(term.source, "domain_gap", "{gap}");
         }
+    }
+
+    /// FIN-110 (FDRD-1..10): fixed and recurring deposit identity, terms, funding,
+    /// contributions and shortfall are approved capabilities, so their window questions
+    /// are not guarded; FDRD-9 per-installment schedule and write actions remain gap/unsupported.
+    #[test]
+    fn fixed_recurring_deposit_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show fixed and recurring deposit accounts from January 2026 to March 2026.",
+            "Show fixed and recurring deposit terms from January 2026 to December 2026.",
+            "Show recorded fixed deposit funding transactions from January 2026 to March 2026.",
+            "Show recurring deposit contributions from January 2026 to March 2026.",
+            "Show recurring deposit shortfall from January 2026 to March 2026.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        let gap = "Show the recurring deposit installment schedule for this account.";
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, "domain_gap", "{gap}");
     }
 
     /// "credit" adalah synonym konsep `loan` (deferred) SEKALIGUS synonym

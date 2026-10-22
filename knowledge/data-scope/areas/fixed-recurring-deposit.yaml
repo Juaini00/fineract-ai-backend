@@ -1,0 +1,53 @@
+id: fixed_recurring_deposit
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md#fdRD
+inventory_refs:
+  - FDRD-1
+  - FDRD-2
+  - FDRD-3
+  - FDRD-4
+  - FDRD-5
+  - FDRD-6
+  - FDRD-7
+  - FDRD-8
+  - FDRD-9
+  - FDRD-10
+description: >-
+  Fixed and recurring deposit accounts (§2 FD/RD): identity, effective terms,
+  funding, interest, maturity and preclosure terms, RD contributions and shortfall.
+  Account numbers and external identifiers are never returned. Maturity amounts
+  are projected figures, not evidence of payout. Closure instructions are not
+  assumed to be executed payouts or reinvestment chains without evidence. RD
+  shortfall is distinct from loan arrears. FD has no periodic installment schedule.
+  RD schedule is implicit and not stored per-installment. Shared charges (FDRD-5)
+  and transactions (FDRD-7) are answered via existing savings capabilities.
+  Office authorization is governed by the client's office (m_client.office_id).
+included_tables:
+  - m_savings_account
+  - m_deposit_account_term_and_preclosure
+  - m_deposit_account_recurring_detail
+  - m_savings_account_transaction
+  - m_savings_product
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [fixed_recurring_deposit]
+default_rules:
+  - Maturity amount is a projection, never payout evidence; maturity date is a projected date, not an event (§2 FD/RD rule; scope-decisions :40-58).
+  - Closure instruction (on_account_closure_enum) is distinct from evidenced payout or transfer; never derive a reinvestment chain without an FK or evidence path.
+  - Fixed deposits have no periodic installment schedule — never impose a periodic schedule on FD.
+  - RD shortfall (total_overdue_amount) is distinct from loan arrears — separate concept and separate wording.
+  - Schedule is not an event (same rule as LOAN-5); FDRD-9 returns frequency and calendar linkage only, never invented per-installment rows.
+  - Shared rows FDRD-5 (charges/tax) and FDRD-7 (transactions/relations) stay answered by existing savings capabilities (SAV-7/SAV-9, SAV-5) without duplication.
+  - Account-number masking follows the savings convention; account_no and external_id are never returned.
+  - Office authorization path is the client's office (m_client.office_id); transaction office is evidence only.
+checks:
+  - id: office_path_declared
+    rule: FD/RD facts are scoped through m_client.office_id; transaction office is evidence only.
+  - id: maturity_is_projected
+    rule: maturity_amount is labeled and checked as a projected figure, not an actual payout.
+  - id: closure_instruction_not_payout
+    rule: closure instructions are surfaced as config/instruction, never interpreted as executed payout or reinvestment.
+  - id: shortfall_not_arrears
+    rule: recurring deposit shortfall is tracked via recurring detail overdue fields, distinct from loan arrears.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected in output fields.
