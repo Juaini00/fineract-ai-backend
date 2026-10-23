@@ -1,0 +1,35 @@
+id: linking_resources.transaction_reversals
+database: fineract
+sql_file: queries/linking_resources/transaction_reversals.sql
+data_areas: [linking_resources]
+tables: [m_loan_transaction, m_loan, m_savings_account_transaction, m_savings_account, acc_gl_journal_entry]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: entity_type, type: string, sensitivity: public_business }
+  - { name: transaction_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: is_reversed, type: boolean, sensitivity: public_business }
+  - { name: is_reversal, type: boolean, sensitivity: public_business }
+  - { name: reversed_on_date, type: date, sensitivity: public_business }
+  - { name: original_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [entity_type, transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains office_id on each branch with ANY($1::bigint[]).
+  - id: reversal_status_surfaced
+    rule: is_reversed and correction linkages are surfaced explicitly to allow default exclusion from sums.
+  - id: share_absence_acknowledged
+    rule: share accounts have no reversal field in schema.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

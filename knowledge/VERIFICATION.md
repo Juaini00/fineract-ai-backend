@@ -1803,3 +1803,91 @@ All assertion checks pass cleanly.
 
 `docs/data/dataset-inventory.md` rows CLI-4, CLI-5, and CLI-6 moved to `inherited` (Mode-1 capabilities). CLI-7 (identity documents) and CLI-8 (notes) remain excluded by design.
 `fineract-assistant-api/engine/policy-deferred-client-address-job.yml` updated to assert remaining client gap intent: `family member detail` (D15d).
+
+## 23. FIN-130 / LINK-3..8 — linking_resources (§25 resource penghubung) full expansion
+
+**Context & Scope.** `dataset-inventory.md` §9 rows LINK-3..8 cover domain `linking_resources` (Resource penghubung, `dataset-scope-decisions.md` §30, binding rules lines 32–38: linked accounts, transfers, allocation, settlement, reversal, payment type). Prior to FIN-130, domain `linking_resources` was in `status: gap` with all six capabilities deferred. FIN-130 transitions `linking_resources` to `status: approved_mvp` by implementing six curated Mode-1 capabilities. In local `fineract_default`:
+- `m_portfolio_account_associations`: 90 rows total, all `association_type_enum = 1` (`LINKED_ACCOUNT_ASSOCIATION`, `AccountAssociationType.java:26-28`; 0 rows of type 0 or 2 — confirms FIN-127). Office spread through the delivered view's NULL-safe client path (any of the four account sides): 1(2), 2(2), 3(29), 4(26), 5(14), 6(10), 8(7).
+- `m_account_transfer_details`: 498 rows.
+- `m_account_transfer_transaction`: 728 rows by `from_office_id`: 1(3), 2(156), 3(197), 4(158), 5(93), 6(75), 8(46). Population exceeds default hard cap 200.
+- `m_savings_account_charge_paid_by`: 165 rows by office of the paying savings transaction: 1(1), 2(2), 3(76), 4(81), 5(2), 6(1), 8(2). The loan side has no paid-by table (`m_loan_charge.amount_paid_derived` is a derived total, LOAN-7).
+- `m_payment_detail`: 489 rows across offices 1, 2, 3. Re-verified count on live database is 489 rows.
+- Reversals: 88 reversed loan transactions (1:7, 2:3, 3:60, 4:12, 5:1, 6:5) and 6,788 reversed/reversal savings transactions (2:8, 3:6,483, 4:284, 5:10, 6:3); 0 reversed `acc_gl_journal_entry` rows. Fineract schema for `m_share_account_transactions` has no reversal field or reversal transaction type — share reversals are absent by data model (SHARE-8).
+- Standing instructions (D05): excluded and deferred under FIN-114.
+
+**Built (Mode 1, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `account_association_links` (LINK-3):
+   - Lists portfolio account associations (savings to loan, savings to savings, and loan-side links; only type 1 rows exist live).
+   - Grain: `[association_id]` (`m_portfolio_account_associations.id`).
+   - Authorization: any of the four account sides' client office, NULL-safe (`COALESCE(cl.office_id, cs.office_id, cls.office_id, cll.office_id)` in SQL).
+   - Enums: Association type decoded via `AccountAssociationType.java:26-28`.
+2. `account_transfer_transactions` (LINK-4):
+   - Operational account transfer transactions between savings/loan accounts.
+   - Grain: `[transfer_transaction_id]` (`m_account_transfer_transaction.id`); details:transactions is 1:N, never fanned out.
+   - Population: 728 rows (hits 200 row cap on all offices; 353 on scope [2,3] hitting 200 row cap; office 9 returns genuine Empty outcome).
+   - Authorization: `from_office_id` on the transfer detail header (owner side); `to_*` columns are evidence only.
+3. `loan_payment_allocation` (LINK-5):
+   - Allocation of one loan transaction across principal, interest, fee, and penalty portion columns; savings transactions are single-purpose (stated, not faked).
+   - Grain: `[loan_transaction_id]` (`m_loan_transaction.id`).
+   - Population: 2,947 rows (hits 200 row cap on all offices; 951 rows on scope [2,3], capped as well). Allocation-consistency contract: components sum to `amount`.
+   - Authorization: loan office (`lt.office_id = ANY($1::bigint[])`).
+4. `charge_settlement_evidence` (LINK-6):
+   - Savings charge-settlement evidence linking `m_savings_account_charge` to its paying `m_savings_account_transaction`; settlement is never inferred from a balance drop.
+   - Grain: `[charge_paid_by_id]` (`m_savings_account_charge_paid_by.id`).
+   - Rows: 165 total (78 in scope [2,3]; office 9 returns genuine Empty outcome).
+   - Authorization: office of the paying transaction (`sat.office_id = ANY($1::bigint[])`). Loan side stated as derived totals only (`m_loan_charge.amount_paid_derived`, LOAN-7); no per-transaction settlement link exists there.
+5. `transaction_reversals` (LINK-7):
+   - Cross-portfolio reversal flags and original↔reversal linkage across loan transactions, savings transactions, and GL journal entries.
+   - Grain: `[entity_type, transaction_id]`.
+   - Rows: 6,876 total (200-row cap; 6,554 on scope [2,3], capped).
+   - Discriminator: `'loan'`, `'savings'`, `'gl'`. GL rows expose only the reversal flag and `reversal_id` reference — no D12 accounting capability is claimed (balances/mutations stay gap). Share accounts have no reversal field (stated explicitly).
+   - Authorization: governed by entity transaction office (`lt.office_id`, `sat.office_id`, `gl.office_id`).
+6. `payment_type_resolution` (LINK-8):
+   - Payment type name and cash flag resolved per transaction via `m_payment_detail` → `m_payment_type`; NULL `payment_detail_id` is NULL-safe (rows preserved).
+   - Grain: `[account_type, transaction_id]` (UNION ALL over loan and savings transactions).
+   - Population: 18,554 rows = 2,947 loan + 15,607 savings (hits 200 row cap on all offices; 13,337 on scope [2,3], capped).
+   - Authorization: governed by transaction office (`lt.office_id`, `sat.office_id`).
+   - PII exclusion: `m_payment_detail` fields (account number, routing number, check number) and `account_no`/`external_id` are never selected.
+
+### 23.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{account_association_links,account_transfer_transactions,loan_payment_allocation,charge_settlement_evidence,transaction_reversals,payment_type_resolution}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked run (`answers/linking_resources`): all requests tested against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus genuine Empty population tests in office 9 (transfer transactions and charge settlements).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| account_association_links | office_ids + limit | 90 | 31 | Completed / Answered |
+| account_transfer_transactions | office_ids + limit | 200 (capped from 728) | 200 (capped from 353) | Completed / Answered |
+| loan_payment_allocation | office_ids + limit | 200 (capped from 2947) | 200 (capped from 951) | Completed / Answered |
+| charge_settlement_evidence | office_ids + limit | 165 | 78 | Completed / Answered |
+| transaction_reversals | office_ids + limit | 200 (capped from 6876) | 200 (capped from 6554) | Completed / Answered |
+| payment_type_resolution | office_ids + limit | 200 (capped from 18554) | 200 (capped from 13337) | Completed / Answered |
+
+In addition, empty population tested:
+- `account_transfer_transactions`: office 9 returns 0 rows with `outcome = "Empty"`.
+- `charge_settlement_evidence`: office 9 returns 0 rows with `outcome = "Empty"`.
+
+### 23.2 VALUES-only semantics smoke (`tests/linking_resources_semantics_smoke.sh`)
+
+`tests/linking_resources_semantics_smoke.sh` shadows all underlying Fineract tables (`m_portfolio_account_associations`, `m_account_transfer_details`, `m_account_transfer_transaction`, `m_payment_detail`, `m_payment_type`, `m_loan`, `m_loan_transaction`, `m_savings_account`, `m_savings_account_charge`, `m_savings_account_charge_paid_by`, `m_savings_account_transaction`, `acc_gl_journal_entry`, `m_client`, `m_office`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Association Type Mapping & Office Boundaries**: Decodes `LINKED_ACCOUNT_ASSOCIATION` (1) and `GUARANTOR_ACCOUNT_ASSOCIATION` (2); filters unauthorized office 9.
+2. **Transfer Transactions Office Boundary & Filtering**: Enforces authorization on source account office; unauthorized transfers filtered.
+3. **Loan Payment Allocation Breakdown**: Accurately separates principal, interest, fees, and penalties per installment; enforces loan office scope.
+4. **Charge Settlement Evidence**: Links savings charges to their paying transactions; verifies the charge amount on the paid-by row.
+5. **Multi-Entity Transaction Reversals**: Combines reversed loan, savings, and GL journal-entry rows; verifies exclusion of unreversed transactions and unauthorized offices.
+6. **Payment Type Resolution & Breakdown**: Resolves payment type names and breakdown without leaking sensitive payment details; enforces office boundary.
+7. **Empty Semantics**: Querying unauthorized or nonexistent office scope returns 0 rows across all capabilities.
+All 10 assertion checks pass cleanly.
+
+### 23.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/linking_resources`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only operational IDs, dates, quantities, amounts, currency codes, and status strings returned; `account_no`, `external_id`, routing/check numbers, and client names are never returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, proper enum mappings to Fineract source enums, row cap 200 with population metadata.
+
+### 23.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` rows LINK-3, LINK-4, LINK-5, LINK-6, LINK-7, and LINK-8 moved to `inherited` (Mode-1 capabilities).
+Domain `linking_resources` moved to `status: approved_mvp` with 0 gap rows.
+Standing instructions (D05 / FIN-114) remain excluded/deferred.

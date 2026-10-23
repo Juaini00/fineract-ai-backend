@@ -1,0 +1,44 @@
+id: linking_resources
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md:30
+inventory_refs:
+  - LINK-3
+  - LINK-4
+  - LINK-5
+  - LINK-6
+  - LINK-7
+  - LINK-8
+description: >-
+  Linking and cross-cutting resources that connect accounts to each other and
+  to payments — linked accounts (LINK-3), actual account transfers (LINK-4),
+  loan payment allocation (LINK-5), charge settlement evidence (LINK-6),
+  reversals (LINK-7), and payment type resolution (LINK-8) — per §1
+  "Resource penghubung" (dataset-scope-decisions.md:30) and dataset-inventory.md
+  LINK-3..8.
+included_tables:
+  - m_portfolio_account_associations
+  - m_account_transfer_details
+  - m_account_transfer_transaction
+  - m_savings_account_charge_paid_by
+  - m_payment_detail
+  - m_payment_type
+  - m_loan_transaction
+  - m_loan
+  - m_savings_account_transaction
+  - m_savings_account
+  - m_savings_account_charge
+  - m_client
+  - acc_gl_journal_entry
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [linking_resources]
+default_rules:
+  - Configuration link is not proof of funds movement (§1 rule 35 / XR-EVID) — LINK-3 (link existence) and LINK-4 (evidenced transfer) must stay separated.
+  - Transactions, allocations, and settlement must not double count money (§1 rule 36) — loan allocation components sum to the transaction amount, and reversed transactions are flagged/excluded from sums by default.
+  - Savings source for loan payment is asserted only when evidenced by m_account_transfer_transaction, never inferred from balances.
+  - Single large joins across child resources are forbidden (§1 rule 38) — each capability covers one declared relationship grain.
+checks:
+  - id: office_scope_required
+    rule: every linking resource query must bind authorized office scope.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned (PII safe).

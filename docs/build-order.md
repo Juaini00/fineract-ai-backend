@@ -2401,6 +2401,16 @@ stays `gap`; the ticket is not closed here**):
 - Deterministic synthetic proof: `tests/savings_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 7 semantic checks (lifecycle scope & sub-status mapping, interest earned vs posted, holds and releases, withheld tax Empty outcome, linked accounts associations, balance detail components, and transactions by type grouping).
 - Gates: catalog validated with 0 errors; `chat` unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-130 (resource penghubung: full §25 scope expansion, closing LINK-3..8):**
+
+- Delivered 6 curated Mode-1 capabilities for domain `linking_resources` (`knowledge/domains/linking_resources.yaml`): `account_association_links` (LINK-3), `account_transfer_transactions` (LINK-4), `loan_payment_allocation` (LINK-5), `charge_settlement_evidence` (LINK-6), `transaction_reversals` (LINK-7), and `payment_type_resolution` (LINK-8).
+- Domain and inventory alignment: transitioned domain `linking_resources` from `status: gap` to `status: approved_mvp`; moved LINK-3..8 to `inherited` in `docs/data/dataset-inventory.md`; standing instructions (D05 / FIN-114) remain excluded/deferred.
+- Live `fineract_default` database facts: 90 portfolio account associations (`m_portfolio_account_associations`, all type 1), 498 transfer details (`m_account_transfer_details`), 728 transfer transactions (`m_account_transfer_transaction`), 165 savings charge paid-by rows (`m_savings_account_charge_paid_by`; the loan side has no paid-by table — `m_loan_charge.amount_paid_derived` is a derived total, LOAN-7), 489 payment details (`m_payment_detail`), 88 reversed loan transactions and 6,788 reversed/reversal savings transactions (share reversals absent from the Fineract data model; GL reversal linkage delivered via `acc_gl_journal_entry.reversed`/`reversal_id` without claiming D12).
+- Boundaries and constraints: `$1::bigint[]` authorized office scope strictly bound on all queries; hard limit cap 200 enforced with population disclosure; PII (account numbers, routing/check numbers, external IDs, client names) strictly excluded; accounting boundary (D12) shielded from general ledger reversals.
+- HTTP proof (`answers/linking_resources`): 182 requests / 96 tests, 100% PASS (locked, re-run by the coordinator) against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus genuine Empty population tests in office 9 (`outcome = "Empty"`) and zero commit-isolation violations (OVR-6.7).
+- Deterministic synthetic proof: `tests/linking_resources_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 10 semantic checks.
+- Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

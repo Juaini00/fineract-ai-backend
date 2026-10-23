@@ -508,8 +508,8 @@ mod tests {
             // instructions, provisioning, scheduler, group meeting (D08).
             // Products masters moved to approved under FIN-109;
             // FD/RD identity/terms/funding/contributions/shortfall approved under FIN-110 (FDRD-9 schedule stays gap).
+            // Linking resources approved under FIN-130 (LINK-3..8).
             "Show the recurring deposit installment schedule for this account.",
-            "Show the actual account transfer between these two accounts.",
             "Show the cash reconciliation for this teller.",
             "Show the physical cash count for this teller.",
             "Show the standing instruction execution history for this account.",
@@ -659,14 +659,11 @@ mod tests {
             "Show linked savings accounts and portfolio associations.",
             "Show savings account balance detail with available and on-hold funds.",
             "Show savings transactions breakdown by type.",
+            "Show actual account transfer between accounts.",
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
         for (gap, expected_source) in [
-            (
-                "Show actual account transfer between accounts.",
-                "domain_gap",
-            ),
             ("Reproduce the published report for savings.", "domain_gap"),
             (
                 "Show consolidated total across currencies for savings.",
@@ -674,6 +671,47 @@ mod tests {
             ),
             (
                 "Show completeness analysis by category for savings.",
+                "domain_gap",
+            ),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+    }
+
+    /// FIN-130 (LINK-3..8): account association links, actual transfer transactions,
+    /// loan payment allocation, charge settlement evidence, transaction reversals,
+    /// and payment type resolution are approved capabilities and not guarded;
+    /// write actions and related gap domains (standing instructions D05) remain guarded.
+    #[test]
+    fn linking_resources_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show account association links and portfolio associations.",
+            "Show actual account transfer between accounts.",
+            "Show account transfer transactions between accounts.",
+            "Show loan payment allocation breakdown by portion.",
+            "Show charge settlement evidence linking charges to transactions.",
+            "Show transaction reversals and correction linkage.",
+            "Show transaction payment types and cash flags.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the standing instruction execution history for this account.",
+                "domain_gap",
+            ),
+            (
+                "Reproduce the published report for last month.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+            (
+                "Show completeness analysis by category for this portfolio.",
                 "domain_gap",
             ),
         ] {

@@ -1,0 +1,9 @@
+info:
+  name: linking_resources
+  seq: 14
+  description: |
+    FIN-130 (LC.23): linking resources (§25/§30) expansion (LINK-3..8).
+    account_association_links, account_transfer_transactions, loan_payment_allocation,
+    charge_settlement_evidence, transaction_reversals, and payment_type_resolution.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).
