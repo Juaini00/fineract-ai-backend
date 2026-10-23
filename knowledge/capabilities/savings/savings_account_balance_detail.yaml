@@ -1,0 +1,50 @@
+id: savings_account_balance_detail
+status: approved_mvp
+domain: savings
+display_name: Savings Account Balance Detail
+description: >-
+  List detailed savings account balances exposing all four distinct balance measures:
+  account ID, client ID, office ID, product ID, product name, currency code,
+  account balance derived, available balance derived, total savings amount on hold,
+  on hold funds derived, allow overdraft, overdraft limit, and submitted date.
+  Balance, available balance, on-hold amount, and overdraft limit are strictly distinct
+  measures and are never conflated or merged.
+  Account numbers and external IDs are never returned.
+data_areas: [savings_core, organization_foundation]
+required_api_capability: savings_account_balance_detail
+query_id: savings.savings_account_balance_detail
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: savings_account, grouping: none, output: list, pii: none }
+examples:
+  - Show savings account balance detail with available and on-hold funds from November 2025 to April 2026.
+  - List savings account balances including holds and overdraft limits.
+  - Tampilkan rincian saldo tabungan termasuk saldo tersedia dan dana tertahan.
+supported_intents:
+  - list savings account balance detail with available and on-hold funds
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: four_balance_measures_distinct
+    rule: four balance measures remain distinct and are never merged.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

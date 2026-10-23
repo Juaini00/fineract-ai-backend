@@ -1,0 +1,23 @@
+info:
+  name: FIN-127 savings_linked_accounts session
+  type: http
+  seq: 14.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-127 savings_linked_accounts" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_linked_accounts_session", res.getBody().data.id);

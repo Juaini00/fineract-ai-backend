@@ -1,0 +1,29 @@
+info:
+  name: FIN-127 savings_withheld_tax narrow answer versus independent SQL
+  type: http
+  seq: 13.6
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin127_withheld_tax_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_withheld_tax", document, { truthKey: "savings_withheld_tax__scope_2_3", narrowedTo: 2 });
+          test("FIN-127 savings_withheld_tax narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-127 SAV-9 narrow: narrowing to offices 2 and 3 returns actual Empty on this fixture", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }

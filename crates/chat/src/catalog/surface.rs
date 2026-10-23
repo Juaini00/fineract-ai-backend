@@ -514,7 +514,8 @@ mod tests {
             "Show the physical cash count for this teller.",
             "Show the standing instruction execution history for this account.",
             "Show the provisioning result history for this loan.",
-            "Show the batch job status for interest posting last night.",
+            // Scheduler job runs approved under FIN-124; D14 interest posting freshness stays gap.
+            "Show the savings interest posting freshness for this account.",
             "Show the group meeting attendance for this center.",
             // FIN-153 (second review pass) — D10 custom datatable, D15a/b
             // survey/credit bureau, D15d family member, and D01/D02/D03/D11
@@ -640,6 +641,45 @@ mod tests {
         let gap = "Show settled share purchases and redemptions for this client.";
         let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
         assert_eq!(term.source, "domain_gap", "{gap}");
+    }
+
+    /// FIN-127 (SAV-1..11): savings account lifecycle/dormant/block, interest earned vs posted,
+    /// holds and lien, withheld tax, linked savings accounts, four-measure balance detail,
+    /// and per-type transactions breakdown are approved capabilities and not guarded;
+    /// residual gap subjects (actual transfer evidence between accounts, reproduce published report,
+    /// cross-currency consolidation, completeness breakdown) remain guarded.
+    #[test]
+    fn savings_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show savings accounts with dormant or block status.",
+            "Show savings interest earned versus posted position.",
+            "Show savings account holds and release transactions.",
+            "Show savings accounts with applied withholding tax.",
+            "Show linked savings accounts and portfolio associations.",
+            "Show savings account balance detail with available and on-hold funds.",
+            "Show savings transactions breakdown by type.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show actual account transfer between accounts.",
+                "domain_gap",
+            ),
+            ("Reproduce the published report for savings.", "domain_gap"),
+            (
+                "Show consolidated total across currencies for savings.",
+                "domain_gap",
+            ),
+            (
+                "Show completeness analysis by category for savings.",
+                "domain_gap",
+            ),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
     }
 
     /// "credit" adalah synonym konsep `loan` (deferred) SEKALIGUS synonym

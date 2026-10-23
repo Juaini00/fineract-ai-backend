@@ -1,0 +1,33 @@
+id: savings.savings_linked_accounts
+database: fineract
+sql_file: queries/savings/savings_linked_accounts.sql
+data_areas: [savings_core, organization_foundation]
+tables: [m_portfolio_account_associations, m_savings_account, m_client]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: association_id, type: bigint, sensitivity: public_business }
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: loan_account_id, type: bigint, sensitivity: public_business }
+  - { name: linked_savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: linked_loan_account_id, type: bigint, sensitivity: public_business }
+  - { name: association_type_enum, type: bigint, sensitivity: public_business }
+  - { name: is_active, type: boolean, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+grain: [association_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: association_not_transfer_evidence
+    rule: association surfaces linkage only and is never asserted as proof of an executed transfer.
+  - id: association_type_enum_mapped
+    rule: association_type_enum follows AccountAssociationType.java:26-28 (LINKED_ACCOUNT_ASSOCIATION=1, GUARANTOR_ACCOUNT_ASSOCIATION=2).
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

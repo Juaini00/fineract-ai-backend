@@ -639,7 +639,7 @@ fn verify_slots(
         for p in &query.parameters {
             if matches!(p.name.as_str(), "from_date" | "to_date") && !bindings.contains_key(&p.name)
             {
-                return Err(invalid());
+                return Err(Unplannable::InvalidSource("period_binding_missing"));
             }
         }
     }

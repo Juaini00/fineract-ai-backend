@@ -1,0 +1,39 @@
+id: savings.savings_account_balance_detail
+database: fineract
+sql_file: queries/savings/savings_account_balance_detail.sql
+data_areas: [savings_core, organization_foundation]
+tables: [m_savings_account, m_client, m_savings_product]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: product_name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: account_balance_derived, type: decimal, sensitivity: public_business }
+  - { name: available_balance_derived, type: decimal, sensitivity: public_business }
+  - { name: total_savings_amount_on_hold, type: decimal, sensitivity: public_business }
+  - { name: on_hold_funds_derived, type: decimal, sensitivity: public_business }
+  - { name: allow_overdraft, type: boolean, sensitivity: public_business }
+  - { name: overdraft_limit, type: decimal, sensitivity: public_business }
+  - { name: submittedon_date, type: date, sensitivity: public_business }
+grain: [account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: four_balance_measures_distinct
+    rule: account_balance_derived, available_balance_derived, total_savings_amount_on_hold, and on_hold_funds_derived are distinct fields, never merged.
+  - id: overdraft_terms_surfaced
+    rule: allow_overdraft and overdraft_limit are surfaced per account.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

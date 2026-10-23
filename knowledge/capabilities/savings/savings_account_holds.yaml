@@ -1,0 +1,50 @@
+id: savings_account_holds
+status: approved_mvp
+domain: savings
+display_name: Savings Account Holds
+description: >-
+  List savings account hold and release transactions: transaction ID, savings account ID,
+  client ID, office ID, transaction office ID (evidence only), transaction type enum,
+  transaction date, amount, currency code, hold type, hold status, parent hold transaction ID,
+  release ID of hold amount, and is lien transaction. Holds are strictly distinct from completed
+  withdrawals. Types 20 (AMOUNT_HOLD) and 21 (AMOUNT_RELEASE) are mapped per Fineract source;
+  types 22-26 remain raw bigint without invented labels. Reversals are excluded by default.
+  Account numbers and external IDs are never returned.
+data_areas: [savings_transactions, savings_core, organization_foundation]
+required_api_capability: savings_account_holds
+query_id: savings.savings_account_holds
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: savings_account_hold, grouping: none, output: list, pii: none }
+examples:
+  - Show savings account holds and release transactions from February 2026 to September 2026.
+  - List savings account hold transactions in authorized offices.
+  - Tampilkan transaksi penahanan dana tabungan dan pelepasannya.
+supported_intents:
+  - list savings account hold and release transactions
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: hold_not_completed_withdrawal
+    rule: holds and releases are distinct from completed withdrawals.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

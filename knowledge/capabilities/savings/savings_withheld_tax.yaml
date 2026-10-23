@@ -1,0 +1,46 @@
+id: savings_withheld_tax
+status: approved_mvp
+domain: savings
+display_name: Savings Withheld Tax
+description: >-
+  List savings accounts with applied withholding tax: account ID, client ID, office ID,
+  product ID, withholding tax flag, tax group ID, tax group name, total withholding tax derived,
+  and currency code. Distinguishes product tax component configuration from account withholding tax
+  on the account (D04 separation pattern). Filtered to accounts with withhold_tax enabled.
+  On deployments without active withholding tax, returns a genuine Empty outcome with Complete
+  completeness. Account numbers and external IDs are never returned.
+data_areas: [savings_core, organization_foundation]
+required_api_capability: savings_withheld_tax
+query_id: savings.savings_withheld_tax
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: savings_account, grouping: none, output: list, pii: none }
+examples:
+  - Show savings accounts with applied withholding tax.
+  - List savings accounts subject to withholding tax in authorized offices.
+  - Tampilkan rekening tabungan dengan pemotongan pajak.
+supported_intents:
+  - list savings accounts with applied withholding tax
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: tax_config_distinct_from_withheld
+    rule: tax config is kept distinct from actual withheld amounts.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

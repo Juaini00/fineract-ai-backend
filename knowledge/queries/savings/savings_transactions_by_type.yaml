@@ -1,0 +1,30 @@
+id: savings.savings_transactions_by_type
+database: fineract
+sql_file: queries/savings/savings_transactions_by_type.sql
+data_areas: [savings_transactions, savings_core, organization_foundation]
+tables: [m_savings_account_transaction, m_savings_account, m_client]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: transaction_type_enum, type: bigint, sensitivity: public_business }
+  - { name: transaction_count, type: bigint, sensitivity: public_business }
+  - { name: total_amount, type: decimal, sensitivity: public_business }
+grain: [currency_code, transaction_type_enum]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: currency_carried_per_code
+    rule: currency_code is grouped and carried alongside total_amount without cross-currency summation.
+  - id: unresolved_types_kept_raw
+    rule: types 22-26 remain raw bigint without invented labels.
+  - id: reversed_transactions_excluded
+    rule: is_reversed = false excludes reversals by default.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

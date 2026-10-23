@@ -2392,6 +2392,15 @@ stays `gap`; the ticket is not closed here**):
 - Deterministic synthetic proof: `tests/client_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 5 semantic checks (N:M group membership, center linkage NULL-safety, roster multi-type & no default-active filter, address details, and empty office scope semantics).
 - Gates: catalog validated with 0 errors, 2 pre-existing warnings; 253 workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-127 (savings: full §22 scope expansion, closing SAV-1..11):**
+
+- Delivered 7 curated Mode-1 capabilities for domain `savings` (SAV-1..11): `savings_account_lifecycle`, `savings_interest_position`, `savings_account_holds`, `savings_withheld_tax`, `savings_linked_accounts`, `savings_account_balance_detail`, `savings_transactions_by_type`.
+- Live `fineract_default` database facts: 187 active/submitted savings accounts, 15,607 savings transactions, 23 active hold/release rows, 90 portfolio account associations (`m_portfolio_account_associations`), 0 tax-withheld savings accounts (tested as genuine Empty outcome with Complete completeness).
+- Multi-currency safe: transaction breakdown groups strictly by `[currency_code, transaction_type_enum]` preventing multi-currency rollups without exchange rate conversion (#14).
+- HTTP proof (`answers/savings`): 42 new requests / tests against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests (`outcome = "Empty"`).
+- Deterministic synthetic proof: `tests/savings_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 7 semantic checks (lifecycle scope & sub-status mapping, interest earned vs posted, holds and releases, withheld tax Empty outcome, linked accounts associations, balance detail components, and transactions by type grouping).
+- Gates: catalog validated with 0 errors; `chat` unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

@@ -180,15 +180,15 @@ office-scoped, not a global master.
 | ID | Requirement | Source table(s) & grain | Field / measure | Relationship (cardinality) | Office-scope path | Time / as-of / currency | Evidence rule | Acceptance | Capability | Confidence | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | SAV-1 | Identity / relations | `m_savings_account` (grain: account) | `account_no` (sensitive), `client_id`, `group_id`, `product_id`, `field_officer_id`, `deposit_type_enum` | `N:1` client **or** group, product, officer | via `client_id`/`group_id` → office | n/a | n/a | identity resolvable | `savings/account_identity_lookup`, `account_identity_resolve` | known (207 rows, §4) | inherited |
-| SAV-2 | Lifecycle / dormant / block | `status_enum, sub_status_enum` (dormant/block is a `sub_status_enum` value — **unresolved** exact enum value not re-verified this session), `activatedon_date, closedon_date, reason_for_block` | status + block reason | n/a | via account | n/a | n/a | lifecycle/dormant/block state resolvable | `organization/office_dormant` (office-level dormant summary only) | known columns (§4); enum value unresolved | gap (partially inherited at office-aggregate level only) |
+| SAV-2 | Lifecycle / dormant / block | `status_enum, sub_status_enum` (`SavingsAccountSubStatusEnum.java:24-30`: NONE=0, INACTIVE=100, DORMANT=200, ESCHEAT=300, BLOCK=400, BLOCK_CREDIT=500, BLOCK_DEBIT=600), `activatedon_date, closedon_date, reason_for_block` | status + block reason | n/a | via account | n/a | n/a | lifecycle/dormant/block state resolvable | `savings/savings_account_lifecycle` | known columns (§4); enum values resolved (FIN-127) | inherited |
 | SAV-3 | Effective terms | `nominal_annual_interest_rate, interest_compounding_period_enum, interest_posting_period_enum, min_required_opening_balance, allow_overdraft, overdraft_limit` | account-level effective terms | `N:1` to product for comparison | via account | n/a | same "effective vs product now" caveat as LOAN-3 | resolvable | `savings/account_terms_lookup` | known (§4) | inherited |
-| SAV-4 | Balance vs available/holds/overdraft | `account_balance_derived, available_balance_derived, total_savings_amount_on_hold, overdraft_limit, on_hold_funds_derived` | four distinct balance measures, not interchangeable | n/a | via account | `XR-CUR` per account currency | balance ≠ available ≠ on-hold must stay distinct fields, never merged | balance query returns the specific measure asked for | `savings/balance_summary` (does not appear to separately expose hold/overdraft — **verify field selection matches all four before declaring this fully closed**) | known (§4) | inherited (core balance only; hold/overdraft split not confirmed exposed) |
-| SAV-5 | Deposit/withdrawal/transfer/adjustment/reversal | `m_savings_account_transaction.transaction_type_enum, is_reversed, amount, transaction_date` | per-type transaction amounts | `N:1` account; `office_id` direct on this table | `m_savings_account_transaction.office_id` direct | `transaction_date`, reversed excluded by default (`savings-transactions.yaml` rule, verified above) | reversed txn excluded unless explicitly analyzing reversals | `savings/deposit_total`, `withdrawal_total`, `deposit_monthly_breakdown`, `withdrawal_monthly_breakdown`, `deposit_top_n`, `withdrawal_top_n`, `activity_list`, `client_activity` | known (15,607 rows, §4) | inherited (deposit/withdrawal only; transfer/adjustment enum values not separately confirmed) |
-| SAV-6 | Interest recorded vs posted | `total_interest_earned_derived` vs `total_interest_posted_derived`, `interest_posted_till_date` | two distinct measures — earned-to-date is not the same as posted | n/a | via account | posting is periodic (`interest_posting_period_enum`) | must not conflate earned with posted | resolvable, kept distinct | none | known (§4) | gap |
+| SAV-4 | Balance vs available/holds/overdraft | `account_balance_derived, available_balance_derived, total_savings_amount_on_hold, overdraft_limit, on_hold_funds_derived` | four distinct balance measures, not interchangeable | n/a | via account | `XR-CUR` per account currency | balance ≠ available ≠ on-hold must stay distinct fields, never merged | balance query returns the specific measure asked for | `savings/savings_account_balance_detail`, `savings/balance_summary` | known (§4); four-measure split resolved (FIN-127) | inherited |
+| SAV-5 | Deposit/withdrawal/transfer/adjustment/reversal | `m_savings_account_transaction.transaction_type_enum, is_reversed, amount, transaction_date` | per-type transaction amounts | `N:1` account; `office_id` direct on this table | `m_savings_account_transaction.office_id` direct (evidence only; auth via client office) | `transaction_date`, reversed excluded by default (`savings-transactions.yaml` rule, verified above) | reversed txn excluded unless explicitly analyzing reversals | `savings/savings_transactions_by_type`, `savings/deposit_total`, `savings/withdrawal_total`, `savings/deposit_monthly_breakdown`, `savings/withdrawal_monthly_breakdown`, `savings/deposit_top_n`, `savings/withdrawal_top_n`, `savings/activity_list`, `savings/client_activity` | known (15,607 rows, §4); full type exposure resolved (FIN-127) | inherited |
+| SAV-6 | Interest recorded vs posted | `total_interest_earned_derived` vs `total_interest_posted_derived`, `interest_posted_till_date` | two distinct measures — earned-to-date is not the same as posted | n/a | via account | posting is periodic (`interest_posting_period_enum`) | must not conflate earned with posted | resolvable, kept distinct | `savings/savings_interest_position` | known (§4) | inherited |
 | SAV-7 | Charges | `m_savings_account_charge` (182 rows) + `m_savings_account_charge_paid_by` (165 rows, links charge to the settling transaction) | amount/paid/waived/written-off/outstanding, `is_penalty` | `1:N` account → charges; `1:N` charge → paid-by (settlement evidence) | via account | n/a | settlement evidence via `paid_by`, not inferred from balance drop alone | `savings/account_charges_recent`, `charge_count_by_type`, `charges_by_type`, `pending_charges_clients`, `strictly_overdue_charges_clients` | known (§4) | inherited |
-| SAV-8 | Holds | `m_savings_account_transaction` where `hold_type`/`hold_status` populated (lien/hold transactions), `is_lien_transaction`, `release_id_of_hold_amount` | hold amount, hold status, release linkage | self-referencing via `parent_hold_transaction_id` | via account | hold placed/released dates | a hold amount is not a completed withdrawal | hold list distinct from completed transactions | none | known columns exist on `m_savings_account_transaction` (§4); no rows sampled for actual hold usage this session | gap |
-| SAV-9 | Applied tax | `withhold_tax, tax_group_id` on the account; tax component detail via PROD-10's tax tables | tax withheld amount vs tax config | `N:1` account → tax group | via account | n/a | tax config (PROD-10) ≠ tax actually withheld — same separation pattern as D04 | resolvable, distinct from tax master | none | known columns exist (§4) | gap |
-| SAV-10 | Linked accounts | `m_portfolio_account_associations` (90 rows, `savings_account_id ↔ linked_savings_account_id`/`linked_loan_account_id`) | `association_type_enum, is_active` | `1:1` or `1:N` depending on association type — **cardinality not re-verified per type this session** | via either linked account | n/a | linkage existing is not proof of a transfer (§1 rule 35 / `XR-EVID`) — see LINK-3 | linkage list resolvable, distinct from actual transfer evidence | none | known (§4) | gap |
+| SAV-8 | Holds | `m_savings_account_transaction` where `hold_type`/`hold_status` populated (lien/hold transactions), `is_lien_transaction`, `release_id_of_hold_amount` | hold amount, hold status, release linkage | self-referencing via `parent_hold_transaction_id` | via account | hold placed/released dates | a hold amount is not a completed withdrawal | hold list distinct from completed transactions | `savings/savings_account_holds` | known columns and real hold rows verified (§4, FIN-127) | inherited |
+| SAV-9 | Applied tax | `withhold_tax, tax_group_id` on the account; tax component detail via PROD-10's tax tables | tax withheld amount vs tax config | `N:1` account → tax group | via account | n/a | tax config (PROD-10) ≠ tax actually withheld — same separation pattern as D04 | resolvable, distinct from tax master; genuine Empty on this fixture, nonzero semantics proven via smoke | `savings/savings_withheld_tax` | known columns exist (§4); genuine Empty outcome confirmed (FIN-127) | inherited |
+| SAV-10 | Linked accounts | `m_portfolio_account_associations` (90 rows, `savings_account_id ↔ linked_savings_account_id`/`linked_loan_account_id`) | `association_type_enum, is_active` | `1:1` or `1:N` depending on association type — cardinality verified: 90 rows all type 1 (`AccountAssociationType.java`) | via either linked account | n/a | linkage existing is not proof of a transfer (§1 rule 35 / `XR-EVID`) — see LINK-3 | linkage list resolvable, distinct from actual transfer evidence | `savings/savings_linked_accounts` | known (§4); cardinality verified (FIN-127) | inherited |
 | SAV-11 | History available | Implicit: `m_savings_account_transaction` full history is retained (no truncation observed at 15,607 rows for 207 accounts) | n/a | n/a | via account | full history assumed available unless a retention/archival policy is found | n/a | history queries not artificially windowed | `savings/activity_list` | known (§4) | inherited |
 
 ---
@@ -378,8 +378,8 @@ total (see D15 table-count note, §10).
 | Products (`:24`) | PROD-1..PROD-11 | 11 | 11 inherited (FIN-109) |
 | Client/kepemilikan (`:25`) | CLI-1..CLI-8 | 8 | 6 inherited (CLI-1..6), 2 gap (CLI-7..8 excluded by design) |
 | Loan (`:26`) | LOAN-1..LOAN-12 | 12 | 8 inherited (FIN-108), 4 gap |
-| Savings (`:27`) | SAV-1..SAV-11 | 11 | 6 inherited, 5 gap |
-| FD/RD (`:28`) | FDRD-1..FDRD-10 | 10 | 7 inherited, 3 gap |
+| Savings (`:27`) | SAV-1..SAV-11 | 11 | 11 inherited (FIN-127) |
+| FD/RD (`:28`) | FDRD-1..FDRD-10 | 10 | 7 inherited (FIN-110), 3 gap |
 | Share accounts (`:29`) | SHARE-1..SHARE-8 | 8 | 7 inherited, 1 gap |
 | Resource penghubung (`:30`) | LINK-1..LINK-8 | 8 (2 cross-referenced to CLI-5/PROD-1..3, not double-counted) | 0 inherited, 6 gap, 2 cross-ref |
 | D01 | D01 | 1 | gap |
@@ -401,11 +401,11 @@ total (see D15 table-count note, §10).
 **Totals:** 79 baseline-domain rows + 21 decision rows (D01–D14 = 14,
 plus the D06-physical sub-row; D15 heading + five sub-rows = 6) = **100 inventory rows**, covering all 8
 §1 headings and all 15 decisions (D01–D15) with **zero omissions**.
-Thirty-one rows are `inherited` (an approved Mode-1 capability exists today;
-PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108, D06 and D15e by FIN-115, SHARE-1..6/8 by FIN-111, CLI-4..6 by FIN-128 for source-supported Mode-1 capabilities only); three
+Fifty-three rows are `inherited` (an approved Mode-1 capability exists today;
+PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108, D06 and D15e by FIN-115, SHARE-1..6/8 by FIN-111, SAV-1..11 by FIN-127, CLI-4..6 by FIN-128 for source-supported Mode-1 capabilities only); three
 (D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
 `summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
-61 rows are `gap`: agreed scope lacking a capability, including unresolved
+39 rows are `gap`: agreed scope lacking a capability, including unresolved
 source mappings. Coverage counts requirements, not executable capabilities.
 
 ---
@@ -416,16 +416,19 @@ These are the concrete `unresolved` markers scattered through §2–§10, collec
 so FIN-153 does not have to re-scan every table:
 
 1. Enum value mappings not re-verified this session: `m_client.status_enum`/`sub_status`,
-   `m_savings_account.sub_status_enum` (dormant/block),
    `m_savings_account.deposit_type_enum` (FD vs RD). (`m_loan.loan_status_id`
-   and the loan-transaction recovery type were resolved by FIN-108.)
+   and the loan-transaction recovery type were resolved by FIN-108; `m_savings_account.sub_status_enum`
+   was resolved by FIN-127 citing SavingsAccountSubStatusEnum.java:24-30: NONE=0, INACTIVE=100,
+   DORMANT=200, ESCHEAT=300, BLOCK=400, BLOCK_CREDIT=500, BLOCK_DEBIT=600).
 2. Tables referenced by name but not queried this session: `m_fund`,
    `m_global_configuration` (business date), `m_code`/`m_code_value` (generic
    enums), `m_tax_group_mappings`, `m_payment_detail`, `m_note`, calendar/meeting
    tables for D08, `stretchy_report` metadata (D13, read-only existence only —
    never execution).
 3. Cardinality of `m_portfolio_account_associations.association_type_enum` per
-   type value (SAV-10/LINK-3) — not individually verified.
+   type value (SAV-10/LINK-3) — verified in FIN-127: 90 rows total, all 90 are
+   association_type_enum = 1 (LINKED_ACCOUNT_ASSOCIATION) and is_active = true per
+   AccountAssociationType.java:26-28; 0 rows for type 0 (INVALID) or 2 (GUARANTOR_ACCOUNT_ASSOCIATION).
 4. No exchange-rate table exists anywhere in `fineract_default` — D03 has no
    candidate source at all, not merely an unverified one.
 5. No RD per-installment schedule table found (FDRD-9) — needs confirmation

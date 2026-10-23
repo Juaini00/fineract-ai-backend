@@ -1,0 +1,50 @@
+id: savings_account_lifecycle
+status: approved_mvp
+domain: savings
+display_name: Savings Account Lifecycle
+description: >-
+  List savings accounts lifecycle, dormant, and block status: account ID, client ID,
+  office ID, product ID, product name, status enum, sub status enum (dormant, block),
+  reason for block, submitted date, approved date, rejected date, withdrawn date,
+  activated date, closed date, and currency code. Sub-status enum maps to Fineract
+  SavingsAccountSubStatusEnum (NONE=0, INACTIVE=100, DORMANT=200, ESCHEAT=300, BLOCK=400,
+  BLOCK_CREDIT=500, BLOCK_DEBIT=600). Status enum maps to SavingsAccountStatusType.
+  PII (account number and external ID) is never returned.
+data_areas: [savings_core, organization_foundation]
+required_api_capability: savings_account_lifecycle
+query_id: savings.savings_account_lifecycle
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: savings_account, grouping: none, output: list, pii: none }
+examples:
+  - Show savings account lifecycle and status from November 2025 to April 2026.
+  - List savings accounts with dormant or block status.
+  - Tampilkan siklus hidup rekening tabungan dan status dormant atau blokir.
+supported_intents:
+  - list savings account lifecycle and dormant or block status
+guards:
+  require_office_scope: true
+  max_date_range_days: 366
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: start_of_month(business_today) }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: sub_status_enum_mapped
+    rule: sub_status_enum follows SavingsAccountSubStatusEnum.java.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

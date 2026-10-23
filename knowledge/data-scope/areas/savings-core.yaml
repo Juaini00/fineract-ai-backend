@@ -3,8 +3,12 @@ status: included_mvp_domain
 source_doc: docs/data/dataset-inventory.md#6-domain-e--savings
 inventory_refs:
   - SAV-1
+  - SAV-2
   - SAV-3
   - SAV-4
+  - SAV-6
+  - SAV-9
+  - SAV-10
 detail_doc: docs/reporting-data/savings-core.md
 description: Savings accounts, products, balances, and lifecycle context.
 included_tables:
@@ -13,6 +17,8 @@ included_tables:
 conditional_tables:
   - m_savings_product_charge
   - m_savings_officer_assignment_history
+  - m_portfolio_account_associations
+  - m_tax_group
 excluded_tables: []
 allowed_domains:
   - savings

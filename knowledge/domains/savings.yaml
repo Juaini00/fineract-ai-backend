@@ -4,10 +4,15 @@ display_name: Savings
 description: Savings account and transaction reporting.
 inventory_refs:
   - SAV-1
+  - SAV-2
   - SAV-3
   - SAV-4
   - SAV-5
+  - SAV-6
   - SAV-7
+  - SAV-8
+  - SAV-9
+  - SAV-10
   - SAV-11
   - D01
   - D03
@@ -30,9 +35,19 @@ concepts:
   - id: savings_account
     meaning: Customer or group savings account.
     synonyms: [savings, savings account, deposit account]
+  - id: withholding_tax
+    meaning: Withheld tax on savings accounts.
+    synonyms: [withholding tax, withheld tax, pemotongan pajak]
 supported_intents:
   - { phrase: "savings deposit totals", inventory_ref: SAV-5 }
   - { phrase: "largest savings deposits", inventory_ref: SAV-5 }
+  - { phrase: "savings account lifecycle and dormant or block status", inventory_ref: SAV-2 }
+  - { phrase: "savings account balance detail with available and on-hold funds", inventory_ref: SAV-4 }
+  - { phrase: "savings transactions by type breakdown", inventory_ref: SAV-5 }
+  - { phrase: "savings interest earned vs posted position", inventory_ref: SAV-6 }
+  - { phrase: "savings account holds and lien transactions", inventory_ref: SAV-8 }
+  - { phrase: "savings accounts with applied withholding tax", inventory_ref: SAV-9 }
+  - { phrase: "savings linked accounts and portfolio associations", inventory_ref: SAV-10 }
 gap_intents:
   - { phrase: "reproduce the published report", inventory_ref: D01 }
   - { phrase: "consolidated total across currencies", inventory_ref: D03 }

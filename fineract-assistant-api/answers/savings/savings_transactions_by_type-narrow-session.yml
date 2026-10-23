@@ -1,0 +1,23 @@
+info:
+  name: FIN-127 savings_transactions_by_type narrow session
+  type: http
+  seq: 16.4
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-127 savings_transactions_by_type narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_tx_by_type_narrow_session", res.getBody().data.id);
