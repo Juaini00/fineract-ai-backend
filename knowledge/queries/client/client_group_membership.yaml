@@ -1,0 +1,58 @@
+id: client.client_group_membership
+database: fineract
+sql_file: queries/client/client_group_membership.sql
+data_areas:
+  - client_foundation
+  - group_center_foundation
+  - organization_foundation
+tables:
+  - m_group_client
+  - m_group
+  - m_client
+metrics: []
+parameters:
+  - name: office_ids
+    type: array_bigint
+    required: true
+    source: authorized_scope
+  - name: limit
+    type: integer
+    required: false
+output_fields:
+  - name: client_id
+    type: bigint
+    sensitivity: public_business
+  - name: client_office_id
+    type: bigint
+    sensitivity: public_business
+  - name: group_id
+    type: bigint
+    sensitivity: public_business
+  - name: group_name
+    type: string
+    sensitivity: pii
+  - name: level_id
+    type: bigint
+    sensitivity: public_business
+  - name: parent_id
+    type: bigint
+    sensitivity: public_business
+  - name: group_office_id
+    type: bigint
+    sensitivity: public_business
+grain: [client_id, group_id]
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: client_office_governs
+    rule: authorization is the client's office; group office is surfaced as evidence only.
+  - id: no_identifiers
+    rule: m_group.account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

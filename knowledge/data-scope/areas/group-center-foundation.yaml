@@ -8,6 +8,7 @@ status: enabled
 source_doc: docs/data/dataset-inventory.md#4-domain-c--client--ownership
 inventory_refs:
   - CLI-4
+  - CLI-4-accounts
   - D08
 description: >-
   Group and center context for deployments that use group-based organization

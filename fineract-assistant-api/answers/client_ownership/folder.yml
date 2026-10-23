@@ -1,0 +1,8 @@
+info:
+  name: client_ownership
+  seq: 13
+  description: |
+    FIN-128 (LC.21): client ownership and relationship expansion (CLI-4, CLI-5, CLI-6).
+    client_group_membership, client_account_roster, and client_address.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).

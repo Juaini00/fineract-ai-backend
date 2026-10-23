@@ -93,11 +93,23 @@ pub fn validate(catalog: &Catalog) -> Report {
     let mut referenced_sql = BTreeSet::new();
 
     for loaded in &catalog.queries {
-        check_query(catalog, &loaded.entry, &loaded.path, &mut referenced_sql, &mut findings);
+        check_query(
+            catalog,
+            &loaded.entry,
+            &loaded.path,
+            &mut referenced_sql,
+            &mut findings,
+        );
     }
 
     for loaded in &catalog.capabilities {
-        check_capability(catalog, &loaded.entry, &loaded.path, &queries, &mut findings);
+        check_capability(
+            catalog,
+            &loaded.entry,
+            &loaded.path,
+            &queries,
+            &mut findings,
+        );
     }
 
     check_resolvers(catalog, &mut findings);
@@ -207,7 +219,9 @@ fn check_query(
         findings.push(Finding::error(
             &subject,
             "placeholder_count_matches_parameters",
-            format!("SQL memakai ${highest} tertinggi, manifest mendeklarasikan {declared} parameter"),
+            format!(
+                "SQL memakai ${highest} tertinggi, manifest mendeklarasikan {declared} parameter"
+            ),
         ));
     } else {
         for index in 1..=declared {
@@ -231,10 +245,14 @@ fn check_query(
     // declaration, mutually exclusive with `org_wide_reference`.
     let operational = query.guards.operational_tenant_wide == Some(true);
     if query.database.as_deref() == Some("fineract") {
-        let declared = [query.guards.require_office_filter == Some(true), org_wide, operational]
-            .iter()
-            .filter(|class| **class)
-            .count();
+        let declared = [
+            query.guards.require_office_filter == Some(true),
+            org_wide,
+            operational,
+        ]
+        .iter()
+        .filter(|class| **class)
+        .count();
         if declared != 1 {
             findings.push(Finding::error(
                 &subject,
@@ -317,7 +335,9 @@ fn check_query(
         }
         // D14: raw scheduler failure text is never an output.
         for field in &query.output_fields {
-            if ["error_message", "error_log", "initializing_errorlog"].contains(&field.name.as_str()) {
+            if ["error_message", "error_log", "initializing_errorlog"]
+                .contains(&field.name.as_str())
+            {
                 findings.push(Finding::error(
                     &subject,
                     "no_raw_error_output",
@@ -521,7 +541,10 @@ const FORBIDDEN_GAP_OR_SUPPORTED_PHRASES: &[(&str, &[&str])] = &[
     ),
     (
         "group_center",
-        &["group-owned savings reporting", "center-level savings summaries"],
+        &[
+            "group-owned savings reporting",
+            "center-level savings summaries",
+        ],
     ),
 ];
 
@@ -678,10 +701,14 @@ fn check_domain(
     }
 
     if domain.id == "client"
-        && !domain.gap_intents.iter().any(|intent| {
-            let lower = intent.phrase().to_lowercase();
-            lower.contains("loan") || lower.contains("share")
-        })
+        && !domain
+            .gap_intents
+            .iter()
+            .chain(domain.supported_intents.iter())
+            .any(|intent| {
+                let lower = intent.phrase().to_lowercase();
+                lower.contains("loan") || lower.contains("share")
+            })
     {
         findings.push(Finding::error(
             &subject,
@@ -862,7 +889,10 @@ fn check_resolvers(catalog: &Catalog, findings: &mut Vec<Finding>) {
             findings.push(Finding::error(
                 &subject,
                 "resolver_shape_exists",
-                format!("dataset '{}' tidak ada di knowledge/datasets", resolves.dataset_id),
+                format!(
+                    "dataset '{}' tidak ada di knowledge/datasets",
+                    resolves.dataset_id
+                ),
             ));
             continue;
         };
@@ -934,7 +964,10 @@ fn check_resolvers(catalog: &Catalog, findings: &mut Vec<Finding>) {
             findings.push(Finding::error(
                 format!("{dataset_id}/{shape_id}"),
                 "resolver_shape_has_one_query",
-                format!("shape dibungkus lebih dari satu manifest: {}", manifests.join(", ")),
+                format!(
+                    "shape dibungkus lebih dari satu manifest: {}",
+                    manifests.join(", ")
+                ),
             ));
         }
     }
@@ -1146,7 +1179,9 @@ fn check_capability(
     }
 
     if let Some(freshness) = &capability.freshness {
-        check_freshness(catalog, capability, query, freshness, queries, &subject, findings);
+        check_freshness(
+            catalog, capability, query, freshness, queries, &subject, findings,
+        );
     }
 
     // chart_matches_grain (responses.md §7): chart hanya sah di atas bentuk data
@@ -1198,7 +1233,13 @@ fn check_freshness(
     findings: &mut Vec<Finding>,
 ) {
     use crate::catalog::model::{BATCH_PROBE_FIELDS, COVERAGE_PROBE_FIELDS};
-    let mut fail = |detail: String| findings.push(Finding::error(subject, "freshness_declaration_valid", detail));
+    let mut fail = |detail: String| {
+        findings.push(Finding::error(
+            subject,
+            "freshness_declaration_valid",
+            detail,
+        ))
+    };
 
     if freshness.batch_job.trim().is_empty() {
         fail("freshness.batch_job kosong".to_string());
@@ -1211,9 +1252,12 @@ fn check_freshness(
     }
 
     let has_fields = |manifest: &QueryManifest, required: &[&str]| {
-        required
-            .iter()
-            .all(|name| manifest.output_fields.iter().any(|field| field.name == *name))
+        required.iter().all(|name| {
+            manifest
+                .output_fields
+                .iter()
+                .any(|field| field.name == *name)
+        })
     };
     let shape = |manifest: &QueryManifest| -> Vec<(String, String, Option<String>)> {
         manifest
@@ -1238,12 +1282,19 @@ fn check_freshness(
         }
     }
     match queries.get(freshness.coverage_probe.as_str()) {
-        None => fail(format!("coverage_probe {} tidak ada", freshness.coverage_probe)),
+        None => fail(format!(
+            "coverage_probe {} tidak ada",
+            freshness.coverage_probe
+        )),
         Some(coverage) => {
             if coverage.guards.require_office_filter != Some(true)
                 || shape(coverage)
                     != [
-                        ("office_ids".to_string(), "array_bigint".to_string(), Some("authorized_scope".to_string())),
+                        (
+                            "office_ids".to_string(),
+                            "array_bigint".to_string(),
+                            Some("authorized_scope".to_string()),
+                        ),
                         ("cob_date".to_string(), "date".to_string(), None),
                     ]
                 || !has_fields(coverage, &COVERAGE_PROBE_FIELDS)
@@ -1335,7 +1386,9 @@ fn strip_literals_and_comments(sql: &str) -> String {
 /// tables. Nested/CTE sources cannot borrow the global-reference exception.
 fn global_reference_tables(sql: &str) -> Option<BTreeSet<String>> {
     let tokens: Vec<&str> = sql.split_whitespace().collect();
-    if tokens.first().is_none_or(|token| !token.eq_ignore_ascii_case("SELECT"))
+    if tokens
+        .first()
+        .is_none_or(|token| !token.eq_ignore_ascii_case("SELECT"))
         || tokens.iter().any(|token| {
             ["WITH", "LATERAL", "UNION", "INTERSECT", "EXCEPT"]
                 .iter()
@@ -1348,10 +1401,9 @@ fn global_reference_tables(sql: &str) -> Option<BTreeSet<String>> {
     for pair in tokens.windows(2) {
         if pair[0].eq_ignore_ascii_case("FROM") || pair[0].eq_ignore_ascii_case("JOIN") {
             let table = pair[1];
-            if !table
-                .chars()
-                .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_')
-            {
+            if !table.chars().all(|character| {
+                character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+            }) {
                 return None;
             }
             tables.insert(table.to_string());
@@ -1364,16 +1416,14 @@ fn contains_word(haystack: &str, word: &str) -> bool {
     let upper = haystack.to_ascii_uppercase();
     let needle = word.to_ascii_uppercase();
 
-    upper
-        .match_indices(&needle)
-        .any(|(index, matched)| {
-            let before = upper[..index].chars().next_back();
-            let after = upper[index + matched.len()..].chars().next();
-            let boundary = |character: Option<char>| {
-                character.is_none_or(|value| !value.is_ascii_alphanumeric() && value != '_')
-            };
-            boundary(before) && boundary(after)
-        })
+    upper.match_indices(&needle).any(|(index, matched)| {
+        let before = upper[..index].chars().next_back();
+        let after = upper[index + matched.len()..].chars().next();
+        let boundary = |character: Option<char>| {
+            character.is_none_or(|value| !value.is_ascii_alphanumeric() && value != '_')
+        };
+        boundary(before) && boundary(after)
+    })
 }
 
 fn placeholder_indexes(sql: &str) -> BTreeSet<usize> {
@@ -1437,8 +1487,9 @@ mod tests {
 
     #[test]
     fn grain_must_be_subset_of_output_fields() {
-        let output_names: BTreeSet<&str> =
-            ["client_id", "savings_account_id", "currency_code"].into_iter().collect();
+        let output_names: BTreeSet<&str> = ["client_id", "savings_account_id", "currency_code"]
+            .into_iter()
+            .collect();
 
         // Grain yang seluruh kolomnya diterbitkan diterima.
         let valid = vec!["client_id".to_string(), "savings_account_id".to_string()];
@@ -1544,12 +1595,18 @@ mod tests {
         let domain = parsed_domain("id: loan\nstatus: gap\ninventory_refs: [FAKE-999]\n");
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "inventory_ref_must_exist_in_dataset_inventory"));
+        assert!(has_check(
+            &findings,
+            "inventory_ref_must_exist_in_dataset_inventory"
+        ));
 
         let area = parsed_area("id: tax\ninventory_refs: [FAKE-999]\n");
         let mut findings = Vec::new();
         check_area(&area, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "inventory_ref_must_exist_in_dataset_inventory"));
+        assert!(has_check(
+            &findings,
+            "inventory_ref_must_exist_in_dataset_inventory"
+        ));
     }
 
     // A `gap` domain whose own inventory_refs actually resolve to `inherited`
@@ -1560,7 +1617,10 @@ mod tests {
         let domain = parsed_domain("id: loan\nstatus: gap\ninventory_refs: [CLI-1]\n");
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "domain_status_must_match_referenced_row_status"));
+        assert!(has_check(
+            &findings,
+            "domain_status_must_match_referenced_row_status"
+        ));
     }
 
     // Reviewer: "a supported intent for a gap-only row fails".
@@ -1571,7 +1631,10 @@ mod tests {
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "supported_intent_ref_must_be_inherited"));
+        assert!(has_check(
+            &findings,
+            "supported_intent_ref_must_be_inherited"
+        ));
     }
 
     // Reviewer: "a hard reject for a gap row fails".
@@ -1602,7 +1665,8 @@ mod tests {
     // and citation actually agree.
     #[test]
     fn d13_excluded_area_remains_correctly_modeled() {
-        let area = parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D13]\n");
+        let area =
+            parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D13]\n");
         let mut findings = Vec::new();
         check_area(&area, "path", &test_inventory(), &mut findings);
         assert!(findings.is_empty());
@@ -1611,10 +1675,14 @@ mod tests {
         // the same class of bug as the client-address contradiction, now
         // caught mechanically instead of only via the two hardcoded phrase
         // lists below.
-        let mislabeled = parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D12]\n");
+        let mislabeled =
+            parsed_area("id: out_of_scope_areas\nstatus: rejected_group\ninventory_refs: [D12]\n");
         let mut findings = Vec::new();
         check_area(&mislabeled, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "area_status_must_match_referenced_row_status"));
+        assert!(has_check(
+            &findings,
+            "area_status_must_match_referenced_row_status"
+        ));
     }
 
     // Kontradiksi #4: tax/loan/accounting/audit "deferred" (istilah MVP)
@@ -1636,9 +1704,8 @@ mod tests {
 
         // Domain onboarding-dependent yang sungguh deferred (bukan di daftar
         // MUST_BE_GAP_NOT_DEFERRED) tidak boleh ikut ditolak.
-        let custom_datatables = parsed_domain(
-            "id: custom_datatables\nstatus: deferred\ninventory_refs: [D10]\n",
-        );
+        let custom_datatables =
+            parsed_domain("id: custom_datatables\nstatus: deferred\ninventory_refs: [D10]\n");
         let mut findings = Vec::new();
         check_domain(&custom_datatables, "path", &test_inventory(), &mut findings);
         assert!(!has_check(&findings, "gap_domain_not_mislabeled_deferred"));
@@ -1653,7 +1720,10 @@ mod tests {
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
+        assert!(has_check(
+            &findings,
+            "gap_intents_exclude_out_of_scope_phrases"
+        ));
     }
 
     // Kontradiksi #6: group/center mencakup seluruh jenis account (§1), tidak
@@ -1665,7 +1735,10 @@ mod tests {
         );
         let mut findings = Vec::new();
         check_domain(&domain, "path", &test_inventory(), &mut findings);
-        assert!(has_check(&findings, "gap_intents_exclude_out_of_scope_phrases"));
+        assert!(has_check(
+            &findings,
+            "gap_intents_exclude_out_of_scope_phrases"
+        ));
     }
 
     // Kontradiksi #3: alamat client selektif/gap (§1 CLI-6), bukan ditolak
@@ -1732,7 +1805,10 @@ mod tests {
         let result: Result<Domain, _> = serde_yaml::from_str(
             "id: products\nstatus: gap\ninventory_refs: [PROD-1]\nsupported_intents:\n  - loan product master list\n",
         );
-        assert!(result.is_err(), "a plain string must not deserialize into IntentRef");
+        assert!(
+            result.is_err(),
+            "a plain string must not deserialize into IntentRef"
+        );
     }
 
     #[test]
@@ -1740,7 +1816,10 @@ mod tests {
         let result: Result<Domain, _> = serde_yaml::from_str(
             "id: products\nstatus: gap\ninventory_refs: [PROD-1]\ngap_intents:\n  - loan product master list\n",
         );
-        assert!(result.is_err(), "a plain string must not deserialize into IntentRef");
+        assert!(
+            result.is_err(),
+            "a plain string must not deserialize into IntentRef"
+        );
     }
 
     #[test]
@@ -1748,7 +1827,10 @@ mod tests {
         let result: Result<Domain, _> = serde_yaml::from_str(
             "id: client\nstatus: approved_mvp\ninventory_refs: [CLI-1]\nunsupported_intents:\n  - client charge\n",
         );
-        assert!(result.is_err(), "a plain string must not deserialize into IntentRef, even in unsupported_intents");
+        assert!(
+            result.is_err(),
+            "a plain string must not deserialize into IntentRef, even in unsupported_intents"
+        );
     }
 
     // A structured entry marked `exempt` is a deliberate, visible choice —
@@ -1795,7 +1877,8 @@ mod tests {
         // A header that no longer ends "| Confidence | Status |" (mis. a
         // rename) yields zero rows — exactly the failure `loader::load`
         // must catch, not silently swallow.
-        let renamed_header = markdown.replace("| Confidence | Status |", "| Confidence | Disposition |");
+        let renamed_header =
+            markdown.replace("| Confidence | Status |", "| Confidence | Disposition |");
         let rows_after_rename = crate::catalog::inventory::parse(&renamed_header);
         assert!(
             rows_after_rename.len() < crate::catalog::inventory::MIN_EXPECTED_ROWS,

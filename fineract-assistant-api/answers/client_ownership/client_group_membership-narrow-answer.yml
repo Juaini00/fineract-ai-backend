@@ -1,0 +1,29 @@
+info:
+  name: FIN-128 client group membership narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin128_group_membership_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin128Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_group_membership", document, { truthKey: "client_group_membership__scope_2_3", narrowedTo: 2 });
+          test("FIN-128 client group membership narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-128 CLI-4: narrowed to offices 2 and 3 returns 3 members in office 3", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(answers.answerRows(document).rows.length).to.equal(3);
+          });
+        }

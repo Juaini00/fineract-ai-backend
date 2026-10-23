@@ -1,12 +1,11 @@
 info:
-  name: "OVR-6.6 domain gap (client address, CLI-6) — job"
+  name: "OVR-6.6 domain gap (family member detail, D15d) — job"
   type: http
   seq: 38.98
   description: |
-    Alamat client (CLI-6, `knowledge/domains/client.yaml` `gap_intents`) selektif/gap
-    per §1 — sebelum FIN-153 ia justru tercantum di `unsupported_intents` client dan
-    ditolak sebagai kebijakan (`BlockedByPolicy`, kontradiksi #3). Sekarang dijawab
-    `Unsupported` dengan alasan gap, bukan ditolak sebagai permukaan yang dilarang.
+    FIN-128: client address (CLI-6) is now an approved capability (`client_address`).
+    Family member detail (D15d, `knowledge/domains/client.yaml` `gap_intents`) remains
+    selective/gap: it answers `Unsupported` with `domain_gap`.
 http:
   method: post
   url: "{{baseUrl}}/chat/jobs"
@@ -20,7 +19,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{policySession}}", "request_text": "Show every client address in Head Office.", "office_ids": [] }
+      { "session_id": "{{policySession}}", "request_text": "Show the family member detail for this client.", "office_ids": [] }
 runtime:
   scripts:
     - type: before-request

@@ -1,0 +1,57 @@
+id: client_address
+status: approved_mvp
+domain: client
+display_name: Client Address
+description: >-
+  List client contact addresses: client address ID, client ID, client office ID, address ID,
+  address type ID, address type name, active status, street, address lines 1-3, town/village,
+  city, county/district, state/province ID, country ID, postal code, latitude, and longitude.
+  Office-scoped via client office. Selective capability: triggers only when address or alamat
+  is explicitly requested. Output address fields carry PII sensitivity. Hard cap 200, disclosed.
+data_areas:
+  - client_foundation
+  - organization_foundation
+required_api_capability: client_address
+query_id: client.client_address
+metrics: []
+output_mode: list
+request_shape:
+  operation: list
+  subject: client_address
+  grouping: none
+  output: list
+  pii: client_address
+examples:
+  - Show client address details in my authorized offices.
+  - List address records for clients.
+  - Tampilkan alamat lengkap nasabah di kantor saya.
+  - Daftar alamat nasabah di kantor yang diizinkan.
+supported_intents:
+  - list client address details in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: true
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: pii_declared
+    rule: address detail fields carry pii sensitivity and are withheld when pii is disabled.
+  - id: no_identifiers
+    rule: account_no and external_id are never selected or returned.

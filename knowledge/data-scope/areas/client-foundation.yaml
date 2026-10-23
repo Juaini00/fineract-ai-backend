@@ -21,6 +21,7 @@ included_tables:
 conditional_tables:
   - m_client_non_person
   - m_client_address
+  - m_address
 excluded_tables:
   - m_client_identifier
   - m_client_transfer_details

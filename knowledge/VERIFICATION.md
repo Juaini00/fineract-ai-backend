@@ -1660,3 +1660,69 @@ All 5 assertion checks pass cleanly.
 
 `docs/data/dataset-inventory.md` rows SHARE-1..6, 8 moved to `inherited` (SHARE-6, 8 shared with client/general capabilities). SHARE-7 (evidence of settled share purchase/redemption) confirmed as gap intent (`gap_intents`) in `knowledge/domains/share.yaml`.
 `fineract-assistant-api/engine/policy-deferred-share-job.yml` created to assert remaining SHARE-7 gap intent ("Show settled share purchases and redemptions for this client.").
+
+
+## 22. FIN-128 / CLI-1..8 — client/ownership full §20 expansion
+
+**Context & Scope.** `dataset-inventory.md` §4 rows CLI-1..8 cover domain `client` (Client/kepemilikan, §1 baseline: identity, lifecycle, assignment, group/center, and all account types). Prior to FIN-128, CLI-1..3 and D04 charges were approved Mode-1 capabilities, while CLI-4, CLI-5, and CLI-6 remained gap rows; CLI-7 (identity documents) and CLI-8 (notes) are permanently excluded by design. In local `fineract_default`:
+- `m_group`: 2 groups (`level_id=2` group in office 3, `level_id=1` center in office 2). `parent_id` is NULL on all rows (center hierarchy not populated in live fixture, linkage is NULL-safe).
+- `m_group_client`: 3 membership rows (clients 4, 5, 9 in office 3, all members of group 1). Office 2 has center 2 with 0 members. Cardinality `N:M` client<->group.
+- `m_client_address`: 1 row live (client 73, office 4). Offices 2 & 3 have 0 address rows (genuine Empty on narrowed scope `[2,3]`).
+- Roster across account types: 116 loans (`m_loan`), 207 savings accounts (`m_savings_account`), 2 share accounts (`m_share_account`). Total union rows = 325 (capped at 200); narrowed `[2,3]` = 121 rows.
+
+**Built (Mode 1, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `client_group_membership` (CLI-4):
+   - Lists client group and center memberships: client ID, client office ID, group ID, group name, level ID, parent ID (center linkage), and group office ID.
+   - Grain: `[client_id, group_id]` (`m_group_client.client_id`, `m_group_client.group_id`).
+   - Authorization: governed by the client's office (`m_client.office_id = ANY($1::bigint[])`); group office surfaced as evidence only.
+   - Center linkage is NULL-safe (group 1 has `parent_id = NULL` live).
+2. `client_account_roster` (CLI-5):
+   - Per-client UNION ALL across `m_loan`, `m_savings_account`, `m_share_account`.
+   - Grain: `[account_type, account_id]`.
+   - Account type surfaced as declared literal (`'loan'`, `'savings'`, `'share'`).
+   - Raw status enum preserved: loan `loan_status_id` (100/200/300/400/500/600/601/602/700 via `r_enum_value`), savings `status_enum` (`SavingsAccountStatusType.java:29-39`), share `status_enum` (`ShareAccountStatusType.java:26-31`).
+   - No default-active filter (§1 rule 34: all accounts owned by client surfaced).
+   - Authorization: loan via client office (`m_loan.group_id -> m_group.office_id` path declared, 0 live rows), savings/share via client office.
+3. `client_address` (CLI-6):
+   - Client contact and address details: joins `m_client_address` -> `m_client`, `m_address`, and `m_code_value`.
+   - Grain: `[client_address_id]` (`m_client_address.id`).
+   - Selective: triggers only when address/contact is explicitly asked.
+   - Address fields carry `pii` sensitivity classification (gated behind `can_view_pii` / PII withholding machinery).
+   - Authorization: governed by client office (`m_client.office_id = ANY($1::bigint[])`).
+
+### 22.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{client_group_membership,client_account_roster,client_address}.sql` (+ `__scope_2_3` variants).
+Locked run (`answers/client`): all requests tested against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus genuine Empty population tests in office 2 (group membership) and office 9 (account roster).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| client_group_membership | office_ids + limit | 3 | 3 | live Bruno run |
+| client_account_roster | office_ids + limit | 200 (capped from 325) | 121 | live Bruno run |
+| client_address | office_ids + limit | 1 | 0 (Empty) | live Bruno run |
+
+In addition, empty population tested:
+- `client_group_membership`: office 2 returns 0 rows with `outcome = "Empty"`.
+- `client_account_roster`: office 9 returns 0 rows with `outcome = "Empty"`.
+- `client_address`: offices `[2,3]` return 0 rows with `outcome = "Empty"`.
+
+### 22.2 VALUES-only semantics smoke (`tests/client_semantics_smoke.sh`)
+
+`tests/client_semantics_smoke.sh` shadows all underlying Fineract tables (`m_client`, `m_group`, `m_group_client`, `m_client_address`, `m_loan`, `m_savings_account`, `m_share_account`, `m_office`, `m_address`, `m_code_value`, `m_loan_product`, `m_savings_product`, `m_share_product`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Group Membership N:M & Center Linkage**: Client 1 in group 10 (center 20) and group 11 (NULL center); client 2 in group 10; unauthorized client 3 in office 9 filtered.
+2. **Account Roster Multi-Type & No Default Active**: Surfaces loan, savings, and share account types; submitted/pending accounts (status 100) surfaced alongside active accounts (status 300); unauthorized client 3 in office 9 filtered.
+3. **Address Details & Authorization**: Address 6001 surfaced with street, city, postal code, and type RESIDENTIAL; unauthorized client 3 address in office 9 filtered.
+4. **Empty Semantics**: Querying empty office scope returns 0 rows across all capabilities.
+All assertion checks pass cleanly.
+
+### 22.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/client`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Address fields classified as `pii`; account numbers and external IDs are never returned across all capabilities.
+4. **Semantics**: Client-office authorization, no default-active filter, center linkage NULL-safe, genuine Empty outcomes.
+
+### 22.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` rows CLI-4, CLI-5, and CLI-6 moved to `inherited` (Mode-1 capabilities). CLI-7 (identity documents) and CLI-8 (notes) remain excluded by design.
+`fineract-assistant-api/engine/policy-deferred-client-address-job.yml` updated to assert remaining client gap intent: `family member detail` (D15d).

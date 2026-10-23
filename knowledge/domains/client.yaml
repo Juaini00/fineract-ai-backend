@@ -8,15 +8,16 @@ description: >-
   assignment (CLI-1..3) are approved Mode-1 capabilities. Direct client
   charge assessments and payment allocations (D04) are approved Mode-1
   capabilities (`client_charge_assessments`, `client_charge_payment_allocations`).
-  The client's full account roster spans loan, savings, and share (CLI-5);
-  only the savings side has an approved capability today (`clients_with_account_counts`) —
-  the loan and share sides answer unsupported with a gap reason rather than a
-  savings-only count presented as the whole roster. Contact/address (CLI-6)
-  is selectively agreed, not default-on, and not yet an approved capability.
+  Client group and center membership (CLI-4) is approved (`client_group_membership`).
+  The client's full account roster spans loan, savings, and share (CLI-5) and is
+  approved via `client_account_roster` (with `clients_with_account_counts` covering
+  the savings-only summary). Contact/address (CLI-6) is selectively agreed and
+  approved via `client_address` under PII sensitivity class gating.
 inventory_refs:
   - CLI-1
   - CLI-2
   - CLI-3
+  - CLI-4
   - CLI-5
   - CLI-6
   - CLI-7
@@ -27,24 +28,41 @@ concepts:
   - id: client
     meaning: Customer or member in Fineract.
     synonyms: [client, customer, member, account holder]
+  - id: group_membership
+    meaning: Client membership in groups and centers.
+    synonyms:
+      - client group
+      - client groups
+      - group membership
+      - group memberships
+      - client center
+      - client centers
+      - center membership
+      - center memberships
+      - group name
+      - group office
+      - keanggotaan kelompok
+      - keanggotaan group
+      - group nasabah
 supported_intents:
   - { phrase: "client identity resolve and name lookup", inventory_ref: CLI-1 }
   - { phrase: "client lifecycle summary", inventory_ref: CLI-2 }
   - { phrase: "active pending and closed client counts by authorized office scope", inventory_ref: CLI-3 }
   - { phrase: "client charge assessments", inventory_ref: D04 }
   - { phrase: "client charge payment allocations", inventory_ref: D04 }
+  - { phrase: "client group and center membership", inventory_ref: CLI-4 }
+  - { phrase: "full account roster across loan savings and share account types", inventory_ref: CLI-5 }
+  - { phrase: "client contact and address", inventory_ref: CLI-6 }
 gap_intents:
-  - { phrase: "client loan account roster", inventory_ref: CLI-5 }
-  - { phrase: "client share account roster", inventory_ref: CLI-5 }
-  - { phrase: "client address", inventory_ref: CLI-6 }
   - { phrase: "family member detail", inventory_ref: D15d }
   - { phrase: "historical office as of a past date", inventory_ref: D02 }
 unsupported_intents:
   - { phrase: "identity document reporting", exempt: "excluded_by_design_gap_row_nuance" }
 default_rules:
   - Client identity output requires explicit capability approval.
-  - All account types owned by a client are agreed baseline scope (CLI-5); only the savings roster has an approved capability today, so a request for a client's loan or share accounts answers unsupported with a gap reason instead of returning the savings-only count as if it were the whole roster.
-  - Client address/contact is selectively agreed (§1), not default-on, and not yet an approved capability (CLI-6); it answers unsupported with a gap reason, never a hard policy rejection — address is not the same as a secret field or an out-of-scope table.
+  - Group and center membership (CLI-4) is approved under client_group_membership; authorization follows the client's office with group office surfaced as evidence only.
+  - All account types owned by a client (loan, savings, share) are agreed baseline scope (CLI-5) and approved via client_account_roster; clients_with_account_counts remains the savings-count summary.
+  - Client address/contact is selectively agreed (§1), not default-on, and approved via client_address behind the PII sensitivity class (CLI-6).
   - Direct client charges (D04, `m_client_charge`/`m_client_charge_paid_by`) are approved capabilities under `client_charge_assessments` and `client_charge_payment_allocations`; master definition is separated from actual assessment, payment allocations avoid fan-out, and NULL derived amounts stay NULL. Absence of charges is not evidence of delinquency.
   - Family member detail (D15d, `m_family_members`) is selective/not-default, same pattern as CLI-6/CLI-8; it answers unsupported with a gap reason, not a hard policy rejection.
   - Historical branch attribution (D02) is agreed scope only where a history table exists; none does today (verified negative, dataset-inventory.md D02) — every domain row above is current-office only. A request explicitly asking for the office as of a past date must answer unsupported with a gap reason, never silently answer with the current office as if it were historical.
@@ -57,4 +75,4 @@ checks:
   - id: address_not_hard_rejected
     rule: unsupported_intents must not contain 'address-level reporting' — address is selective/gap (CLI-6), not policy-forbidden.
   - id: all_account_types_declared
-    rule: gap_intents must acknowledge the loan and share sides of CLI-5, not only the approved savings side.
+    rule: supported_intents must acknowledge the full account roster across loan and share sides of CLI-5.

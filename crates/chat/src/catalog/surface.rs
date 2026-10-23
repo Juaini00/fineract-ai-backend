@@ -495,8 +495,6 @@ mod tests {
             "Berapa pajak yang terkumpul bulan ini?",
             "What is the tax rate for this account?",
             "Show journal entries for this month.",
-            // FIN-153 — client address (CLI-6, selektif/gap, bukan ditolak kebijakan).
-            "Show every client address in Head Office.",
             // FIN-153 — share domain: approved share capabilities under FIN-111;
             // residual per-transaction settlement proof (SHARE-7) stays gap.
             "Show settled share purchases and redemptions for this client.",
@@ -574,9 +572,28 @@ mod tests {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
         for gap in [
-            "Show the client loan account roster for this client.",
-            "Show the client share account roster for this client.",
-            "Show every client address in Head Office.",
+            "Show the family member detail for this client.",
+            "Show the historical office as of a past date for this client.",
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, "domain_gap", "{gap}");
+        }
+    }
+
+    /// FIN-128 (CLI-4..6): client group membership, full account roster, and
+    /// client address are approved capabilities, so their window questions are
+    /// not guarded; family member detail and historical office remain gap intents.
+    #[test]
+    fn client_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        for approved in [
+            "Show client group and center membership.",
+            "Show the full account roster across loan savings and share account types for this client.",
+            "Show the client address for this client.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+        }
+        for gap in [
             "Show the family member detail for this client.",
             "Show the historical office as of a past date for this client.",
         ] {
@@ -778,11 +795,11 @@ mod tests {
             .expect("group account summary is still a gap");
         assert_eq!(group_gap.source, "domain_gap");
 
-        // Intent gap di dalam domain approved_mvp (alamat client) tetap
+        // Intent gap di dalam domain approved_mvp (detail anggota keluarga) tetap
         // `domain_gap`, bukan reason domain induknya.
         let client_gap = deferred
-            .find("Show every client address in Head Office.")
-            .expect("alamat client cocok");
+            .find("Show the family member detail for this client.")
+            .expect("family member cocok");
         assert_eq!(client_gap.source, "domain_gap");
     }
 

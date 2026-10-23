@@ -1,0 +1,28 @@
+info:
+  name: FIN-128 client address job
+  type: http
+  seq: 71
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin128Token}}"
+    - name: Idempotency-Key
+      value: "{{fin128_address_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin128_address_session}}", "request_text": "Show client address information in my authorized offices." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin128_address_key", "fin128-address-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin128_address_job", res.getBody().data.job_id);
