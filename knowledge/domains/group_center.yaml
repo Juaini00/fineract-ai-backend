@@ -25,6 +25,7 @@ description: >-
   remain agreed scope without approved capabilities.
 inventory_refs:
   - CLI-4
+  - CLI-4-accounts
   - D08
 data_areas:
   - group_center_foundation
@@ -37,10 +38,10 @@ concepts:
     synonyms: [center, centre, pusat]
 supported_intents: []
 gap_intents:
-  - { phrase: "group savings summary", inventory_ref: CLI-4 }
-  - { phrase: "group loan summary", inventory_ref: CLI-4 }
-  - { phrase: "center savings summary", inventory_ref: CLI-4 }
-  - { phrase: "center loan summary", inventory_ref: CLI-4 }
+  - { phrase: "group savings summary", inventory_ref: CLI-4-accounts }
+  - { phrase: "group loan summary", inventory_ref: CLI-4-accounts }
+  - { phrase: "center savings summary", inventory_ref: CLI-4-accounts }
+  - { phrase: "center loan summary", inventory_ref: CLI-4-accounts }
   - { phrase: "group meeting attendance", inventory_ref: D08 }
 unsupported_intents:
   - { phrase: "create group", exempt: "write_action" }

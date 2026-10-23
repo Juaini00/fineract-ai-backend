@@ -1,5 +1,5 @@
 info:
-  name: "OVR-6.6 domain gap (client address, CLI-6) — job state"
+  name: "OVR-6.6 domain gap (family member detail, D15d) — job state"
   type: http
   seq: 38.981
 http:
@@ -13,7 +13,7 @@ runtime:
     - type: tests
       code: |
         const job = res.getBody().data;
-        test("OVR-6.6/FIN-153 (gap, client address CLI-6): Completed + Unsupported + Unknown, tanpa plan", function () {
+        test("OVR-6.6/FIN-128 (gap, family member D15d): Completed + Unsupported + Unknown, tanpa plan", function () {
           expect(res.getStatus()).to.equal(200);
           expect(job.lifecycle).to.equal("Completed");
           expect(job.outcome).to.equal("Unsupported");

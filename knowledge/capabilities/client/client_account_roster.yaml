@@ -1,0 +1,61 @@
+id: client_account_roster
+status: approved_mvp
+domain: client
+display_name: Client Account Roster
+description: >-
+  List all accounts owned by clients across loan, savings, and share account types:
+  account ID, account type literal ('loan', 'savings', 'share'), client ID, office ID,
+  product ID, raw status enum, submitted date, and currency code per account type.
+  No default-active filter. Authorization is enforced per account type via client office
+  (loan group office path declared). Hard cap 200, disclosed.
+data_areas:
+  - client_foundation
+  - loans_identity
+  - savings_core
+  - share_accounts
+  - group_center_foundation
+  - organization_foundation
+required_api_capability: client_account_roster
+query_id: client.client_account_roster
+metrics: []
+output_mode: list
+request_shape:
+  operation: list
+  subject: client_account_roster
+  grouping: none
+  output: list
+  pii: none
+examples:
+  - Show the full client account roster in my authorized offices.
+  - List all loan, savings, and share accounts by client.
+  - Tampilkan daftar seluruh rekening pinjaman, tabungan, dan saham nasabah.
+  - Daftar seluruh rekening nasabah.
+supported_intents:
+  - list all client accounts across loan savings and share account types
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: all_account_types_included
+    rule: UNION ALL spans m_loan, m_savings_account, and m_share_account without default active status filter.
+  - id: no_identifiers
+    rule: account_no and external_id are never selected or returned.

@@ -2382,6 +2382,16 @@ stays `gap`; the ticket is not closed here**):
 - Deterministic synthetic proof: `tests/share_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 5 semantic checks (account scope & status, transaction date & type, charges & NULL preservation, allocations anti-fanout & evidence IDs, dividends lifecycle & Empty outcome).
 - Gates: catalog validated with 0 errors; 211 `chat` unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-128 (LC.21 client/ownership full §20 expansion: groups, rosters, addresses):**
+
+- Delivered 3 curated Mode-1 capabilities for domain `client` (closing CLI gap rows): `client_group_membership` (CLI-4), `client_account_roster` (CLI-5), `client_address` (CLI-6).
+- Live `fineract_default` database facts: 3 client group memberships (`m_group_client`), 6 client accounts across loan, savings, and share types (`m_loan`, `m_savings_account`, `m_share_account`), 0 client addresses (`m_client_address`).
+- Domain and inventory alignment: moved CLI-4, CLI-5, and CLI-6 to `supported_intents` in `knowledge/domains/client.yaml`; added `m_address` to `client-foundation.yaml`; added `CLI-4-accounts` in `docs/data/dataset-inventory.md`, `group_center.yaml`, and `group-center-foundation.yaml`; updated dataset inventory rows CLI-4, CLI-5, CLI-6 to `inherited`.
+- Guard protection: resolved lexical stripping of uncontracted `group_center` candidate guard by defining multi-word synonyms under concept `group_membership` in `client.yaml`.
+- HTTP proof (`answers/client_ownership`): 25 requests / 27 tests passed against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests (`outcome = "Empty"`).
+- Deterministic synthetic proof: `tests/client_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 5 semantic checks (N:M group membership, center linkage NULL-safety, roster multi-type & no default-active filter, address details, and empty office scope semantics).
+- Gates: catalog validated with 0 errors, 2 pre-existing warnings; 253 workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

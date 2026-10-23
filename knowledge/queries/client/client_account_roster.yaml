@@ -1,0 +1,68 @@
+id: client.client_account_roster
+database: fineract
+sql_file: queries/client/client_account_roster.sql
+data_areas:
+  - client_foundation
+  - loans_identity
+  - savings_core
+  - share_accounts
+  - group_center_foundation
+  - organization_foundation
+tables:
+  - m_loan
+  - m_savings_account
+  - m_share_account
+  - m_client
+  - m_group
+metrics: []
+parameters:
+  - name: office_ids
+    type: array_bigint
+    required: true
+    source: authorized_scope
+  - name: limit
+    type: integer
+    required: false
+output_fields:
+  - name: account_id
+    type: bigint
+    sensitivity: public_business
+  - name: account_type
+    type: string
+    sensitivity: public_business
+  - name: client_id
+    type: bigint
+    sensitivity: public_business
+  - name: office_id
+    type: bigint
+    sensitivity: public_business
+  - name: product_id
+    type: bigint
+    sensitivity: public_business
+  - name: status_enum
+    type: bigint
+    sensitivity: public_business
+  - name: submitted_date
+    type: date
+    sensitivity: public_business
+  - name: currency_code
+    type: string
+    sensitivity: public_business
+grain: [account_type, account_id]
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to client office (with loan group office path fallback).
+  - id: union_all_three_types
+    rule: SQL unions m_loan, m_savings_account, and m_share_account with literal account types.
+  - id: no_default_active_filter
+    rule: no status filter is applied so all lifecycle states are returned.
+  - id: no_identifiers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

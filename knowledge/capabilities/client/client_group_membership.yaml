@@ -1,0 +1,57 @@
+id: client_group_membership
+status: approved_mvp
+domain: client
+display_name: Client Group Membership
+description: >-
+  List client group and center memberships: client ID, client office ID, group membership ID,
+  group name, level ID, parent ID (center linkage), and group office ID within authorized
+  client office scope. Group office is evidence only; authorization is governed by the
+  client's office. Hard cap 200, disclosed.
+data_areas:
+  - client_foundation
+  - group_center_foundation
+  - organization_foundation
+required_api_capability: client_group_membership
+query_id: client.client_group_membership
+metrics: []
+output_mode: list
+request_shape:
+  operation: list
+  subject: client_group_membership
+  grouping: none
+  output: list
+  pii: client_identity
+examples:
+  - Show client group memberships in my authorized offices.
+  - List client group memberships and center memberships for clients.
+  - Tampilkan keanggotaan kelompok dan sentra nasabah di kantor saya.
+  - Daftar keanggotaan group nasabah.
+supported_intents:
+  - list client group memberships and center memberships in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: true
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: client_office_governs
+    rule: authorization is governed by client's office (m_client.office_id), group office is returned as evidence only.
+  - id: no_identifiers
+    rule: account_no and external_id are never selected or returned.
