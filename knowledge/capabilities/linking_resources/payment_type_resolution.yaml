@@ -1,0 +1,44 @@
+id: payment_type_resolution
+status: approved_mvp
+domain: linking_resources
+display_name: Payment Type Resolution
+description: >-
+  Resolve payment type details and cash flags for transactions: account type (loan, savings),
+  transaction ID, account ID, authorized office ID, transaction date, payment detail ID, payment type ID,
+  payment type name, and cash payment flag. NULL payment_detail_id transactions are preserved via LEFT JOIN
+  without row drop. Account numbers and external IDs in m_payment_detail are never returned.
+data_areas: [linking_resources]
+required_api_capability: payment_type_resolution
+query_id: linking_resources.payment_type_resolution
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: payment_type, grouping: none, output: list, pii: none }
+examples:
+  - Show transaction payment types and cash flags.
+  - List payment type details for loan and savings transactions.
+  - Tampilkan jenis pembayaran transaksi dan tanda tunai.
+supported_intents:
+  - payment type resolution and cash flag for transactions
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: null_payment_detail_survives
+    rule: transactions with NULL payment_detail_id survive without dropped rows.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

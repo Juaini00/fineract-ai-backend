@@ -1,0 +1,40 @@
+id: linking_resources.account_transfer_transactions
+database: fineract
+sql_file: queries/linking_resources/account_transfer_transactions.sql
+data_areas: [linking_resources]
+tables: [m_account_transfer_details, m_account_transfer_transaction]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: transfer_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: account_transfer_details_id, type: bigint, sensitivity: public_business }
+  - { name: from_office_id, type: bigint, sensitivity: public_business }
+  - { name: to_office_id, type: bigint, sensitivity: public_business }
+  - { name: from_client_id, type: bigint, sensitivity: public_business }
+  - { name: to_client_id, type: bigint, sensitivity: public_business }
+  - { name: from_savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: from_loan_account_id, type: bigint, sensitivity: public_business }
+  - { name: to_savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: to_loan_account_id, type: bigint, sensitivity: public_business }
+  - { name: from_savings_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: from_loan_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: to_savings_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: to_loan_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: is_reversed, type: boolean, sensitivity: public_business }
+grain: [transfer_transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains atd.from_office_id with ANY($1::bigint[]).
+  - id: transfer_movement_evidenced
+    rule: transfer movement is evidenced by m_account_transfer_transaction, not the detail header alone.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

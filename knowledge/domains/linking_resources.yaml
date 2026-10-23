@@ -1,14 +1,13 @@
 id: linking_resources
-status: gap
+status: approved_mvp
 display_name: Linking resources
 description: >-
   Cross-cutting resources that connect accounts to each other and to
   payments — linked accounts, actual account transfers, payment allocation,
   charge settlement, reversal/correction, and payment type — per §1
-  "Resource penghubung" (dataset-scope-decisions.md:27) and
+  "Resource penghubung" (dataset-scope-decisions.md:30) and
   dataset-inventory.md LINK-3..8 (LINK-1/LINK-2 are cross-references to
-  CLI-5/PROD-1..3, not separate rows). Agreed baseline scope; no approved
-  Mode-1 capability exists yet.
+  CLI-5/PROD-1..3, not separate rows).
 inventory_refs:
   - LINK-3
   - LINK-4
@@ -16,31 +15,48 @@ inventory_refs:
   - LINK-6
   - LINK-7
   - LINK-8
-data_areas: []
+data_areas:
+  - linking_resources
 concepts:
   - id: linked_account
     meaning: A declared association between two accounts (savings/loan), not itself proof of a transfer.
-    synonyms: [linked account, akun tertaut]
+    synonyms: [linked account, linked accounts, akun tertaut, relasi akun, account association, portfolio account association]
   - id: account_transfer
     meaning: An actual, evidenced movement of funds between accounts.
-    synonyms: [account transfer, transfer antar akun]
+    synonyms: [account transfer, account transfers, transfer antar akun, transfer rekening, perpindahan dana]
   - id: payment_allocation
     meaning: How one payment splits across principal/interest/fee/penalty components.
-    synonyms: [payment allocation, alokasi pembayaran]
+    synonyms: [payment allocation, payment allocations, loan payment allocation, alokasi pembayaran, alokasi cicilan, breakdown alokasi]
   - id: charge_settlement
     meaning: Which transaction actually paid a given charge.
-    synonyms: [charge settlement, pelunasan biaya]
-supported_intents: []
-gap_intents:
-  - { phrase: "linked account association", inventory_ref: LINK-3 }
-  - { phrase: "actual account transfer", inventory_ref: LINK-4 }
-  - { phrase: "payment allocation breakdown", inventory_ref: LINK-5 }
+    synonyms: [charge settlement, charge settlements, pelunasan biaya, bukti pelunasan biaya, paid charge transaction]
+  - id: transaction_reversal
+    meaning: Reversal status and original-to-reversal linkage of transactions.
+    synonyms: [transaction reversal, transaction reversals, pembalikan transaksi, reversal transaksi, transaksi dibatalkan]
+  - id: payment_type
+    meaning: Resolution of transaction payment detail to payment type name and cash flag.
+    synonyms: [payment type, payment types, tipe pembayaran, jenis pembayaran, channel pembayaran, payment method]
+supported_intents:
+  - { phrase: "linked account associations and portfolio associations", inventory_ref: LINK-3 }
+  - { phrase: "actual account transfer transactions and movement evidence", inventory_ref: LINK-4 }
+  - { phrase: "loan payment allocation component breakdown", inventory_ref: LINK-5 }
+  - { phrase: "charge settlement evidence linking charges to paying transactions", inventory_ref: LINK-6 }
+  - { phrase: "transaction reversals and correction linkage", inventory_ref: LINK-7 }
+  - { phrase: "payment type resolution and cash flag for transactions", inventory_ref: LINK-8 }
+gap_intents: []
 unsupported_intents:
   - { phrase: "create account link", exempt: "write_action" }
   - { phrase: "execute account transfer", exempt: "write_action" }
+  - { phrase: "reverse transaction", exempt: "write_action" }
 default_rules:
-  - Linking resources are agreed baseline scope with no approved capability yet (dataset-inventory.md LINK-3..8, every row `gap`); every request answers unsupported with a gap reason.
-  - A linked-account association is not proof a transfer happened (§1 rule 35 / XR-EVID) — a future capability must keep LINK-3 (link existence) and LINK-4 (evidenced transfer) distinct, never conflated.
+  - "Config relationship is not money movement (§30 / §1 rule 35): LINK-3 surfaces account linkage only; actual fund movement must be asserted solely from LINK-4 (m_account_transfer_transaction) evidence rows."
+  - "No double counting (§31 / §1 rule 36): loan payment allocation components (principal, interest, fee, penalty) sum to the transaction amount; reversed transactions carry is_reversed and are excluded from sums by default."
+  - "Charge settlement evidence (LINK-6): savings charge settlement is traceable to its paying transaction via m_savings_account_charge_paid_by; loan side has no paid-by table and is derived total only."
+  - "No one-big-join across children (§33 / §1 rule 38): each linking capability covers its own declared relationship grain."
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and its rows move to inherited.
+  - id: data_areas_exist
+    rule: all linking_resources data_areas must exist under knowledge/data-scope/areas.
+  - id: approved_intents_have_capabilities
+    rule: supported MVP linking_resources intents must map to approved capabilities.
+  - id: unsupported_intents_not_executable
+    rule: write and reversal execution intents must not map to approved_mvp capabilities.

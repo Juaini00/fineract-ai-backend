@@ -1,0 +1,36 @@
+id: linking_resources.loan_payment_allocation
+database: fineract
+sql_file: queries/linking_resources/loan_payment_allocation.sql
+data_areas: [linking_resources]
+tables: [m_loan_transaction, m_loan]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: transaction_type_enum, type: bigint, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: principal_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: fee_charges_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: penalty_charges_portion_derived, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: is_reversed, type: boolean, sensitivity: public_business }
+grain: [loan_transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains lt.office_id with ANY($1::bigint[]).
+  - id: allocation_consistency_contract
+    rule: components sum to amount for multi-component repayment allocations.
+  - id: transaction_type_enum_mapped
+    rule: transaction_type_enum follows LoanTransactionType.java:26-75.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

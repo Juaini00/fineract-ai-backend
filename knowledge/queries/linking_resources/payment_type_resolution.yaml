@@ -1,0 +1,31 @@
+id: linking_resources.payment_type_resolution
+database: fineract
+sql_file: queries/linking_resources/payment_type_resolution.sql
+data_areas: [linking_resources]
+tables: [m_loan_transaction, m_savings_account_transaction, m_payment_detail, m_payment_type]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_type, type: string, sensitivity: public_business }
+  - { name: transaction_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+  - { name: payment_detail_id, type: bigint, sensitivity: public_business }
+  - { name: payment_type_id, type: bigint, sensitivity: public_business }
+  - { name: payment_type_name, type: string, sensitivity: public_business }
+  - { name: is_cash, type: boolean, sensitivity: public_business }
+grain: [account_type, transaction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains office_id on each branch with ANY($1::bigint[]).
+  - id: null_payment_detail_survives
+    rule: transactions with NULL payment_detail_id survive via LEFT JOIN without row loss.
+  - id: no_account_numbers
+    rule: account_no and external_id from m_payment_detail are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

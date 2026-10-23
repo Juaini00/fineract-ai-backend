@@ -177,6 +177,12 @@ mod tests {
         assert_eq!(rows.get("SAV-8").map(String::as_str), Some("inherited"));
         assert_eq!(rows.get("SAV-9").map(String::as_str), Some("inherited"));
         assert_eq!(rows.get("SAV-10").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-3").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-4").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-5").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-6").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-7").map(String::as_str), Some("inherited"));
+        assert_eq!(rows.get("LINK-8").map(String::as_str), Some("inherited"));
         assert_eq!(rows.get("FDRD-5").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("FDRD-7").map(String::as_str), Some("gap"));
         assert_eq!(rows.get("D09").map(String::as_str), Some("gap"));

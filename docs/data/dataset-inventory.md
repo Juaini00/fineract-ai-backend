@@ -239,12 +239,12 @@ as `unresolved` on every row below rather than assumed from naming convention.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | LINK-1 | Account ownership | covered by CLI-5 (loan/savings/share → client/group) | — | — | — | — | — | — | — | — | cross-reference (CLI-5) |
 | LINK-2 | Account-product | covered per-domain (PROD-1/2/3 `1:N` to their accounts) | — | — | — | — | — | — | — | cross-reference (PROD-1..3) |
-| LINK-3 | Linked accounts | `m_portfolio_account_associations` (90 rows, grain: association) | `association_type_enum, is_active`, both sides (`loan_account_id`/`savings_account_id`/`linked_*`) | `1:N` or self-`N:M` depending on type (SAV-10 duplicate — cross-referenced, not re-counted) | via either side's office path | n/a | link existing ≠ transfer proof (§1 rule 35) | linkage resolvable, kept distinct from LINK-4 transfer evidence | none | known (§4) | gap |
-| LINK-4 | Actual transfer | `m_account_transfer_details` (498 rows, header) + `m_account_transfer_transaction` (728 rows, the evidenced movement) | from/to office, client, account; transfer amount/date on the transaction row | `1:1` details ↔ N transactions over time (recurring transfers reuse the same detail row) | `from_office_id`/`to_office_id` on the detail row | `transaction_date` on the transaction row | this is the evidence row LINK-3's link alone cannot provide | actual money movement only asserted from the transaction row, never from the link header alone | none | known (§4) | gap |
-| LINK-5 | Payment allocation | `m_loan_transaction.principal_portion_derived/interest_portion_derived/fee_charges_portion_derived/penalty_charges_portion_derived` (loan side, LOAN-6); savings has no equivalent multi-component allocation (a savings transaction is single-purpose) | allocation of one payment across components | n/a (denormalized on the transaction row) | via transaction | n/a | components must sum to the transaction amount (anti-double-count, §1 rule 36) | allocation resolvable and internally consistent | none | known (§4) | gap |
-| LINK-6 | Charge settlement | `m_savings_account_charge_paid_by` (165 rows, `savings_transaction_id` links a charge to its paying transaction); loan side has no equivalent explicit "paid-by" table — `m_loan_charge`'s `amount_paid_derived` is a derived total, not a per-transaction settlement link | which transaction paid which charge (savings); derived total only (loan) | `1:N` savings charge → paying transaction(s) | via account | n/a | settlement evidence, not inferred from balance drop | savings settlement traceable to a transaction; loan settlement stated as derived total only, gap flagged | none | known (§4) | gap |
-| LINK-7 | Reversal / correction | per-domain reversal fields: `m_savings_account_transaction.is_reversed/is_reversal`, `m_loan_transaction.is_reversed`, `acc_gl_journal_entry.reversed/reversal_id` — share has **no** reversal field (see SHARE-8) | reversal flag + reference to the original | `1:1` transaction ↔ its reversal, where the field exists | via transaction | reversal date where recorded | anti-double-count when a reversed transaction is excluded by default | reversal handling consistent per domain, share's absence stated explicitly rather than assumed | none | known (§4) | gap |
-| LINK-8 | Payment type | `m_payment_type` (ORG-6) joined via `m_payment_detail` (referenced by both `m_savings_account_transaction.payment_detail_id` and `m_loan_transaction.payment_detail_id`) | payment type name/is_cash | `N:1` transaction → payment_detail → payment_type | via transaction | n/a | n/a | payment type resolvable per transaction where a `payment_detail_id` is set | none | known (§4); `m_payment_detail` itself not queried this session (candidate) | gap |
+| LINK-3 | Linked accounts | `m_portfolio_account_associations` (90 rows, grain: association) | `association_type_enum, is_active`, both sides (`loan_account_id`/`savings_account_id`/`linked_*`) | `1:N` or self-`N:M` depending on type (SAV-10 duplicate — cross-referenced, not re-counted) | via either side's office path | n/a | link existing ≠ transfer proof (§1 rule 35) | linkage resolvable, kept distinct from LINK-4 transfer evidence | `account_association_links` (FIN-130, Mode-1) | known (§4) | inherited |
+| LINK-4 | Actual transfer | `m_account_transfer_details` (498 rows, header) + `m_account_transfer_transaction` (728 rows, the evidenced movement) | from/to office, client, account; transfer amount/date on the transaction row | `1:1` details ↔ N transactions over time (recurring transfers reuse the same detail row) | `from_office_id`/`to_office_id` on the detail row | `transaction_date` on the transaction row | this is the evidence row LINK-3's link alone cannot provide | actual money movement only asserted from the transaction row, never from the link header alone | `account_transfer_transactions` (FIN-130, Mode-1) | known (§4) | inherited |
+| LINK-5 | Payment allocation | `m_loan_transaction.principal_portion_derived/interest_portion_derived/fee_charges_portion_derived/penalty_charges_portion_derived` (loan side, LOAN-6); savings has no equivalent multi-component allocation (a savings transaction is single-purpose) | allocation of one payment across components | n/a (denormalized on the transaction row) | via transaction | n/a | components must sum to the transaction amount (anti-double-count, §1 rule 36) | allocation resolvable and internally consistent | `loan_payment_allocation` (FIN-130, Mode-1) | known (§4) | inherited |
+| LINK-6 | Charge settlement | `m_savings_account_charge_paid_by` (165 rows, `savings_transaction_id` links a charge to its paying transaction); loan side has no equivalent explicit "paid-by" table — `m_loan_charge`'s `amount_paid_derived` is a derived total, not a per-transaction settlement link | which transaction paid which charge (savings); derived total only (loan) | `1:N` savings charge → paying transaction(s) | via account | n/a | settlement evidence, not inferred from balance drop | savings settlement traceable to a transaction; loan settlement stated as derived total only, gap flagged | `charge_settlement_evidence` (FIN-130, Mode-1) | known (§4) | inherited |
+| LINK-7 | Reversal / correction | per-domain reversal fields: `m_savings_account_transaction.is_reversed/is_reversal`, `m_loan_transaction.is_reversed`, `acc_gl_journal_entry.reversed/reversal_id` — share has **no** reversal field (see SHARE-8) | reversal flag + reference to the original | `1:1` transaction ↔ its reversal, where the field exists | via transaction | reversal date where recorded | anti-double-count when a reversed transaction is excluded by default | reversal handling consistent per domain, share's absence stated explicitly rather than assumed | `transaction_reversals` (FIN-130, Mode-1) | known (§4) | inherited |
+| LINK-8 | Payment type | `m_payment_type` (ORG-6, 6 rows) joined via `m_payment_detail` (489 rows, referenced by both `m_savings_account_transaction.payment_detail_id` and `m_loan_transaction.payment_detail_id`) | payment type name/is_cash | `N:1` transaction → payment_detail → payment_type | via transaction | n/a | n/a | payment type resolvable per transaction where a `payment_detail_id` is set | `payment_type_resolution` (FIN-130, Mode-1) | known (§4; `m_payment_detail` count verified read-only 489 in FIN-130) | inherited |
 
 ---
 
@@ -381,7 +381,7 @@ total (see D15 table-count note, §10).
 | Savings (`:27`) | SAV-1..SAV-11 | 11 | 11 inherited (FIN-127) |
 | FD/RD (`:28`) | FDRD-1..FDRD-10 | 10 | 7 inherited (FIN-110), 3 gap |
 | Share accounts (`:29`) | SHARE-1..SHARE-8 | 8 | 7 inherited, 1 gap |
-| Resource penghubung (`:30`) | LINK-1..LINK-8 | 8 (2 cross-referenced to CLI-5/PROD-1..3, not double-counted) | 0 inherited, 6 gap, 2 cross-ref |
+| Resource penghubung (`:30`) | LINK-1..LINK-8 | 8 (2 cross-referenced to CLI-5/PROD-1..3, not double-counted) | 6 inherited (FIN-130), 0 gap, 2 cross-ref |
 | D01 | D01 | 1 | gap |
 | D02 | D02 | 1 | gap |
 | D03 | D03 | 1 | gap |
@@ -401,11 +401,11 @@ total (see D15 table-count note, §10).
 **Totals:** 79 baseline-domain rows + 21 decision rows (D01–D14 = 14,
 plus the D06-physical sub-row; D15 heading + five sub-rows = 6) = **100 inventory rows**, covering all 8
 §1 headings and all 15 decisions (D01–D15) with **zero omissions**.
-Fifty-three rows are `inherited` (an approved Mode-1 capability exists today;
-PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108, D06 and D15e by FIN-115, SHARE-1..6/8 by FIN-111, SAV-1..11 by FIN-127, CLI-4..6 by FIN-128 for source-supported Mode-1 capabilities only); three
+Fifty-nine rows are `inherited` (an approved Mode-1 capability exists today;
+PROD-1..11 added by FIN-109, LOAN-1..3/5/6 by FIN-108, D06 and D15e by FIN-115, SHARE-1..6/8 by FIN-111, SAV-1..11 by FIN-127, CLI-4..6 by FIN-128, LINK-3..8 by FIN-130 for source-supported Mode-1 capabilities only); three
 (D10, D15a, D15b) are `deferred-onboarding`. D13 is `excluded`; D15 is a
 `summary`; LINK-1, LINK-2 and D15c are `cross-reference` rows. The remaining
-39 rows are `gap`: agreed scope lacking a capability, including unresolved
+33 rows are `gap`: agreed scope lacking a capability, including unresolved
 source mappings. Coverage counts requirements, not executable capabilities.
 
 ---
@@ -422,12 +422,13 @@ so FIN-153 does not have to re-scan every table:
    DORMANT=200, ESCHEAT=300, BLOCK=400, BLOCK_CREDIT=500, BLOCK_DEBIT=600).
 2. Tables referenced by name but not queried this session: `m_fund`,
    `m_global_configuration` (business date), `m_code`/`m_code_value` (generic
-   enums), `m_tax_group_mappings`, `m_payment_detail`, `m_note`, calendar/meeting
+   enums), `m_tax_group_mappings`, `m_note`, calendar/meeting
    tables for D08, `stretchy_report` metadata (D13, read-only existence only —
-   never execution).
+   never execution). (`m_payment_detail` was queried and verified in FIN-130: 489 rows).
 3. Cardinality of `m_portfolio_account_associations.association_type_enum` per
-   type value (SAV-10/LINK-3) — verified in FIN-127: 90 rows total, all 90 are
-   association_type_enum = 1 (LINKED_ACCOUNT_ASSOCIATION) and is_active = true per
+   type value (SAV-10/LINK-3) — verified in FIN-127 and delivered under FIN-130 (`account_association_links`):
+   90 rows total, all 90 are association_type_enum = 1 (LINKED_ACCOUNT_ASSOCIATION) and is_active = true per
+   AccountAssociationType.java:26-28; 0 rows for type 0 (INVALID) or 2 (GUARANTOR_ACCOUNT_ASSOCIATION).
    AccountAssociationType.java:26-28; 0 rows for type 0 (INVALID) or 2 (GUARANTOR_ACCOUNT_ASSOCIATION).
 4. No exchange-rate table exists anywhere in `fineract_default` — D03 has no
    candidate source at all, not merely an unverified one.

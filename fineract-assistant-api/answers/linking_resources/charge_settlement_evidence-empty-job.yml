@@ -1,0 +1,28 @@
+info:
+  name: FIN-130 charge_settlement_evidence empty job
+  type: http
+  seq: 30
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin130Token}}"
+    - name: Idempotency-Key
+      value: "{{fin130_settlement_empty_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin130_settlement_empty_session}}", "request_text": "Show charge settlement evidence linking charges to transactions.", "office_ids": [9] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin130_settlement_empty_key", "fin130-settle-empty-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin130_settlement_empty_job", res.getBody().data.job_id);

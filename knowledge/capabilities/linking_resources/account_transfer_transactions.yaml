@@ -1,0 +1,46 @@
+id: account_transfer_transactions
+status: approved_mvp
+domain: linking_resources
+display_name: Account Transfer Transactions
+description: >-
+  List actual account transfer transactions and movement evidence: transfer transaction ID,
+  account transfer details ID, from/to office ID, from/to client ID, from/to savings and loan account IDs,
+  savings and loan transaction IDs, transaction date, currency code, amount, and reversed flag.
+  Details-to-transactions is 1:N; grain is one transfer-transaction row. Visibility is governed by
+  from_office_id in authorized scope. Amounts and dates originate from the transaction movement row.
+  Account numbers and external IDs are never returned.
+data_areas: [linking_resources]
+required_api_capability: account_transfer_transactions
+query_id: linking_resources.account_transfer_transactions
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: account_transfer, grouping: none, output: list, pii: none }
+examples:
+  - Show account transfer transactions between accounts.
+  - List actual money movement transfers between accounts.
+  - Tampilkan transaksi transfer antar rekening.
+supported_intents:
+  - actual account transfer transactions and movement evidence
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: movement_evidenced_by_transaction
+    rule: actual money movement only asserted from transaction row.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

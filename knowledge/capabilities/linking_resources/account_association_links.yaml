@@ -1,0 +1,47 @@
+id: account_association_links
+status: approved_mvp
+domain: linking_resources
+display_name: Account Association Links
+description: >-
+  List linked accounts and portfolio account associations across loans and savings accounts:
+  association ID, loan account ID, savings account ID, linked loan account ID, linked savings account ID,
+  association type enum, active flag, and authorized office ID. Association type enum maps to
+  AccountAssociationType.java (INVALID=0, LINKED_ACCOUNT_ASSOCIATION=1, GUARANTOR_ACCOUNT_ASSOCIATION=2).
+  Surfaces cross-domain association linkage only, never proof of an executed transfer (actual transfer
+  evidence is kept under account_transfer_transactions / LINK-4). Governed by client office on either side.
+  Account numbers and external IDs are never returned.
+data_areas: [linking_resources]
+required_api_capability: account_association_links
+query_id: linking_resources.account_association_links
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: account_association, grouping: none, output: list, pii: none }
+examples:
+  - Show account association links and portfolio associations.
+  - List portfolio account associations for loans and savings.
+  - Tampilkan relasi akun dan asosiasi portofolio.
+supported_intents:
+  - linked account associations and portfolio associations
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: linkage_only_not_transfer
+    rule: linkage existence is not proof of transfer.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

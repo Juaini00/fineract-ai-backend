@@ -1,0 +1,44 @@
+id: transaction_reversals
+status: approved_mvp
+domain: linking_resources
+display_name: Transaction Reversals
+description: >-
+  List transaction reversal flags and correction linkage across loan, savings, and general ledger transaction records.
+  Surfaces reversal state so callers can filter reversed transactions by default to prevent double counting (§31).
+  Share accounts have no reversal field in schema (SHARE-8). Does not claim general accounting D12 capabilities.
+  Account numbers and external IDs are never returned.
+data_areas: [linking_resources]
+required_api_capability: transaction_reversals
+query_id: linking_resources.transaction_reversals
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: transaction_reversal, grouping: none, output: list, pii: none }
+examples:
+  - Show transaction reversals in my authorized offices.
+  - List transactions with reversal status and reference.
+  - Tampilkan pembalikan transaksi dan relasi koreksi.
+supported_intents:
+  - transaction reversals and correction linkage
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: reversals_surfaced_for_anti_double_count
+    rule: reversal flags are surfaced to allow default exclusion from sums.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

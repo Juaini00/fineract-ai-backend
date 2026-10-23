@@ -1,0 +1,36 @@
+info:
+  name: FIN-130 loan_payment_allocation narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin130_payment_allocation_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin130Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_payment_allocation", document, { truthKey: "loan_payment_allocation__scope_2_3", narrowedTo: 2 });
+          test("FIN-130 loan_payment_allocation narrow: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          answers.expectRowCap(
+            test,
+            expect,
+            "loan_payment_allocation",
+            document,
+            200,
+            answers.populationSize("loan_payment_allocation")
+          );
+          test("FIN-130 LINK-5 narrow: row cap 200 hit with 951 in scope 2,3", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(answers.answerRows(document).rows.length).to.equal(200);
+          });
+        }
