@@ -18,7 +18,7 @@ http:
     data: |
       {
         "session_id": "{{engineSessionId}}",
-        "request_text": "berapa total portfolio aktif bulan ini?"
+        "request_text": "Show the savings portfolio summary."
       }
 
 runtime:

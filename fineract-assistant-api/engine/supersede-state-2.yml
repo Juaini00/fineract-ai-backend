@@ -16,6 +16,10 @@ runtime:
   scripts:
     - type: tests
       code: |
+        // Sama seperti read-job-settled (FIN-167): tunggu settlement sebelum
+        // menegaskan Completed/Answered.
+        const poll = require("./lib/poll.js");
+        if (!(await poll.awaitJob(bru, req, res, (j) => poll.TERMINAL.includes(j.lifecycle)))) return;
         const job = res.getBody().data;
         test("FIN-147: jawaban kedua dengan scope berbeda Completed/Answered", function () {
           expect(res.getStatus()).to.equal(200);

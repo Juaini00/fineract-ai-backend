@@ -14,6 +14,12 @@ runtime:
   scripts:
     - type: tests
       code: |
+        // Baca job yang SUDAH settlement — turn analitik butuh ~2,5 detik
+        // (terukur, FIN-167), jadi satu bacaan tunggal pada +1,5 detik adalah
+        // balapan. Pola sama dengan assistant/*/03 (FIN-164): poll waktu-terbatas
+        // lewat lib/poll.js. Tidak ada asersi yang dilonggarkan.
+        const poll = require("./lib/poll.js");
+        if (!(await poll.awaitJob(bru, req, res, (j) => poll.TERMINAL.includes(j.lifecycle)))) return;
         const job = res.getBody().data;
 
         test("job mencapai state terminal tanpa campur tangan klien", function () {

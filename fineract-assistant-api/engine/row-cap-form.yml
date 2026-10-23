@@ -12,6 +12,10 @@ runtime:
   scripts:
     - type: tests
       code: |
+        // Sama seperti read-job-settled (FIN-167): form hanya ada setelah turn
+        // planner (~2,5 detik), jadi satu GET tunggal pada +1,5 detik balapan.
+        const poll = require("./lib/poll.js");
+        if (!(await poll.awaitJob(bru, req, res, () => true))) return;
         const form = res.getBody().data;
         test("FIN-133: form klarifikasi terbuka untuk slot client_id", function () {
           expect(res.getStatus()).to.equal(200);
