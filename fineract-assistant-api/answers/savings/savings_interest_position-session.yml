@@ -1,0 +1,23 @@
+info:
+  name: FIN-127 savings_interest_position session
+  type: http
+  seq: 11.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-127 savings_interest_position" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_interest_pos_session", res.getBody().data.id);

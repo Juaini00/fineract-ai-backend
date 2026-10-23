@@ -1,0 +1,33 @@
+info:
+  name: FIN-127 savings_account_balance_detail answer versus independent SQL
+  type: http
+  seq: 15.3
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin127_balance_detail_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "savings_account_balance_detail", document);
+          test("FIN-127 savings_account_balance_detail: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-127 SAV-4: positive non-zero savings balance detail rows and no raw PII", function () {
+            expect(document.outcome).to.equal("Answered");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(187);
+            for (const forbidden of ["account_no", "external_id", "client_name"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

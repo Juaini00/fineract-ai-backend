@@ -1,0 +1,41 @@
+id: savings.savings_account_lifecycle
+database: fineract
+sql_file: queries/savings/savings_account_lifecycle.sql
+data_areas: [savings_core, organization_foundation]
+tables: [m_savings_account, m_client, m_savings_product]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: product_name, type: string, sensitivity: public_business }
+  - { name: status_enum, type: bigint, sensitivity: public_business }
+  - { name: sub_status_enum, type: bigint, sensitivity: public_business }
+  - { name: reason_for_block, type: string, sensitivity: public_business }
+  - { name: submittedon_date, type: date, sensitivity: public_business }
+  - { name: approvedon_date, type: date, sensitivity: public_business }
+  - { name: rejectedon_date, type: date, sensitivity: public_business }
+  - { name: withdrawnon_date, type: date, sensitivity: public_business }
+  - { name: activatedon_date, type: date, sensitivity: public_business }
+  - { name: closedon_date, type: date, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: sub_status_enum_mapped
+    rule: sub_status_enum returned as bigint following SavingsAccountSubStatusEnum.java:24-30 (NONE=0, INACTIVE=100, DORMANT=200, ESCHEAT=300, BLOCK=400, BLOCK_CREDIT=500, BLOCK_DEBIT=600).
+  - id: status_enum_mapped
+    rule: status_enum returned as bigint following SavingsAccountStatusType.java:29-40.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

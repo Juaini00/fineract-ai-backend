@@ -1661,6 +1661,83 @@ All 5 assertion checks pass cleanly.
 `docs/data/dataset-inventory.md` rows SHARE-1..6, 8 moved to `inherited` (SHARE-6, 8 shared with client/general capabilities). SHARE-7 (evidence of settled share purchase/redemption) confirmed as gap intent (`gap_intents`) in `knowledge/domains/share.yaml`.
 `fineract-assistant-api/engine/policy-deferred-share-job.yml` created to assert remaining SHARE-7 gap intent ("Show settled share purchases and redemptions for this client.").
 
+## 21. FIN-127 / SAV-1..11 — savings full §22 expansion
+
+**Context & Scope.** `dataset-inventory.md` §6 rows SAV-1..11 cover the domain `savings`. In FIN-127, the remaining gap rows SAV-2, SAV-6, SAV-8, SAV-9, SAV-10, as well as the partial-inherited caveats on SAV-4 and SAV-5, are fully resolved by introducing 7 Mode-1 capabilities:
+- `savings_account_lifecycle` (SAV-2): Full account lifecycle covering submitted/activated/closed/dormant/block dates, sub_status_enum (mapped via `SavingsAccountSubStatusEnum.java`), and savings deposit_type_enum in (100, 300, 400).
+- `savings_interest_position` (SAV-6): Account-level earned, posted, and accrued interest, interest compounding/posting period enums, and nominal annual interest rate.
+- `savings_account_holds` (SAV-8): Transaction-level hold balances, hold reasons, release dates, and parent hold associations (`sat.sub_resource_id = 20/21/22` or `sat.parent_hold_transaction_id`).
+- `savings_withheld_tax` (SAV-9): Withholding tax percentage, tax group, and tax withholding flag on savings accounts. Genuine Empty outcome with `completeness = Complete` on standard fixture.
+- `savings_linked_accounts` (SAV-10): Portfolio account associations (`m_portfolio_account_associations`) linking savings accounts to loan or other portfolio accounts.
+- `savings_account_balance_detail` (SAV-4): Account-grain balance breakdown including nominal balance, available balance, on-hold funds, unauthorized overdraft, and overdraft limit.
+- `savings_transactions_by_type` (SAV-5): Aggregated transaction counts, total amount, and average amount grouped strictly by `[currency_code, transaction_type_enum, transaction_type_name]` without cross-currency mixing.
+
+**Built (Mode 1, bound `$1::bigint[]` authorized office scope, limit hard cap 200 with disclosed row cap):**
+1. `savings_account_lifecycle` (SAV-2):
+   - Lists savings accounts in authorized client offices (`c.office_id = ANY($1::bigint[])`).
+   - Grain: `account_id` (`sa.id`).
+   - Surfaces `sub_status_enum`, `sub_status_name`, `submitted_date`, `approved_date`, `activated_date`, `closed_date`, `dormant_date`, `lock_date`.
+   - Identity & privacy: `client_name`, `account_no`, and `external_id` are never returned.
+2. `savings_interest_position` (SAV-6):
+   - Surfaces earned vs posted interest derived amounts (`total_interest_earned_derived`, `total_interest_posted_derived`), `nominal_annual_interest_rate`, compounding and posting periods.
+   - Grain: `account_id` (`sa.id`).
+   - Preserves distinction between earned interest and posted interest.
+3. `savings_account_holds` (SAV-8):
+   - Surfaces hold/release transactions on savings accounts.
+   - Grain: `hold_transaction_id` (`sat.id`).
+   - Maps hold amounts, release transaction dates, hold reason descriptions, and parent hold references.
+4. `savings_withheld_tax` (SAV-9):
+   - Surfaces withholding tax configuration and tax group identifiers on savings accounts (`sa.withhold_tax`, `tg.name`).
+   - Grain: `account_id` (`sa.id`).
+   - Fixture fact: 0 rows on standard test data; verified as genuine `outcome = "Empty"` with `completeness = "Complete"`.
+5. `savings_linked_accounts` (SAV-10):
+   - Surfaces associations between savings accounts and other portfolio accounts (`m_portfolio_account_associations`).
+   - Grain: `association_id` (`paa.id`).
+   - Maps association type enums (1 = Linked account association).
+6. `savings_account_balance_detail` (SAV-4):
+   - Surfaces granular balance components: `account_balance_derived`, `available_balance`, `on_hold_funds`, `overdraft_amount`, `overdraft_limit`.
+   - Grain: `account_id` (`sa.id`).
+7. `savings_transactions_by_type` (SAV-5):
+   - Grouped transaction totals: `currency_code`, `transaction_type_enum`, `transaction_type_name`, `transaction_count`, `total_amount`, `avg_amount`.
+   - Strict currency grouping prevents multi-currency aggregation violation (#14).
+
+### 21.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{savings_account_lifecycle,savings_interest_position,savings_account_holds,savings_withheld_tax,savings_linked_accounts,savings_account_balance_detail,savings_transactions_by_type}.sql` (+ `__scope_2_3` variants).
+Locked run (`answers/savings`): 42 new requests / tests against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests (`outcome = "Empty"`).
+
+| Capability | Window / Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job ids (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| savings_account_lifecycle | office_ids + limit | 187 | 81 | live Bruno run |
+| savings_interest_position | office_ids + limit | 187 | 81 | live Bruno run |
+| savings_account_holds | office_ids + limit | 23 | 0 (Empty) | live Bruno run |
+| savings_withheld_tax | office_ids + limit | 0 (Empty) | 0 (Empty) | live Bruno run |
+| savings_linked_accounts | office_ids + limit | 90 | 31 | live Bruno run |
+| savings_account_balance_detail | office_ids + limit | 187 | 81 | live Bruno run |
+| savings_transactions_by_type | office_ids + limit | 33 | 20 | live Bruno run |
+
+### 21.2 VALUES-only semantics smoke (`tests/savings_semantics_smoke.sh`)
+
+`tests/savings_semantics_smoke.sh` shadows all underlying Fineract tables (`m_savings_account`, `m_client`, `m_savings_product`, `m_savings_account_transaction`, `m_portfolio_account_associations`, `m_tax_group`, `m_office`) using inline `VALUES` CTEs with unmodified production SQL text:
+1. **Lifecycle Scope & Status Filtering**: Covers submitted, approved, active, closed, and dormant/block status mapping; filters out fixed/recurring deposits (`deposit_type_enum = 200`); filters out unauthorized offices.
+2. **Interest Position Calculations**: Verifies distinct earned vs posted interest; checks compounding and posting period enums.
+3. **Account Holds & Releases**: Verifies hold amounts, release amounts, parent hold relationships, and office boundary enforcement.
+4. **Withheld Tax Scope & Empty Semantics**: Verifies tax group join and Empty outcome when no tax withholding exists.
+5. **Linked Accounts Associations**: Verifies association types, linked account IDs, active flags, and office boundaries.
+6. **Balance Detail Granularity**: Verifies available balance, on-hold funds, overdraft amounts, and overdraft limits.
+7. **Transactions by Type Aggregation**: Verifies grouping by currency code and transaction type enum without cross-currency contamination.
+All 7 assertion checks pass cleanly.
+
+### 21.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/savings`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, dates, quantities, amounts, currency codes, and status strings are returned; `account_no`, `external_id`, and `client_name` are never returned.
+4. **Semantics**: Office authorization via client office, proper enum mappings to Fineract source enums, multi-currency safe grouping.
+
+### 21.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` rows SAV-2, SAV-4, SAV-5, SAV-6, SAV-8, SAV-9, SAV-10, FDRD-5, FDRD-7 moved to `inherited`. Domain `savings` now has 0 gap rows across all 11 items. Domain `tax` updated to `approved_mvp`.
 
 ## 22. FIN-128 / CLI-1..8 — client/ownership full §20 expansion
 

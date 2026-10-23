@@ -1,0 +1,28 @@
+info:
+  name: FIN-127 savings_interest_position job
+  type: http
+  seq: 11.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{fin127_interest_pos_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin127_interest_pos_session}}", "request_text": "Show savings interest earned versus posted from November 2025 to April 2026." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin127_interest_pos_key", "fin127-interest-pos-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_interest_pos_job", res.getBody().data.job_id);

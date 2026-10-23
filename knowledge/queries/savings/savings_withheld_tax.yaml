@@ -1,0 +1,31 @@
+id: savings.savings_withheld_tax
+database: fineract
+sql_file: queries/savings/savings_withheld_tax.sql
+data_areas: [savings_core, organization_foundation]
+tables: [m_savings_account, m_client, m_tax_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: withhold_tax, type: boolean, sensitivity: public_business }
+  - { name: tax_group_id, type: bigint, sensitivity: public_business }
+  - { name: tax_group_name, type: string, sensitivity: public_business }
+  - { name: total_withhold_tax_derived, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+grain: [account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: tax_config_distinct_from_withheld
+    rule: tax config (m_tax_group) is distinct from actual withheld amounts (total_withhold_tax_derived).
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

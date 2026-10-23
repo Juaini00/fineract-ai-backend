@@ -1,0 +1,23 @@
+info:
+  name: FIN-127 savings_account_balance_detail session
+  type: http
+  seq: 15.1
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-127 savings_account_balance_detail" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_balance_detail_session", res.getBody().data.id);

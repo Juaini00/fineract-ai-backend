@@ -1,0 +1,40 @@
+id: savings.savings_interest_position
+database: fineract
+sql_file: queries/savings/savings_interest_position.sql
+data_areas: [savings_core, organization_foundation]
+tables: [m_savings_account, m_client, m_savings_product]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: product_name, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: nominal_annual_interest_rate, type: decimal, sensitivity: public_business }
+  - { name: interest_compounding_period_enum, type: bigint, sensitivity: public_business }
+  - { name: interest_posting_period_enum, type: bigint, sensitivity: public_business }
+  - { name: interest_calculation_type_enum, type: bigint, sensitivity: public_business }
+  - { name: interest_calculation_days_in_year_type_enum, type: bigint, sensitivity: public_business }
+  - { name: total_interest_earned_derived, type: decimal, sensitivity: public_business }
+  - { name: total_interest_posted_derived, type: decimal, sensitivity: public_business }
+  - { name: interest_posted_till_date, type: date, sensitivity: public_business }
+  - { name: last_interest_calculation_date, type: date, sensitivity: public_business }
+  - { name: submittedon_date, type: date, sensitivity: public_business }
+grain: [account_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains m_client.office_id with ANY($1::bigint[]).
+  - id: earned_distinct_from_posted
+    rule: total_interest_earned_derived and total_interest_posted_derived are separately surfaced and never merged.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

@@ -1,0 +1,28 @@
+info:
+  name: FIN-127 savings_account_lifecycle job
+  type: http
+  seq: 10.2
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{answersToken}}"
+    - name: Idempotency-Key
+      value: "{{fin127_account_lifecycle_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin127_account_lifecycle_session}}", "request_text": "Show savings account lifecycle and status from November 2025 to April 2026." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin127_account_lifecycle_key", "fin127-account-lifecycle-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin127_account_lifecycle_job", res.getBody().data.job_id);
