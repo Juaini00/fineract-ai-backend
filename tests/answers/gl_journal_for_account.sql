@@ -1,4 +1,4 @@
--- params: {"gl_code": null, "account_name": null, "from_date": null, "to_date": null, "limit": 200}
+-- params: {"gl_code": "20101", "account_name": null, "from_date": null, "to_date": null, "limit": 200}
 -- FIN-112 D12: general ledger journal debit/credit entries in authorized offices.
 -- Written independently of queries/accounting/gl_journal_for_account.sql:
 -- office scope resolved via CTE join, account filter applied over CTE.
@@ -34,5 +34,6 @@ SELECT
 FROM acc_gl_journal_entry gl
 JOIN scoped_offices so ON so.office_id = gl.office_id
 JOIN account_ref ar ON ar.account_id = gl.account_id
+WHERE ar.gl_code = '20101'
 ORDER BY gl.office_id, gl.entry_date DESC, gl.id DESC
 LIMIT 200

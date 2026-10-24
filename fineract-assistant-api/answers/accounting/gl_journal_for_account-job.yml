@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{fin112_journal_account_session}}", "request_text": "Show general ledger journal entries for one account." }
+      { "session_id": "{{fin112_journal_account_session}}", "request_text": "Show general ledger journal entries for GL account 20101." }
 runtime:
   scripts:
     - type: before-request

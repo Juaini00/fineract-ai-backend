@@ -34,3 +34,5 @@ checks:
     rule: SQL filters entry_date between $4::date and $5::date.
   - id: no_account_numbers
     rule: account_no and external_id are never selected.
+  - id: named_subject_required
+    rule: request must carry gl_code or account_name; with neither the SQL returns no rows — a whole-ledger recap is the D12-excluded trial-balance shape.

@@ -25,6 +25,7 @@ SELECT
 FROM acc_gl_journal_entry gl
 JOIN acc_gl_account a ON a.id = gl.account_id
 WHERE gl.office_id = ANY($1::bigint[])
+  AND ($2::varchar IS NOT NULL OR $3::varchar IS NOT NULL)
   AND ($2::varchar IS NULL OR a.gl_code = $2::varchar)
   AND ($3::varchar IS NULL OR a.name = $3::varchar)
   AND ($4::date IS NULL OR gl.entry_date >= $4::date)

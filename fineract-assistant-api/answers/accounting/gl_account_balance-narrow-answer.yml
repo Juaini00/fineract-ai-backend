@@ -24,6 +24,6 @@ runtime:
           });
           test("FIN-112 D12 narrow: row count matches scope 2,3", function () {
             expect(document.outcome).to.equal("Answered");
-            expect(answers.answerRows(document).rows.length).to.equal(6);
+            expect(answers.answerRows(document).rows.length).to.equal(4);
           });
         }

@@ -4,6 +4,8 @@ domain: accounting
 display_name: GL Account Balance
 description: >-
   Calculate deterministic debit total, credit total, and net balance for one named GL account within authorized offices and date window.
+  The request must name the account (gl_code or exact account_name); a request without a named account returns no rows —
+  a whole-ledger recap itself is outside the approved D12 scope.
   Excludes reversed entries and paired reversal entries from totals (§31 anti-double-count) while surfacing their counts.
   Sums are grouped per office and currency without cross-currency consolidation.
 data_areas: [accounting_gl]
@@ -14,14 +16,11 @@ output_mode: list
 request_shape: { operation: summary, subject: gl_account_balance, grouping: office_currency, output: table, pii: none }
 examples:
   - Show general ledger balance for one named account.
-  - Saldo dan mutasi akun buku besar.
-  - General ledger balance and turnover for account.
-  - Show balance and turnover for general ledger accounts.
+  - Saldo dan mutasi akun buku besar 20101.
+  - Show balance and turnover for GL account 20101.
 supported_intents:
   - general ledger balance for one named account
   - saldo and turnover of general ledger account
-  - balance and turnover for general ledger accounts
-  - general ledger account balances and turnover across offices
 guards:
   require_office_scope: true
   pii:

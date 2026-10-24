@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{fin112_account_balance_session}}", "request_text": "Show general ledger balance and turnover for account." }
+      { "session_id": "{{fin112_account_balance_session}}", "request_text": "Show general ledger balance and turnover for GL account 20101." }
 runtime:
   scripts:
     - type: before-request

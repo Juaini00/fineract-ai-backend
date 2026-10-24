@@ -156,5 +156,27 @@ else
   fail "ACC-9 gl_journal_for_transaction: transaction TX-107 in office 9 leaked under scope {2,3}: $out_tx9"
 fi
 
+# 7. D12 named-subject guards: requests without a named subject return no rows (no ledger recap).
+out_unnamed_balance="$(run_balance "{2,3}" "NULL" "NULL" "'2026-03-01'" "'2026-03-31'")"
+if [ -z "$out_unnamed_balance" ]; then
+  pass "ACC-10 gl_account_balance: request without a named account returns no rows (no whole-ledger recap, D12 boundary)"
+else
+  fail "ACC-10 gl_account_balance: unnamed request returned a ledger recap: $out_unnamed_balance"
+fi
+
+out_unnamed_journal="$(run_journal_account "{2,3}" "NULL" "NULL" "NULL" "NULL" 100)"
+if [ -z "$out_unnamed_journal" ]; then
+  pass "ACC-11 gl_journal_for_account: request without a named account returns no rows (no unfiltered ledger dump)"
+else
+  fail "ACC-11 gl_journal_for_account: unnamed request returned rows: $out_unnamed_journal"
+fi
+
+out_unnamed_tx="$(run_journal_tx "{2,3}" "NULL" 100)"
+if [ -z "$out_unnamed_tx" ]; then
+  pass "ACC-12 gl_journal_for_transaction: request without transaction_id returns no rows"
+else
+  fail "ACC-12 gl_journal_for_transaction: transaction-less request returned rows: $out_unnamed_tx"
+fi
+
 echo "=== Smoke result: $fail failure(s) ==="
 exit $fail
