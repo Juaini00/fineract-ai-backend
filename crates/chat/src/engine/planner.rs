@@ -27,6 +27,7 @@ pub enum Bound {
     NullText,
     NullBigintArray,
     NullBigint,
+    NullDate,
     /// Row cap capability untuk `limit: unbounded` tanpa `default_limit`
     /// (FIN-133). Nilainya adalah **cap**; executor mengikat `cap + 1` supaya
     /// "ada baris melebihi cap" teramati, lalu worker memotong hasil ke cap dan
@@ -964,6 +965,7 @@ fn null_for(kind: &str) -> Option<Bound> {
         "string" => Some(Bound::NullText),
         "array_bigint" => Some(Bound::NullBigintArray),
         "bigint" | "integer" => Some(Bound::NullBigint),
+        "date" => Some(Bound::NullDate),
         _ => None,
     }
 }

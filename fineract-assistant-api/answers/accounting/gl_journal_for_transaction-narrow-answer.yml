@@ -1,0 +1,36 @@
+info:
+  name: FIN-112 gl_journal_for_transaction narrow answer versus independent SQL
+  type: http
+  seq: 16
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin112_journal_tx_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin112Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "gl_journal_for_transaction", document, { truthKey: "gl_journal_for_transaction__scope_2_3", narrowedTo: 2 });
+          test("FIN-112 gl_journal_for_transaction narrow: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          answers.expectRowCap(
+            test,
+            expect,
+            "gl_journal_for_transaction",
+            document,
+            200,
+            answers.populationSize("gl_journal_for_transaction")
+          );
+          test("FIN-112 D12 narrow: positive transaction journal entries under scope 2,3", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(answers.answerRows(document).rows.length).to.equal(200);
+          });
+        }

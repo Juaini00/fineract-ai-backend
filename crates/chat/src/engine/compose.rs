@@ -837,7 +837,10 @@ pub fn bindings(plan: &Plan) -> Value {
                     Bound::Bigint(value) | Bound::RowCap(value) => Value::from(*value),
                     Bound::Text(value) => Value::String(value.clone()),
                     Bound::OfficeIds(_) => Value::String(format!("{office_count} authorized offices")),
-                    Bound::NullText | Bound::NullBigintArray | Bound::NullBigint => Value::Null,
+                    Bound::NullText
+                    | Bound::NullBigintArray
+                    | Bound::NullBigint
+                    | Bound::NullDate => Value::Null,
                 },
             })
         })

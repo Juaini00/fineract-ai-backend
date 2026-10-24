@@ -1,0 +1,44 @@
+id: accounting.gl_journal_for_transaction
+database: fineract
+sql_file: queries/accounting/gl_journal_for_transaction.sql
+data_areas: [accounting_gl]
+tables: [acc_gl_journal_entry, acc_gl_account]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: transaction_id, type: string, required: false }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: journal_entry_id, type: bigint, sensitivity: public_business }
+  - { name: account_id, type: bigint, sensitivity: public_business }
+  - { name: gl_code, type: string, sensitivity: public_business }
+  - { name: account_name, type: string, sensitivity: public_business }
+  - { name: classification_enum, type: integer, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: transaction_id, type: string, sensitivity: public_business }
+  - { name: entry_date, type: date, sensitivity: public_business }
+  - { name: entry_type, type: integer, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: reversed, type: boolean, sensitivity: public_business }
+  - { name: reversal_id, type: bigint, sensitivity: public_business }
+  - { name: is_reversal_entry, type: boolean, sensitivity: public_business }
+  - { name: manual_entry, type: boolean, sensitivity: public_business }
+  - { name: loan_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: savings_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: client_transaction_id, type: bigint, sensitivity: public_business }
+  - { name: share_transaction_id, type: bigint, sensitivity: public_business }
+grain: [journal_entry_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains gl.office_id with ANY($1::bigint[]).
+  - id: reversals_surfaced_for_anti_double_count
+    rule: reversed flag and reversal entry correlation are surfaced explicitly without excluding rows in list.
+  - id: debit_credit_from_type_enum
+    rule: entry_type preserves raw type_enum (1=CREDIT, 2=DEBIT) without relabeling.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

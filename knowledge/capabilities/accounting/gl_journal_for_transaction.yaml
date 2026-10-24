@@ -1,0 +1,46 @@
+id: gl_journal_for_transaction
+status: approved_mvp
+domain: accounting
+display_name: GL Journal Entries for Transaction
+description: >-
+  List general ledger journal debit and credit entry rows produced by one business transaction reference.
+  Surfaces reversal flags, manual entry flag, and source transaction linkage across loan, savings, client, and share transactions.
+  Office-scoped to authorized offices.
+data_areas: [accounting_gl]
+required_api_capability: gl_journal_for_transaction
+query_id: accounting.gl_journal_for_transaction
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: journal_entry, grouping: none, output: list, pii: none }
+examples:
+  - Show journal entries for transaction L1693.
+  - Tunjukkan jurnal debit dan kredit dari transaksi bisnis ini.
+  - List general ledger journal entries produced by a business transaction.
+supported_intents:
+  - journal entries produced by a business transaction
+  - journal debit and credit entries of this transaction
+  - general ledger journal entries produced by a business transaction
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  transaction_id: { type: string, required: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: reversals_surfaced_for_anti_double_count
+    rule: reversal flags and reversal entry flags are surfaced explicitly.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

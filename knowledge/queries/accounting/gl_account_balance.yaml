@@ -1,0 +1,36 @@
+id: accounting.gl_account_balance
+database: fineract
+sql_file: queries/accounting/gl_account_balance.sql
+data_areas: [accounting_gl]
+tables: [acc_gl_journal_entry, acc_gl_account]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: gl_code, type: string, required: false }
+  - { name: account_name, type: string, required: false }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+output_fields:
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: debit_total, type: decimal, sensitivity: public_business }
+  - { name: credit_total, type: decimal, sensitivity: public_business }
+  - { name: balance, type: decimal, sensitivity: public_business }
+  - { name: entry_count, type: bigint, sensitivity: public_business }
+  - { name: reversed_entry_count, type: bigint, sensitivity: public_business }
+  - { name: reversal_entry_count, type: bigint, sensitivity: public_business }
+  - { name: manual_entry_count, type: bigint, sensitivity: public_business }
+grain: [office_id, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains gl.office_id with ANY($1::bigint[]).
+  - id: reversals_excluded_from_sums
+    rule: reversed entries and paired reversal entries are excluded from debit, credit, and balance sums.
+  - id: per_currency_only
+    rule: sums are grouped per office and currency with no cross-currency consolidation.
+  - id: date_filter_is_bound
+    rule: SQL filters entry_date between $4::date and $5::date.
+  - id: no_account_numbers
+    rule: account_no and external_id are never selected.

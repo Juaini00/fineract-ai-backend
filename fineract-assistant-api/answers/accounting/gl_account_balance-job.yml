@@ -1,0 +1,28 @@
+info:
+  name: FIN-112 gl_account_balance job
+  type: http
+  seq: 18
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin112Token}}"
+    - name: Idempotency-Key
+      value: "{{fin112_account_balance_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin112_account_balance_session}}", "request_text": "Show general ledger balance and turnover for account." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin112_account_balance_key", "fin112-bal-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin112_account_balance_job", res.getBody().data.job_id);

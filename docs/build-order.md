@@ -2411,6 +2411,17 @@ stays `gap`; the ticket is not closed here**):
 - Deterministic synthetic proof: `tests/linking_resources_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 10 semantic checks.
 - Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-112 (GL traceability: D12 journal & saldo satu GL account):**
+
+- Delivered 3 curated Mode-1 capabilities for domain `accounting` (`knowledge/domains/accounting.yaml`): `gl_journal_for_account`, `gl_journal_for_transaction`, and `gl_account_balance`.
+- Domain and inventory alignment: transitioned domain `accounting` from `status: gap` to `status: approved_mvp`; moved D12 (`acc_gl_journal_entry`, `acc_gl_account`) to `inherited (FIN-112)` in `docs/data/dataset-inventory.md` with 3 capabilities registered; data area `accounting-gl` updated to `status: included_mvp_domain`.
+- Boundaries and constraints: Trial balance, balance sheet, and profit-and-loss reports are explicitly and permanently out of scope per D12 boundary (retained under `unsupported_intents` only). All queries bind `$1::bigint[]` authorized office scope. Hard limit cap 200 enforced with population disclosure. Account numbers and external IDs excluded.
+- Anti-double-count reversal rule (§31): `gl_account_balance` debit, credit, and balance sums strictly exclude both reversed entries (`reversed = true`) and paired reversal entries (`EXISTS (SELECT 1 FROM acc_gl_journal_entry rev WHERE rev.reversal_id = gl.id)`), while surfacing their counts explicitly. Sums are strictly grouped by `(office_id, currency_code)` with no cross-currency consolidation.
+- Engine enhancement: Added `Bound::NullDate` support in `chat::engine::planner`, `executor`, and `compose` so optional date parameters without defaults bind `Option::<NaiveDate>::None` cleanly without failing.
+- HTTP proof (`answers/accounting`): 35 requests / 48 tests, 100% PASS against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests in office 9 (`outcome = "Empty"`) and zero commit-isolation violations (OVR-6.7).
+- Deterministic synthetic proof: `tests/accounting_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 9 semantic criteria.
+- Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

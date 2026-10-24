@@ -1,0 +1,9 @@
+info:
+  name: accounting
+  seq: 15
+  description: |
+    FIN-112 (LC.5 / D12): general ledger traceability for single GL account and business transactions.
+    gl_journal_for_account, gl_journal_for_transaction, and gl_account_balance.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization);
+    the -empty job carries office_ids [9] (genuine empty branch).

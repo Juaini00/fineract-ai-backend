@@ -96,6 +96,7 @@ pub async fn run(
                 Bound::NullText => query.bind(Option::<String>::None),
                 Bound::NullBigintArray => query.bind(Option::<Vec<i64>>::None),
                 Bound::NullBigint => query.bind(Option::<i64>::None),
+                Bound::NullDate => query.bind(Option::<chrono::NaiveDate>::None),
             };
         }
 
