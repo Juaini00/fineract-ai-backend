@@ -485,16 +485,15 @@ mod tests {
     }
 
     /// OVR-6.6 (FIN-140/FIN-153) — subjek domain deferred/gap (tax,
-    /// accounting, audit, share, client address/share roster, group/center
+    /// audit, share, client address/share roster, group/center
     /// di luar savings) dikenali lintas bahasa, tanpa menanam istilah di
-    /// Rust.
+    /// Rust. (Accounting approved under FIN-112).
     #[test]
     fn deferred_domain_subjects_are_recognized() {
         let deferred = deferred_domains();
         for text in [
             "Berapa pajak yang terkumpul bulan ini?",
             "What is the tax rate for this account?",
-            "Show journal entries for this month.",
             // FIN-153 — share domain: approved share capabilities under FIN-111;
             // residual per-transaction settlement proof (SHARE-7) stays gap.
             "Show settled share purchases and redemptions for this client.",
@@ -509,6 +508,7 @@ mod tests {
             // Products masters moved to approved under FIN-109;
             // FD/RD identity/terms/funding/contributions/shortfall approved under FIN-110 (FDRD-9 schedule stays gap).
             // Linking resources approved under FIN-130 (LINK-3..8).
+            // Accounting approved under FIN-112 (D12).
             "Show the recurring deposit installment schedule for this account.",
             "Show the cash reconciliation for this teller.",
             "Show the physical cash count for this teller.",
@@ -529,7 +529,6 @@ mod tests {
             "Show the historical office as of a past date for this client.",
             "Show the consolidated total across currencies for this branch.",
             "Show the completeness analysis by category for this portfolio.",
-            "Tampilkan saldo akun buku besar.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
         }
@@ -717,6 +716,48 @@ mod tests {
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
             assert_eq!(term.source, expected_source, "{gap}");
+        }
+    }
+
+    /// FIN-112 (D12): general ledger journal entries and balance for one named GL account
+    /// are approved capabilities and not guarded by deferred/gap;
+    /// trial balance / balance sheet / P&L remain rejected by policy, and related gap domains stay guarded.
+    #[test]
+    fn accounting_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show journal entries for account 20101.",
+            "Show journal entries for this business transaction.",
+            "What is the general ledger balance for account 20101?",
+            "Show general ledger balance for one named account.",
+            "Show journal entries for one account or transaction.",
+            "Show journal entries for this month.",
+            "Tampilkan saldo akun buku besar.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the standing instruction execution history for this account.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+            ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+        for unsupported in [
+            "Show trial balance for this branch.",
+            "Generate balance sheet.",
+            "Show profit and loss report.",
+        ] {
+            assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
         }
     }
 

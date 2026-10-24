@@ -1,0 +1,28 @@
+info:
+  name: FIN-112 gl_journal_for_account empty job
+  type: http
+  seq: 9
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin112Token}}"
+    - name: Idempotency-Key
+      value: "{{fin112_journal_account_empty_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin112_journal_account_empty_session}}", "request_text": "Show general ledger journal entries for one account.", "office_ids": [9] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin112_journal_account_empty_key", "fin112-jacc-empty-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin112_journal_account_empty_job", res.getBody().data.job_id);

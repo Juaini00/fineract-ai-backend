@@ -1,0 +1,48 @@
+id: gl_account_balance
+status: approved_mvp
+domain: accounting
+display_name: GL Account Balance
+description: >-
+  Calculate deterministic debit total, credit total, and net balance for one named GL account within authorized offices and date window.
+  Excludes reversed entries and paired reversal entries from totals (§31 anti-double-count) while surfacing their counts.
+  Sums are grouped per office and currency without cross-currency consolidation.
+data_areas: [accounting_gl]
+required_api_capability: gl_account_balance
+query_id: accounting.gl_account_balance
+metrics: []
+output_mode: list
+request_shape: { operation: summary, subject: gl_account_balance, grouping: office_currency, output: table, pii: none }
+examples:
+  - Show general ledger balance for one named account.
+  - Saldo dan mutasi akun buku besar.
+  - General ledger balance and turnover for account.
+  - Show balance and turnover for general ledger accounts.
+supported_intents:
+  - general ledger balance for one named account
+  - saldo and turnover of general ledger account
+  - balance and turnover for general ledger accounts
+  - general ledger account balances and turnover across offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  gl_code: { type: string, required: false }
+  account_name: { type: string, required: false }
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: reversals_excluded_from_sums
+    rule: reversed entries and paired reversal entries are excluded from debit, credit, and balance sums.
+  - id: per_currency_only
+    rule: sums are grouped per office and currency with no cross-currency consolidation.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

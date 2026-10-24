@@ -1,5 +1,5 @@
 id: accounting_gl
-status: gap
+status: included_mvp_domain
 source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
 inventory_refs:
   - D12
@@ -7,20 +7,21 @@ description: >-
   Accounting general ledger — journal entries and one named GL account's
   balance/movement (D12). Full trial balance/financial statements stay
   excluded by D12 itself; see `knowledge/domains/accounting.yaml`.
-included_tables: []
-conditional_tables: []
-excluded_tables:
+included_tables:
   - acc_gl_account
   - acc_gl_journal_entry
+conditional_tables: []
+excluded_tables:
   - acc_accounting_rule
   - acc_product_mapping
   - acc_gl_closure
 allowed_domains:
   - accounting
 default_rules:
-  - GL traceability is agreed baseline scope (D12) with no approved capability yet; journal entry retrieval must still respect the D12 boundary (no trial balance/financial statements) once a capability is authored.
+  - "GL traceability is agreed baseline scope delivered as Mode-1 capabilities (D12, FIN-112); journal entry retrieval and balance aggregation respect the D12 boundary (no trial balance or financial statements)."
+  - "Reversals are surfaced and excluded from balance sums (§31 anti-double-count) to avoid inflating mutasi."
 checks:
-  - id: gap_not_runtime
-    rule: this area must not be referenced by approved_mvp capabilities or queries until a Mode-1 capability is authored.
-  - id: domain_status_gap
-    rule: matching accounting domain must remain gap, not approved_mvp, until D12's row moves to inherited.
+  - id: office_scope_required
+    rule: every accounting query must bind authorized office scope.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned (PII safe).

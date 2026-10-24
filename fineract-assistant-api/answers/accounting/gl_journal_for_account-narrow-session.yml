@@ -1,0 +1,23 @@
+info:
+  name: FIN-112 gl_journal_for_account narrow session
+  type: http
+  seq: 5
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin112Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-112 gl_journal_for_account narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin112_journal_account_narrow_session", res.getBody().data.id);

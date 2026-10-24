@@ -1891,3 +1891,55 @@ All 10 assertion checks pass cleanly.
 `docs/data/dataset-inventory.md` rows LINK-3, LINK-4, LINK-5, LINK-6, LINK-7, and LINK-8 moved to `inherited` (Mode-1 capabilities).
 Domain `linking_resources` moved to `status: approved_mvp` with 0 gap rows.
 Standing instructions (D05 / FIN-114) remain excluded/deferred.
+
+## 24. FIN-112 / D12 — GL traceability: journal & saldo satu GL account
+
+**Context & Scope.** `dataset-inventory.md` row D12 covers general ledger journal entries and balance/movement of one named GL account (`acc_gl_journal_entry` and `acc_gl_account`).
+Full trial balance, balance sheet, and profit-and-loss reports are explicitly and permanently excluded per D12 boundary (`dataset-scope-decisions.md:156-164`) and remain in `unsupported_intents`.
+Three Mode-1 capabilities delivered under domain `accounting` (`knowledge/domains/accounting.yaml`):
+1. `gl_journal_for_account`: debit/credit journal entries of one named GL account (filter: `gl_code` or exact `account_name`), office-scoped (`office_ids` with `ANY($1::bigint[])`), bound LIMIT 200 last. Grain: `[journal_entry_id]`.
+2. `gl_journal_for_transaction`: journal entries produced by one business transaction (`transaction_id` varchar), office-scoped, bound LIMIT 200. Grain: `[journal_entry_id]`.
+3. `gl_account_balance`: deterministic debit total, credit total, and net balance for one named GL account within authorized offices and date window. Grouped per `(office_id, currency_code)` without cross-currency consolidation.
+   - Anti-double-count reversal rule (§31): sums strictly exclude both reversed entries (`reversed = true`) and paired reversal entries (`EXISTS (SELECT 1 FROM acc_gl_journal_entry rev WHERE rev.reversal_id = gl.id)`), while surfacing their counts explicitly in `reversed_entry_count` and `reversal_entry_count`.
+
+### 24.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{gl_journal_for_account,gl_journal_for_transaction,gl_account_balance}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked run (`answers/accounting`, port 3312): 35 requests, 48/48 tests PASS (100%) against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population test in office 9 and zero commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| gl_journal_for_account | office_ids + limit | 200 (capped from 37,077) | 200 (capped from 37,077) | Completed / Answered |
+| gl_journal_for_transaction | office_ids + limit | 200 (capped from 37,077) | 200 (capped from 37,077) | Completed / Answered |
+| gl_account_balance | office_ids + from_date + to_date | 41 | 6 | Completed / Answered |
+
+In addition, empty population tested:
+- `gl_journal_for_account`: office 9 returns 0 rows with `outcome = "Empty"`.
+
+### 24.2 VALUES-only semantics smoke (`tests/accounting_semantics_smoke.sh`)
+
+`tests/accounting_semantics_smoke.sh` shadows `acc_gl_journal_entry` and `acc_gl_account` using inline `VALUES` CTEs with unmodified production SQL text, asserting 9 semantic checks:
+1. **Account Filter Disjunction**: Filtering by `gl_code` or `account_name` returns matching rows; unmatched accounts return 0 rows.
+2. **Reversal Status Flagging**: Correctly flags original reversed entries (`reversed = true`) and paired reversal entries (`reversal_id IS NOT NULL`).
+3. **Office Scoping (Journal Account)**: Strict `ANY($1::bigint[])` office isolation; entries in office 9 excluded when querying authorized offices `{1, 2, 3}`.
+4. **Transaction ID Filtering**: `gl_journal_for_transaction` correctly selects rows matching specific `transaction_id`.
+5. **Office Scoping (Journal Transaction)**: Enforces office scoping on transaction-produced journal entries.
+6. **Anti-Double-Count Reversal Exclusion**: `gl_account_balance` debit, credit, and balance sums exclude reversed and reversal entries while surfacing their counts.
+7. **Per-Office & Per-Currency Grouping**: Saldo grouped by `(office_id, currency_code)` with no cross-currency consolidation.
+8. **Date Window Filtering**: Saldo computation respects `from_date` and `to_date` bounds.
+9. **Office Scoping (Account Balance)**: Account balances correctly restricted to authorized offices.
+All 9 assertion checks pass cleanly.
+
+### 24.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/accounting`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only operational IDs, dates, quantities, amounts, currency codes, and status strings returned; `account_no`, `external_id`, and client names are never returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, reversal anti-double-count rule strictly applied.
+
+### 24.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D12 moved from `gap` to `inherited (FIN-112)` (Mode-1 capabilities).
+Domain `accounting` moved to `status: approved_mvp` with 0 gap rows.
+Data area `accounting-gl` updated to `status: included_mvp_domain`.
+Trial balance, balance sheet, and profit-and-loss reports remain in `unsupported_intents` per D12 boundary.
