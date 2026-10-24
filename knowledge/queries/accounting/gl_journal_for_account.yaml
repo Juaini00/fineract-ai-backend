@@ -39,6 +39,8 @@ checks:
     rule: SQL constrains gl.office_id with ANY($1::bigint[]).
   - id: reversals_surfaced_for_anti_double_count
     rule: reversed flag and reversal entry correlation are surfaced explicitly without excluding rows in list.
+  - id: named_subject_required
+    rule: request must carry gl_code or account_name; with neither the SQL returns no rows — journal traceability is per named account or transaction, not an unfiltered ledger dump.
   - id: debit_credit_from_type_enum
     rule: entry_type preserves raw type_enum (1=CREDIT, 2=DEBIT) without relabeling.
   - id: no_account_numbers

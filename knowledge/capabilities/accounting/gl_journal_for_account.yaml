@@ -4,6 +4,8 @@ domain: accounting
 display_name: GL Journal Entries for Account
 description: >-
   List general ledger journal debit and credit entry rows for one named GL account filtered by GL code or account name.
+  The request must name the account; a request without a named account returns no rows — journal traceability is per
+  named account or transaction, not an unfiltered ledger dump.
   Surfaces reversal flags, manual entry flag, and source transaction linkage across loan, savings, client, and share transactions.
   Office-scoped to authorized offices.
 data_areas: [accounting_gl]
@@ -15,10 +17,10 @@ request_shape: { operation: list, subject: journal_entry, grouping: none, output
 examples:
   - Show journal entries for GL account 20101.
   - Tunjukkan jurnal debit dan kredit untuk akun Savings Deposits.
-  - List journal entries for general ledger account in my authorized offices.
+  - List journal entries for GL account 10101 in my authorized offices.
 supported_intents:
   - journal entries for one account or transaction
-  - general ledger journal entries for account
+  - general ledger journal entries for one named account
 guards:
   require_office_scope: true
   pii:

@@ -1,4 +1,4 @@
--- params: {"gl_code": null, "account_name": null, "from_date": ":today-12m", "to_date": ":today"}
+-- params: {"gl_code": "20101", "account_name": null, "from_date": ":today-12m", "to_date": ":today"}
 -- NARROWED to offices 2 and 3 (partial authorization proof): the job body carries office_ids [2,3].
 -- FIN-112 D12: general ledger account balance and turnover in offices 2 and 3.
 WITH scoped_offices AS (
@@ -19,7 +19,9 @@ SELECT
     COUNT(*) FILTER (WHERE gl.manual_entry)::bigint AS manual_entry_count
 FROM acc_gl_journal_entry gl
 JOIN scoped_offices so ON so.office_id = gl.office_id
-WHERE gl.entry_date >= (:'today'::date - interval '12 months')::date
+JOIN acc_gl_account a ON a.id = gl.account_id
+WHERE a.gl_code = '20101'
+  AND gl.entry_date >= (:'today'::date - interval '12 months')::date
   AND gl.entry_date <= :'today'::date
 GROUP BY gl.office_id, gl.currency_code
 ORDER BY gl.office_id, gl.currency_code

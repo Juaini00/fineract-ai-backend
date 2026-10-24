@@ -2421,6 +2421,15 @@ stays `gap`; the ticket is not closed here**):
 - HTTP proof (`answers/accounting`): 35 requests / 48 tests, 100% PASS against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests in office 9 (`outcome = "Empty"`) and zero commit-isolation violations (OVR-6.7).
 - Deterministic synthetic proof: `tests/accounting_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 9 semantic criteria.
 - Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+- Coordinator boundary re-proof (2026-10-24, follow-up commit): the first delivery left subject filters optional in all
+  three SQLs, so an unnamed request returned the whole-ledger recap (23 office × currency balance rows) that D12
+  excludes; fixed with SQL named-subject guards (zero rows without a subject), `named_subject_required` /
+  `transaction_subject_required` manifest checks, plural supported-intents removed from `gl_account_balance`, and smoke
+  grown 9 → 12 assertions (ACC-10..12). Re-proof: locked Bruno 51 requests / 48 tests PASS with 0 commit-isolation
+  violations; catalog 0 errors; populations re-verified by direct SQL (`acc_gl_journal_entry` 37,077,
+  `acc_gl_account` 362, `acc_product_mapping` 259, `acc_gl_closure` 1, `acc_accounting_rule` 0); reversal pointer
+  direction pinned from Fineract source (`revertJournalEntry` sets the ORIGINAL's `reversal_id` to the new reversal
+  entry, `JournalEntryWritePlatformServiceJpaRepositoryImpl:428-431`).
 
 
 ### 5.1 Scenario coverage

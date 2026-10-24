@@ -25,6 +25,6 @@ SELECT
 FROM acc_gl_journal_entry gl
 JOIN acc_gl_account a ON a.id = gl.account_id
 WHERE gl.office_id = ANY($1::bigint[])
-  AND ($2::varchar IS NULL OR gl.transaction_id = $2::varchar)
+  AND gl.transaction_id = $2::varchar
 ORDER BY gl.office_id, gl.entry_date DESC, gl.id DESC
 LIMIT $3

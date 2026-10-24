@@ -1,4 +1,4 @@
--- params: {"transaction_id": null, "limit": 200}
+-- params: {"transaction_id": "S10476", "limit": 200}
 -- FIN-112 D12: general ledger journal debit/credit entries for business transactions.
 -- Written independently of queries/accounting/gl_journal_for_transaction.sql:
 -- office scope resolved via CTE join, account ref resolved via CTE.
@@ -34,5 +34,6 @@ SELECT
 FROM acc_gl_journal_entry gl
 JOIN scoped_offices so ON so.office_id = gl.office_id
 JOIN account_ref ar ON ar.account_id = gl.account_id
+WHERE gl.transaction_id = 'S10476'
 ORDER BY gl.office_id, gl.entry_date DESC, gl.id DESC
 LIMIT 200

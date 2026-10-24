@@ -15,7 +15,7 @@ http:
   body:
     type: json
     data: |
-      { "session_id": "{{fin112_journal_tx_session}}", "request_text": "List general ledger journal entries produced by a business transaction." }
+      { "session_id": "{{fin112_journal_tx_session}}", "request_text": "List general ledger journal entries produced by transaction S10476." }
 runtime:
   scripts:
     - type: before-request

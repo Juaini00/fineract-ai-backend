@@ -1905,30 +1905,33 @@ Three Mode-1 capabilities delivered under domain `accounting` (`knowledge/domain
 ### 24.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/{gl_journal_for_account,gl_journal_for_transaction,gl_account_balance}.sql` (+ `__scope_2_3` and `__population` variants).
-Locked run (`answers/accounting`, port 3312): 35 requests, 48/48 tests PASS (100%) against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population test in office 9 and zero commit-isolation violations (OVR-6.7).
+Locked runs (`answers/accounting`, port 3312): worker run 2026-10-24 35 requests / 48 tests PASS; coordinator boundary re-proof (same day, after the named-subject guards below) 51 requests / 48 tests PASS (100%), 0 commit-isolation violations (OVR-6.7). Every request carries a named subject (GL account `20101`, transaction `S10476`).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
-| gl_journal_for_account | office_ids + limit | 200 (capped from 37,077) | 200 (capped from 37,077) | Completed / Answered |
-| gl_journal_for_transaction | office_ids + limit | 200 (capped from 37,077) | 200 (capped from 37,077) | Completed / Answered |
-| gl_account_balance | office_ids + from_date + to_date | 41 | 6 | Completed / Answered |
+| gl_journal_for_account | office_ids + gl_code=20101 + limit | 200 (capped from population 11,048) | 200 (capped from population 9,347) | Completed / Answered |
+| gl_journal_for_transaction | office_ids + transaction_id=S10476 + limit | 8 | 8 | Completed / Answered |
+| gl_account_balance | office_ids + gl_code=20101 + from_date/to_date (12m default window) | 12 | 4 | Completed / Answered |
 
 In addition, empty population tested:
 - `gl_journal_for_account`: office 9 returns 0 rows with `outcome = "Empty"`.
 
 ### 24.2 VALUES-only semantics smoke (`tests/accounting_semantics_smoke.sh`)
 
-`tests/accounting_semantics_smoke.sh` shadows `acc_gl_journal_entry` and `acc_gl_account` using inline `VALUES` CTEs with unmodified production SQL text, asserting 9 semantic checks:
+`tests/accounting_semantics_smoke.sh` shadows `acc_gl_journal_entry` and `acc_gl_account` using inline `VALUES` CTEs with unmodified production SQL text, asserting 12 semantic checks:
 1. **Account Filter Disjunction**: Filtering by `gl_code` or `account_name` returns matching rows; unmatched accounts return 0 rows.
-2. **Reversal Status Flagging**: Correctly flags original reversed entries (`reversed = true`) and paired reversal entries (`reversal_id IS NOT NULL`).
-3. **Office Scoping (Journal Account)**: Strict `ANY($1::bigint[])` office isolation; entries in office 9 excluded when querying authorized offices `{1, 2, 3}`.
+2. **Reversal Status Flagging**: Correctly flags the original reversed entry (`reversed = true`, its `reversal_id` pointing at the new reversal entry) and the paired reversal entry (the row the original's `reversal_id` points to — Fineract `revertJournalEntry` sets the ORIGINAL's `reversal_id` to the reversal entry, `JournalEntryWritePlatformServiceJpaRepositoryImpl:428-431`).
+3. **Office Scoping (Journal Account)**: Strict `ANY($1::bigint[])` office isolation; entries in office 9 excluded when querying authorized offices `{2, 3}`.
 4. **Transaction ID Filtering**: `gl_journal_for_transaction` correctly selects rows matching specific `transaction_id`.
 5. **Office Scoping (Journal Transaction)**: Enforces office scoping on transaction-produced journal entries.
 6. **Anti-Double-Count Reversal Exclusion**: `gl_account_balance` debit, credit, and balance sums exclude reversed and reversal entries while surfacing their counts.
 7. **Per-Office & Per-Currency Grouping**: Saldo grouped by `(office_id, currency_code)` with no cross-currency consolidation.
 8. **Date Window Filtering**: Saldo computation respects `from_date` and `to_date` bounds.
 9. **Office Scoping (Account Balance)**: Account balances correctly restricted to authorized offices.
-All 9 assertion checks pass cleanly.
+10. **Named-Subject Guard (Balance)**: a request carrying neither `gl_code` nor `account_name` returns no rows — the whole-ledger recap is outside D12.
+11. **Named-Subject Guard (Journal Account)**: a request without a named account returns no rows.
+12. **Transaction-Subject Guard**: a request without `transaction_id` returns no rows.
+All 12 assertion checks pass cleanly (coordinator run, 2026-10-24).
 
 ### 24.3 CARRY-OVER rules
 
@@ -1943,3 +1946,28 @@ All 9 assertion checks pass cleanly.
 Domain `accounting` moved to `status: approved_mvp` with 0 gap rows.
 Data area `accounting-gl` updated to `status: included_mvp_domain`.
 Trial balance, balance sheet, and profit-and-loss reports remain in `unsupported_intents` per D12 boundary.
+
+### 24.5 Coordinator boundary re-proof (2026-10-24, same day as merge)
+
+The coordinator verified every worker claim against source and live data before accepting delivery, and closed one D12
+boundary gap found during verification:
+
+- **Population counts re-verified by direct SQL (read-only)**: `acc_gl_journal_entry` 37,077; `acc_gl_account` 362;
+  `acc_product_mapping` 259; `acc_gl_closure` 1; `acc_accounting_rule` 0 — identical to inventory §11. Observed
+  populations: `reversed` 0, `reversal_id` 0 (reversal semantics proven by the VALUES-only smoke, never claimed from
+  live data), `manual_entry` 29, currencies {AED 31,788, USD 4,910, EUR 371, AUD 8}, 7 of 8 offices populated.
+- **Reversal pointer direction pinned from source**: `JournalEntryWritePlatformServiceJpaRepositoryImpl.revertJournalEntry`
+  (`:428-431`) sets the ORIGINAL entry `reversed=true` and its `reversal_id` to the NEW reversal entry; the reversal
+  entry itself is created with `manual_entry=true` and flipped type. Production `is_reversal_entry`
+  (`EXISTS (rev.reversal_id = gl.id)`) and the balance pair-exclusion match this direction.
+- **Boundary gap closed**: the first delivery left `gl_code`/`account_name`/`transaction_id` optional in all three
+  SQLs, so an unnamed request returned the whole ledger (23 balance rows per office × currency — the recap shape D12
+  excludes) and the Bruno suite asserted it. Fix: SQL-level named-subject guards (zero rows without a subject),
+  `named_subject_required` / `transaction_subject_required` manifest checks, plural supported-intents removed from
+  `gl_account_balance`, and smoke assertions ACC-10..12.
+- **Guard-term interaction**: describing the excluded shape inside an approved capability description drops the
+  `Surfaces` policy term (`terms.retain(!occurs_in(approved))`) — capability prose must never contain the excluded
+  token pairs; the validator `FORBIDDEN_GAP_OR_SUPPORTED_PHRASES` list is unaffected.
+- **Re-proof**: locked Bruno 51 requests / 48 tests PASS (0 commit-isolation violations); smoke 12/12; workspace
+  tests, clippy `-D warnings`, docs-check, acceptance-check, catalog validate 0 errors — all run by the coordinator
+  in the worktree on this commit.
