@@ -2061,7 +2061,7 @@ Both source tables are genuinely empty on this deployment fixture. The real HTTP
 ### 26.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/{provisioning_run_history,provisioning_entries}.sql` (+ `__scope_2_3` and `__population` variants).
-Locked runs (`answers/provisioning`, port 3316): 15 requests / 21 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+Locked runs (`answers/provisioning`, port 3316): 22 requests / 21 tests PASS (100%), coordinator re-run, 0 commit-isolation violations (OVR-6.7).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
