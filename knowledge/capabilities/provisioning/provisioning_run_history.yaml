@@ -1,0 +1,44 @@
+id: provisioning_run_history
+status: approved_mvp
+domain: provisioning
+display_name: Provisioning Run History
+description: >-
+  List recorded loan loss provisioning runs: processing date (created_date), creator user ID (createdby_id),
+  journal entry creation status (journal_entry_created), and last modification audit fields.
+  Organization-wide reference; no office filter is applied because provisioning runs are org-wide events.
+  No simulation or recomputation.
+data_areas: [provisioning]
+required_api_capability: provisioning_run_history
+query_id: provisioning.provisioning_run_history
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: provisioning_run, grouping: none, output: list, pii: none }
+examples:
+  - Show provisioning run history.
+  - List recorded provisioning runs.
+  - Tampilkan riwayat proses provisioning.
+supported_intents:
+  - provisioning run history
+  - recorded provisioning runs
+guards:
+  org_wide_reference: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: org_wide_reference
+    rule: provisioning run history is an organization-wide reference without office binding.
+  - id: no_simulation
+    rule: does not simulate or project provisioning.

@@ -2441,6 +2441,16 @@ stays `gap`; the ticket is not closed here**):
 - HTTP proof (`answers/standing_instructions`): 47 requests / 61 tests, 100% PASS against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests in office 9 (`outcome = "Empty"`) and zero commit-isolation violations (OVR-6.7).
 - Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
 
+**Update after FIN-116 (Actual provisioning results: D07 recorded runs and entry details):**
+
+- Delivered 2 curated Mode-1 capabilities for domain `provisioning` (`knowledge/domains/provisioning.yaml`): `provisioning_run_history` (grain: `[history_id]`) and `provisioning_entries` (grain: `[entry_id]`).
+- Domain and inventory alignment: transitioned domain `provisioning` from `status: gap` to `status: approved_mvp`; moved D07 (`m_provisioning_history`, `m_loanproduct_provisioning_entry`) to `inherited (FIN-116)` in `docs/data/dataset-inventory.md` (61→62 inherited, 31→30 gap); data area `provisioning` created with `status: included_mvp_domain` in `knowledge/data-scope/areas/provisioning.yaml`.
+- Boundaries and constraints: Simulation and projection of provisioning, multiplying current criteria % by historical loan outstanding (D07's own rule), loan-level contributor synthesis (no `loan_id` column on entry), and full-GL approval are permanently excluded (retained under `unsupported_intents`). `m_provisioning_history` declared as org-wide reference (`org_wide_reference: true`). `provisioning_entries` binds authorized office scope via `e.office_id = ANY($1::bigint[])`. Schema misspelling `reseve_amount` aliased to `reserve_amount` and never leaked into the public API.
+- Semantics: Both tables are genuinely empty (0 rows) on this deployment fixture. The HTTP response is an actual `Empty` outcome (0 rows) with `completeness: Complete`. Nonzero semantics are proven synthetically via VALUES-only production-SQL smoke.
+- Synthetic proof: `tests/provisioning_semantics_smoke.sh` shadows underlying tables with inline `VALUES` CTEs asserting 8 semantic criteria (run history date window filtering, journal_entry_created flag preservation, entry join to history and criteria IDs, office authorization scoping, entry date window filtering, currency separation without cross-currency conversion, reserve_amount alias correction, and boundary safeguards).
+- HTTP proof (`answers/provisioning`): 22 requests / 21 tests, 100% PASS (coordinator re-run) against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]` (port 3316), and zero commit-isolation violations (OVR-6.7).
+- Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed (41/68 scenario-reference inventory unchanged).
+
 
 ### 5.1 Scenario coverage
 

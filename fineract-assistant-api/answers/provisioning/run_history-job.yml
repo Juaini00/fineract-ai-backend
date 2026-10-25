@@ -1,0 +1,28 @@
+info:
+  name: FIN-116 run_history job
+  type: http
+  seq: 11
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin116Token}}"
+    - name: Idempotency-Key
+      value: "{{fin116_history_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin116_history_session}}", "request_text": "Show provisioning run history." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin116_history_key", "fin116-history-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin116_history_job", res.getBody().data.job_id);

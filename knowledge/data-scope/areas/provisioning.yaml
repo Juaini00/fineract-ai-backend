@@ -1,0 +1,32 @@
+id: provisioning
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md:112-118
+inventory_refs:
+  - D07
+description: >-
+  Actual loan loss provisioning results (D07): recorded provisioning runs
+  (`m_provisioning_history`) and entry details per office/product/category
+  (`m_loanproduct_provisioning_entry`). Read-only recorded facts; no simulation,
+  no criteria multiplication, and no loan-level contributor synthesis.
+included_tables:
+  - m_provisioning_history
+  - m_loanproduct_provisioning_entry
+  - m_provisioning_criteria
+  - m_office
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [provisioning]
+default_rules:
+  - "Actual provisioning results read recorded history and entries as stored; simulation and projection are strictly forbidden."
+  - "Multiplying current provisioning criteria percentages by historical loan outstanding is strictly forbidden (D07 own rule)."
+  - "Loan-level contributor details do not exist in source entry tables; synthesis via m_loan join is unsupported."
+  - "Office authorization is enforced with office_id = ANY($1::bigint[]) on entry records; run history represents org-wide recorded events."
+  - "Amounts are per-currency and per-bucket; no cross-currency consolidation."
+  - "The schema misspelling 'reseve_amount' is aliased to 'reserve_amount' and never exposed to the public API."
+checks:
+  - id: office_scope_required
+    rule: every entry query must bind authorized office scope.
+  - id: no_simulation
+    rule: simulation, recomputation, or projection of provisioning is never supported.
+  - id: no_loan_contributor_synthesis
+    rule: loan-level contributor detail is not synthesized across m_loan.
