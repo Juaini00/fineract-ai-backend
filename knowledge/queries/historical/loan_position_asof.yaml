@@ -1,0 +1,31 @@
+id: historical.loan_position_asof
+database: fineract
+sql_file: queries/historical/loan_position_asof.sql
+data_areas: [loans_charges_balances, client_foundation]
+tables: [m_loan, m_loan_transaction, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: as_of_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: position, type: decimal, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+grain: [loan_id, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else group office.
+  - id: reversed_transactions_excluded
+    rule: Only non-reversed loan transactions (is_reversed = false) are considered.
+  - id: latest_transaction_picked
+    rule: Picks the latest non-reversed transaction with non-null running balance at or before as_of_date.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

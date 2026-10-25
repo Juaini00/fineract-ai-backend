@@ -1,0 +1,31 @@
+id: historical.savings_balance_asof
+database: fineract
+sql_file: queries/historical/savings_balance_asof.sql
+data_areas: [savings_transactions, client_foundation]
+tables: [m_savings_account, m_savings_account_transaction, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: as_of_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: position, type: decimal, sensitivity: public_business }
+  - { name: transaction_date, type: date, sensitivity: public_business }
+grain: [savings_account_id, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning account's client office, else group office.
+  - id: reversed_transactions_excluded
+    rule: Only non-reversed savings account transactions (is_reversed = false) are considered.
+  - id: latest_transaction_picked
+    rule: Picks the latest non-reversed transaction with non-null running balance at or before as_of_date.
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

@@ -1,0 +1,47 @@
+id: savings_balance_asof
+status: approved_mvp
+domain: historical
+display_name: Savings Balance As Of Date
+description: >-
+  Recomputed historical savings balance positions as of a specified date, reading
+  running_balance_derived from the latest non-reversed transaction at or
+  before as_of_date. Savings accounts with no qualifying transaction at or before
+  as_of_date are excluded from rows (not zero-filled); consumers must not interpret
+  absence of an account as zero position (D11 spirit, D01, database-design.md I4, I5).
+  Balance is raw derived running balance without backfilling or unapproved adjustments.
+  Filter requires authorized office scope (COALESCE(c.office_id, g.office_id) = ANY($1::bigint[]))
+  and bound as_of_date.
+data_areas: [savings_transactions, client_foundation]
+required_api_capability: savings_balance_asof
+query_id: historical.savings_balance_asof
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: savings, output: table, pii: none }
+examples:
+  - Show savings balance as of date.
+  - Show savings balance as of 2026-04-30.
+  - Saldo tabungan per 2026-04-30.
+  - Saldo tabungan per tanggal dihitung ulang.
+supported_intents:
+  - Show savings balance as of date.
+  - Show savings balance as of 2026-04-30.
+  - Saldo tabungan per 2026-04-30.
+  - Saldo tabungan per tanggal dihitung ulang.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id, client_name] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  as_of_date:
+    type: date
+    required: false
+    default: business_today
+    fill_when_missing: true
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

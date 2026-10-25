@@ -568,4 +568,24 @@ mod tests {
         let input_len = input_for(&compact).len();
         assert!(!exceeds_input_bound(input_len, 50, 16_000));
     }
+
+    /// FIN-121: the historical positions shortlist fits the default input bound.
+    #[test]
+    fn historical_position_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "loan_position_asof",
+            "savings_balance_asof",
+            "loan_balances",
+            "savings_account_balance_detail",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }

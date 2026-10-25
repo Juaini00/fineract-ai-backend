@@ -1,0 +1,30 @@
+info:
+  name: FIN-121 loan asof answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin121_loan_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin121Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_position_asof", document);
+          test("FIN-121 loan asof: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-121 D01: recomputed loan position as of date returns Answered Complete", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+          });
+        }
