@@ -1,0 +1,28 @@
+info:
+  name: FIN-122 refusal answer
+  type: http
+  seq: 32
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin122_refusal_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          test("FIN-122 refusal: branch at position date is refused via surface guard", function () {
+            expect(document.outcome).to.equal("BlockedByPolicy");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.kind).to.equal("limitation");
+            expect(document.blocks_json).to.have.lengthOf(1);
+            expect(document.blocks_json[0].block_id).to.equal("surface_not_approved");
+            expect(document.blocks_json[0].type).to.equal("limitation");
+          });
+        }

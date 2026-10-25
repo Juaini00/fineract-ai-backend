@@ -53,11 +53,20 @@ supported_intents:
   - { phrase: "client group and center membership", inventory_ref: CLI-4 }
   - { phrase: "full account roster across loan savings and share account types", inventory_ref: CLI-5 }
   - { phrase: "client contact and address", inventory_ref: CLI-6 }
+  - { phrase: "client office attribution", inventory_ref: D02 }
+  - { phrase: "client current office attribution", inventory_ref: D02 }
+  - { phrase: "atribusi kantor nasabah saat ini", inventory_ref: D02 }
 gap_intents:
   - { phrase: "family member detail", inventory_ref: D15d }
-  - { phrase: "historical office as of a past date", inventory_ref: D02 }
 unsupported_intents:
   - { phrase: "identity document reporting", exempt: "excluded_by_design_gap_row_nuance" }
+  - { phrase: "historical office as of a past date", exempt: "dataset-inventory.md:D02" }
+  - { phrase: "branch at position date", exempt: "dataset-inventory.md:D02" }
+  - { phrase: "cabang client pada tanggal posisi", exempt: "dataset-inventory.md:D02" }
+  - { phrase: "office history timeline", exempt: "dataset-inventory.md:D02" }
+  - { phrase: "client transfer", exempt: "write_action" }
+  - { phrase: "move client between branches", exempt: "write_action" }
+  - { phrase: "historical read authorization beyond I7", exempt: "invariant_I7" }
 default_rules:
   - Client identity output requires explicit capability approval.
   - Group and center membership (CLI-4) is approved under client_group_membership; authorization follows the client's office with group office surfaced as evidence only.
@@ -65,7 +74,7 @@ default_rules:
   - Client address/contact is selectively agreed (§1), not default-on, and approved via client_address behind the PII sensitivity class (CLI-6).
   - Direct client charges (D04, `m_client_charge`/`m_client_charge_paid_by`) are approved capabilities under `client_charge_assessments` and `client_charge_payment_allocations`; master definition is separated from actual assessment, payment allocations avoid fan-out, and NULL derived amounts stay NULL. Absence of charges is not evidence of delinquency.
   - Family member detail (D15d, `m_family_members`) is selective/not-default, same pattern as CLI-6/CLI-8; it answers unsupported with a gap reason, not a hard policy rejection.
-  - Historical branch attribution (D02) is agreed scope only where a history table exists; none does today (verified negative, dataset-inventory.md D02) — every domain row above is current-office only. A request explicitly asking for the office as of a past date must answer unsupported with a gap reason, never silently answer with the current office as if it were historical.
+  - "Historical branch attribution (D02) resolves as current-office with explicit label 'current_office' and office_as_of_position as NULL (verified negative history source, dataset-inventory.md D02). A request asking for the branch at a past position date, office history timeline, or transfer/move is unsupported and guarded, never silently answered with current office as if it were historical."
   - "Identity document reporting (CLI-7) is marked `exempt`, not cited against CLI-7 directly: the row's inventory category normalizes to `gap`, but its own acceptance text is stronger than that — \"excluded by default; row exists only to record the exclusion\", \"not to be closed by a capability without a new decision\" — a permanent, by-design hard exclusion, the same shape as D13, not a merely-uncontracted item like address (CLI-6). Citing CLI-7 as a `gap_intents`/`unsupported_intents` ref would force a category (`gap` or `excluded`) neither of which fully matches this row's own nuance; `exempt` states that honestly instead of picking the wrong one."
 checks:
   - id: data_area_exists
@@ -76,3 +85,9 @@ checks:
     rule: unsupported_intents must not contain 'address-level reporting' — address is selective/gap (CLI-6), not policy-forbidden.
   - id: all_account_types_declared
     rule: supported_intents must acknowledge the full account roster across loan and share sides of CLI-5.
+  - id: attribution_mode_labeled
+    rule: client office attribution must label attribution_mode as current_office on every row.
+  - id: no_history_source_asserted
+    rule: historical office attribution at a position date is unsupported because no office assignment history table exists.
+  - id: office_scope_required
+    rule: client office attribution queries must require office_ids scoping.

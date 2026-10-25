@@ -588,4 +588,24 @@ mod tests {
         let input_len = input_for(&compact).len();
         assert!(!exceeds_input_bound(input_len, 50, 16_000));
     }
+
+    /// FIN-122: the client office attribution shortlist fits the default input bound.
+    #[test]
+    fn client_office_attribution_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "client_office_attribution",
+            "client_group_membership",
+            "client_account_roster",
+            "client_address",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }

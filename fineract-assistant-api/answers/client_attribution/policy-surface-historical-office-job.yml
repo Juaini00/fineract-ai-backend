@@ -1,0 +1,28 @@
+info:
+  name: FIN-122 refusal job
+  type: http
+  seq: 31
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+    - name: Idempotency-Key
+      value: "{{fin122_refusal_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin122_refusal_session}}", "request_text": "Show the historical office as of a past date for this client." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin122_refusal_key", "fin122-refusal-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin122_refusal_job", res.getBody().data.job_id);

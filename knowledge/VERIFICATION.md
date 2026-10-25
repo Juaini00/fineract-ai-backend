@@ -2323,3 +2323,76 @@ All 12 assertion checks pass cleanly.
 Domain `historical` created with `status: approved_mvp`.
 As-published period close report replay remains in `unsupported_intents` per D01 boundary (`exempt: "dataset-scope-decisions.md:16"`).
 
+## 30. FIN-122: Historical branch attribution (D02) — current-office, explicitly labeled
+
+- Dataset inventory ref: `D02` (moved from `gap` to `inherited (FIN-122)` for current-office attribution with explicit label; branch-at-position-date stays unsupported).
+- Domain: `client` (`knowledge/domains/client.yaml`).
+- Mode-1 Capability: `client_office_attribution` (grain: `[client_id]`).
+- Three-part technical verification evidence:
+  1. **Office-history table negative proof**:
+     Query against Fineract PostgreSQL schema:
+     `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND (table_name LIKE '%office%' OR table_name LIKE '%history%') ORDER BY table_name;`
+     Result: 16 tables (`job_run_history`, `m_account_transfer_standing_instructions_history`, `m_calendar_history`, `m_holiday_office`, `m_loan_approved_amount_history`, `m_loan_delinquency_tag_history`, `m_loan_officer_assignment_history`, `m_loan_repayment_schedule_history`, `m_loan_status_change_history`, `m_office`, `m_office_transaction`, `m_provisioning_history`, `m_report_mailing_job_run_history`, `m_savings_officer_assignment_history`, `m_staff_assignment_history`, `m_tax_component_history`). No `m_client_office_history` or any client office-assignment history table exists. `m_client.office_id` only stores current office.
+  2. **Transfer evidence verification**:
+     Query: `SELECT count(*) FROM m_client_transfer_details;` -> 0 rows.
+     Query: `SELECT id, entity_name, action_name, status, made_on_date FROM m_portfolio_command_source WHERE action_name LIKE '%TRANSFER%';` -> 2 rows (id 280, 281: `CLIENT` / `PROPOSETRANSFER`, status 5, `made_on_date` NULL). These are pending/rejected transfer proposals, not completed transfers.
+  3. **Payload-exclusion citation**:
+     Command JSON payloads (`command_as_json`) in `m_portfolio_command_source` are strictly excluded by D09 boundary (FIN-118, `dataset-scope-decisions.md` D09: raw command payloads excluded). Office movements over time cannot be reconstructed.
+- Live database counts:
+  - Total clients in `m_client`: 43.
+    Query: `SELECT count(*), count(office_id) FROM m_client;` -> `(43, 43)`.
+  - Distribution by current `office_id`:
+    Query: `SELECT office_id, count(*) FROM m_client GROUP BY office_id ORDER BY office_id;`
+    Office 1: 9, Office 2: 6, Office 3: 14, Office 4: 9, Office 5: 3, Office 6: 1, Office 8: 1 (Total: 43).
+  - Clients in authorized offices `{2, 3}`: 20 rows (6 in office 2, 14 in office 3).
+  - All rows carry `attribution_mode = 'current_office'` and `office_as_of_position = NULL` (explicit "not available", never fabricated).
+- Boundary: Historical branch-at-position-date questions ("Show the historical office as of a past date for this client.", "cabang client pada tanggal posisi") and office history timelines remain permanently guarded under `unsupported_intents` and return `Completed` + `BlockedByPolicy` / `surface_not_approved`.
+
+### 30.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/client_office_attribution.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/client_attribution`, port 3322): 14 requests / 15 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| client_office_attribution | limit: 200 | 43 (population 43) | 20 (population 20) | Answered / Answered |
+
+`client_office_attribution` returns 43 clients under all offices (`completeness: Complete`), and 20 clients when narrowed to offices 2 and 3 (`completeness: Complete`).
+Zero PII columns (`display_name`, `firstname`, `lastname`, `account_no`, `external_id`) leaked across all responses.
+
+### 30.2 Accuracy table
+
+| Test question | Capability | Bound parameters | Oracle match | Verdict |
+| --- | --- | --- | --- | --- |
+| "Show client office attribution in my authorized offices." | client_office_attribution | limit: 200, office_ids: [1,2,3,4,5,6,8,9] | Exactly matches `tests/answers/client_office_attribution.sql` (43 rows, all `attribution_mode='current_office'`, all `office_as_of_position=NULL`) | PASS |
+| "Show client office attribution in my authorized offices." (`office_ids`: [2, 3]) | client_office_attribution | limit: 200, office_ids: [2, 3] | Exactly matches `tests/answers/client_office_attribution__scope_2_3.sql` (20 rows, offices 2 & 3 only) | PASS |
+| "Show the historical office as of a past date for this client." | None (guarded) | None (no plan generated) | BlockedByPolicy / surface_not_approved limitation response | PASS |
+
+### 30.3 VALUES-only semantics smoke (`tests/office_attribution_semantics_smoke.sh`)
+
+`tests/office_attribution_semantics_smoke.sh` shadows `m_client` using inline `VALUES` CTEs asserting 10 semantic criteria:
+1. `client_office_attribution`: returns expected attribution count (3 in scope, office 9 excluded).
+2. `client_office_attribution`: `attribution_mode` literal `'current_office'` and `office_as_of_position` NULL verified on every row.
+3. `client_office_attribution`: narrowed scope `{2}` returns exactly 2 clients from office 2.
+4. `client_office_attribution`: empty scope `{8}` returns 0 rows.
+5. `client_office_attribution`: limit parameter binds properly (got 2 rows with limit 2).
+6. SQL references only current-state `m_client` table (no history tables).
+7. SQL excludes forbidden PII columns (`display_name`, `firstname`, `lastname`, `account_no`, `external_id`).
+8. Negative schema verification: 0 client office history tables exist in `information_schema`.
+9. Transfer evidence verification: `m_client_transfer_details` has 0 rows.
+10. Command source transfer verification: transfer commands are proposals only (2 rows, status 5, payloads excluded).
+All 10 assertion checks pass cleanly.
+
+### 30.4 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/client_attribution` (14 requests, 15 tests PASS).
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only surrogate ID `client_id`, `office_id`, `attribution_mode`, and `office_as_of_position` returned; client names, account numbers, and external IDs are never selected or returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, current-office attribution labeled on every row.
+
+### 30.5 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D02 moved from `gap` to `inherited (FIN-122)` (current-office attribution with explicit label; branch-at-position-date stays unsupported).
+Domain `client` updated with `client_office_attribution` under `supported_intents`.
+Historical branch-at-position-date, office history timeline, and client transfer write intents remain guarded under `unsupported_intents` per D02 boundary (`exempt: "dataset-inventory.md:D02"`).
+

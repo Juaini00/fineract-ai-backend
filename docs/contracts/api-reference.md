@@ -823,6 +823,10 @@ FIN-121 D01: domain `historical` punya dua capability komputasi ulang posisi sal
 Semua capability membatasi jumlah baris hingga 100 (`row_cap: 100`), dan hanya mengembalikan ID pengganti (surrogate IDs); nomor rekening (`account_no`), ID eksternal (`external_id`), dan nama klien (`client_name`, `display_name`) tidak pernah dikembalikan (PII safe).
 Batas cakupan penting: Permintaan untuk mereproduksi laporan penutupan periode sebagaimana diterbitkan pada saat itu ("Reproduce the published report for last month", "as published saat penutupan") berada di luar cakupan Mode-1 dan dijawab `Completed` + `BlockedByPolicy` / `surface_not_approved`.
 
+FIN-122 D02: domain `client` punya capability atribusi kantor cabang nasabah saat ini dengan pelabelan eksplisit dalam office yang berwenang.
+`client_office_attribution` mengembalikan satu baris per nasabah (`client_id`, `office_id`, `attribution_mode`, `office_as_of_position`) dalam office yang berwenang (`c.office_id = ANY($1::bigint[])`). Mode atribusi selalu dilabeli secara eksplisit dengan literal `'current_office'`, dan kolom `office_as_of_position` selalu bernilai `NULL` (tidak pernah difabrikasi atau diasumsikan sebagai kantor historis), sesuai verifikasi negatif ketiadaan tabel riwayat penugasan kantor nasabah di skema Fineract. Nomor rekening (`account_no`), ID eksternal (`external_id`), dan nama nasabah (`display_name`, `firstname`, `lastname`) tidak pernah dikembalikan (PII safe).
+Batas cakupan penting: Permintaan atribusi cabang pada tanggal posisi historis ("Show the historical office as of a past date for this client.", "cabang client pada tanggal posisi"), lini masa riwayat kantor cabang, atau pemindahan nasabah antar-cabang (write action) ditolak secara kebijakan dan dijawab `Completed` + `BlockedByPolicy` / `surface_not_approved`.
+
 #### `evidence_json` — lineage
 
 Dari mana angkanya berasal. Ia **kolom, bukan blok**: blok yang tidak dikenal

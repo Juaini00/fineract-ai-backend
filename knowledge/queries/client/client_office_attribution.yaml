@@ -1,0 +1,46 @@
+id: client.client_office_attribution
+database: fineract
+sql_file: queries/client/client_office_attribution.sql
+data_areas:
+  - client_foundation
+  - organization_foundation
+tables:
+  - m_client
+metrics: []
+parameters:
+  - name: office_ids
+    type: array_bigint
+    required: true
+    source: authorized_scope
+  - name: limit
+    type: integer
+    required: false
+output_fields:
+  - name: client_id
+    type: bigint
+    sensitivity: public_business
+  - name: office_id
+    type: bigint
+    sensitivity: public_business
+  - name: attribution_mode
+    type: string
+    sensitivity: public_business
+  - name: office_as_of_position
+    type: bigint
+    sensitivity: public_business
+grain: [client_id]
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains c.office_id with ANY($1::bigint[]).
+  - id: attribution_mode_labeled
+    rule: attribution_mode is a literal 'current_office' on every row.
+  - id: no_history_source_asserted
+    rule: office_as_of_position is NULL on every row as verified by D02 negative table proof.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.

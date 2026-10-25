@@ -1,0 +1,23 @@
+info:
+  name: FIN-122 attribution narrow session
+  type: http
+  seq: 20
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-122 client office attribution narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin122_narrow_session", res.getBody().data.id);

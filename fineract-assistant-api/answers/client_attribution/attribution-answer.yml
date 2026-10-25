@@ -1,0 +1,37 @@
+info:
+  name: FIN-122 client office attribution answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin122_attribution_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_office_attribution", document);
+          test("FIN-122 client office attribution: validated and complete", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-122 D02: attribution_mode current_office and office_as_of_position null on all rows", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(43);
+            for (const row of got.rows) {
+              expect(row.attribution_mode).to.equal("current_office");
+              expect(row.office_as_of_position).to.equal(null);
+            }
+            for (const forbidden of ["account_no", "external_id", "display_name", "firstname", "lastname"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

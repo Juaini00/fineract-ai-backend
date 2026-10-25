@@ -1,0 +1,6 @@
+info:
+  name: client_attribution
+  type: folder
+  seq: 21
+  description: |
+    FIN-122 (LC.15 / D02): current-office attribution with explicit label; branch-at-position-date refusal via policy surface guard.

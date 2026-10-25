@@ -1,0 +1,35 @@
+info:
+  name: FIN-122 client office attribution narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin122_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "client_office_attribution", document, { truthKey: "client_office_attribution__scope_2_3", narrowedTo: 2 });
+          test("FIN-122 client office attribution narrow: validated and complete", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-122 D02: narrowed scope {2, 3} returns 20 clients (6 in office 2, 14 in office 3)", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(20);
+            for (const row of got.rows) {
+              expect(row.attribution_mode).to.equal("current_office");
+              expect(row.office_as_of_position).to.equal(null);
+              expect([2, 3]).to.include(row.office_id);
+            }
+          });
+        }
