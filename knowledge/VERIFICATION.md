@@ -2126,7 +2126,7 @@ Verified read-only on `fineract_default` database:
 ### 27.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/{command_source_actions,command_source_trace}.sql` (+ `__scope_2_3` and `__population` variants).
-Locked runs (`answers/source_audit`, port 3318): 22 requests / 30 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+Locked runs (`answers/source_audit`, port 3318): 21 requests / 30 tests PASS (100%), coordinator re-run,, 0 commit-isolation violations (OVR-6.7).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
@@ -2154,7 +2154,7 @@ All 10 assertion checks pass cleanly.
 
 ### 27.3 CARRY-OVER rules
 
-1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/source_audit` (22 requests, 30 tests PASS).
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/source_audit` (21 requests, 30 tests PASS).
 2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
 3. **Output sensitivity**: Only public business identifiers, usernames, action/entity names, timestamps, and resource IDs returned; raw payloads and client IPs are strictly excluded.
 4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, maker/checker attribution from `m_appuser`.
