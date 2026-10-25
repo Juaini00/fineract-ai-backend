@@ -1,0 +1,39 @@
+id: provisioning.provisioning_entries
+database: fineract
+sql_file: queries/provisioning/provisioning_entries.sql
+data_areas: [provisioning]
+tables: [m_loanproduct_provisioning_entry, m_provisioning_history, m_provisioning_criteria]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: false }
+  - { name: to_date, type: date, required: false }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: entry_id, type: bigint, sensitivity: public_business }
+  - { name: history_id, type: bigint, sensitivity: public_business }
+  - { name: criteria_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: category_id, type: bigint, sensitivity: public_business }
+  - { name: overdue_in_days, type: bigint, sensitivity: public_business }
+  - { name: reserve_amount, type: decimal, sensitivity: public_business }
+  - { name: liability_account, type: bigint, sensitivity: public_business }
+  - { name: expense_account, type: bigint, sensitivity: public_business }
+grain: [entry_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains e.office_id with ANY($1::bigint[]).
+  - id: date_filter_is_bound
+    rule: SQL filters h.created_date between $2 and $3 when provided.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
+  - id: reserve_amount_alias
+    rule: reseve_amount is aliased to reserve_amount and the typo is not leaked.
+  - id: no_loan_contributor_synthesis
+    rule: m_loan is not joined; loan-level contributor detail is not synthesized.
+  - id: no_simulation
+    rule: does not simulate or recompute provisioning from criteria percentages.

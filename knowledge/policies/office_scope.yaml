@@ -24,6 +24,7 @@ org_wide_reference_tables:
   - m_tax_component_history
   - m_floating_rates
   - m_floating_rates_periods
+  - m_provisioning_history
 # Owner decision (D14, docs/product/2026-10-15-d14-operational-access-decision.md):
 # operational scheduler tables may be read tenant-wide by an authenticated admin
 # bound to the source connection tenant. This is a DEDICATED declaration, not

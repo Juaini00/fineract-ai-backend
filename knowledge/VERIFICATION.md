@@ -2033,3 +2033,66 @@ All 10 assertion checks pass cleanly.
 Domain `standing_instructions` moved to `status: approved_mvp` with 0 gap rows.
 Data area `standing-instructions` created with `status: included_mvp_domain`.
 Write actions, manual triggers, template discovery, and full transaction mapping remain in `unsupported_intents` per D05 boundary.
+
+
+## 26. FIN-116 / D07 — Actual provisioning results: recorded runs and entries
+
+**Context & Scope.** `dataset-inventory.md` row D07 covers actual provisioning results: `m_provisioning_history` (0 rows) and `m_loanproduct_provisioning_entry` (0 rows).
+Prior to FIN-116, domain `provisioning` was in `status: gap` with D07 listed as a gap domain. FIN-116 transitions `provisioning` to `status: approved_mvp` and data area `provisioning` to `status: included_mvp_domain` by implementing two curated Mode-1 capabilities:
+1. `provisioning_run_history`: recorded provisioning run history (grain: `[history_id]`) — processing date (`created_date`), creator user ID (`createdby_id`), journal entry creation status (`journal_entry_created`), and last modification audit fields (`lastmodifiedby_id`, `lastmodified_date`). Provisioning runs are organization-wide recorded events without an office column; authorized as an org-wide reference (`org_wide_reference: true`).
+2. `provisioning_entries`: recorded provisioning entries (grain: `[entry_id]`) — `history_id`, `criteria_id` (reference linkage to provisioning criteria/version), `currency_code`, `office_id` (authorized via `e.office_id = ANY($1::bigint[])`), `product_id`, `category_id`, `overdue_in_days`, `reseve_amount` aliased to `reserve_amount`, `liability_account`, and `expense_account`.
+
+**Live Counts & Executing Query:**
+Verified read-only on `fineract_default` database:
+- `SELECT count(*) FROM m_provisioning_history;` -> 0 rows
+- `SELECT count(*) FROM m_loanproduct_provisioning_entry;` -> 0 rows
+- `SELECT count(*) FROM m_provisioning_criteria;` -> 0 rows
+- `SELECT count(*) FROM m_provision_category;` -> 4 rows
+Both source tables are genuinely empty on this deployment fixture. The real HTTP answers return an actual `Empty` outcome (0 rows) with `completeness: Complete`. Nonzero semantics are proven synthetically via VALUES-only production-SQL smoke.
+
+**Key Invariants & Rules:**
+- Schema typo aliased: `m_loanproduct_provisioning_entry.reseve_amount` is aliased in SQL as `reseve_amount AS reserve_amount`. The typo is never exposed to the public API surface.
+- Hard boundary against simulation and recomputation: never simulates or projects provisioning; never multiplies current provisioning criteria percentages by historical loan outstanding (D07's own rule).
+- Hard boundary against contributor synthesis: loan-level contributor detail does not exist in D07 tables (no `loan_id` on `m_loanproduct_provisioning_entry`). Requests asking for largest contributing loans remain unsupported.
+- Grain: `provisioning_run_history` is at `[history_id]` grain; `provisioning_entries` is at `[entry_id]` grain.
+- Currency per code: amounts are reported per currency code without cross-currency consolidation.
+- Date window: explicit date window bounded by `created_date` on `m_provisioning_history` (`[business_today - 12m, business_today]`).
+
+### 26.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{provisioning_run_history,provisioning_entries}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/provisioning`, port 3316): 15 requests / 21 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| provisioning_run_history | from_date/to_date + limit | 0 (population 0) | n/a (org-wide) | Completed / Empty |
+| provisioning_entries | office_ids + from_date/to_date + limit | 0 (population 0) | 0 (population 0) | Completed / Empty |
+
+Both capabilities return actual `Empty` (0 rows) with `completeness = Complete`, verified row-for-row against independent SQL oracles.
+
+### 26.2 VALUES-only semantics smoke (`tests/provisioning_semantics_smoke.sh`)
+
+`tests/provisioning_semantics_smoke.sh` shadows `m_provisioning_history`, `m_provisioning_criteria`, and `m_loanproduct_provisioning_entry` using inline `VALUES` CTEs with unmodified production SQL text, asserting 8 semantic criteria:
+1. `provisioning_run_history`: returns runs within explicit date window (runs 1 and 2 returned; run 3 outside window excluded).
+2. `provisioning_run_history`: surfaces `created_date`, `createdby_id`, and `journal_entry_created` (`t` and `f`) verbatim.
+3. `provisioning_entries`: joins entry rows to their history and criteria IDs (`history_id = 1`, `criteria_id = 100`).
+4. `provisioning_entries`: office authorization binds strictly via `e.office_id = ANY($1::bigint[])` (office 9 excluded under `{2}` scope).
+5. `provisioning_entries`: filters entries by history date window (history 3 excluded).
+6. `provisioning_entries`: currency separated per code (`USD` and `EUR`) without cross-currency conversion.
+7. `provisioning_entries`: `reserve_amount` alias surfaces misspelled `reseve_amount` correctly.
+8. Safeguards: no simulation capability exists; `reseve_amount` typo not leaked into query output_fields; loan contributor phrases guarded under `unsupported_intents`.
+All 8 assertion checks pass cleanly.
+
+### 26.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/provisioning`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, dates, amounts, currency codes, and flags returned; `account_no` and `external_id` are never returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]` for entries, org-wide reference for run history, row cap 200 with population metadata, no simulation.
+
+### 26.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D07 moved from `gap` to `inherited (FIN-116)` (Mode-1 capabilities).
+Domain `provisioning` moved to `status: approved_mvp` with 0 gap rows.
+Data area `provisioning` created with `status: included_mvp_domain`.
+Simulation, recomputation from current criteria, loan-level contributor synthesis, and full-GL approval remain in `unsupported_intents` per D07 boundary.

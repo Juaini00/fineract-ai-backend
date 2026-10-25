@@ -1,0 +1,49 @@
+id: provisioning_entries
+status: approved_mvp
+domain: provisioning
+display_name: Provisioning Entries
+description: >-
+  List recorded provisioning entries by office, loan product, and provision category:
+  history ID, criteria ID, currency code, office ID, product ID, category ID, overdue days,
+  corrected reserve amount (aliased from reseve_amount), liability account, and expense account.
+  Office-scoped to authorized offices. Does not synthesize loan-level contributors or simulate calculations.
+data_areas: [provisioning]
+required_api_capability: provisioning_entries
+query_id: provisioning.provisioning_entries
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: provisioning_entry, grouping: none, output: list, pii: none }
+examples:
+  - Show provisioning entries in my authorized offices.
+  - List recorded provisioning entries for Branch 001.
+  - Tampilkan rincian entri provisi per produk dan kategori.
+supported_intents:
+  - provisioning entries in authorized offices
+  - recorded provisioning entries
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: reserve_amount_corrected
+    rule: reseve_amount is surfaced as reserve_amount.
+  - id: no_simulation
+    rule: does not simulate or project provisioning.
+  - id: no_loan_contributor_synthesis
+    rule: does not join m_loan to synthesize loan-level contributors.

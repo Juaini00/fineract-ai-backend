@@ -1,0 +1,29 @@
+info:
+  name: FIN-116 entries answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin116_entries_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin116Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "provisioning_entries", document);
+          test("FIN-116 entries: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-116 D07: empty entries table is an actual Empty answer (zero rows)", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }

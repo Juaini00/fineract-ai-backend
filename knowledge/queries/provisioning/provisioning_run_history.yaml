@@ -1,0 +1,27 @@
+id: provisioning.provisioning_run_history
+database: fineract
+sql_file: queries/provisioning/provisioning_run_history.sql
+data_areas: [provisioning]
+tables: [m_provisioning_history]
+metrics: []
+parameters:
+  - { name: from_date, type: date, required: false }
+  - { name: to_date, type: date, required: false }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: history_id, type: bigint, sensitivity: public_business }
+  - { name: created_date, type: date, sensitivity: public_business }
+  - { name: createdby_id, type: bigint, sensitivity: public_business }
+  - { name: journal_entry_created, type: boolean, sensitivity: public_business }
+  - { name: lastmodifiedby_id, type: bigint, sensitivity: public_business }
+  - { name: lastmodified_date, type: date, sensitivity: public_business }
+grain: [history_id]
+guards: { select_only: true, single_statement: true, require_office_filter: false, org_wide_reference: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: date_filter_is_bound
+    rule: SQL filters created_date between $1 and $2 when provided.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
+  - id: no_simulation
+    rule: reads recorded run history directly without simulating or recomputing provisioning.

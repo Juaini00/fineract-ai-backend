@@ -1,0 +1,9 @@
+info:
+  name: provisioning
+  seq: 17
+  description: |
+    FIN-116 (LC.9 / D07): actual provisioning results — recorded provisioning runs and entry detail rows.
+    Both tables (m_provisioning_history, m_loanproduct_provisioning_entry) exist and are empty on this
+    fixture; the real answer is an actual Empty (0 rows) with Complete completeness.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).
