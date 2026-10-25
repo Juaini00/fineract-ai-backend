@@ -1,0 +1,28 @@
+info:
+  name: FIN-118 actions job
+  type: http
+  seq: 11
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin118Token}}"
+    - name: Idempotency-Key
+      value: "{{fin118_actions_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin118_actions_session}}", "request_text": "Show command source actions in my authorized offices." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin118_actions_key", "fin118-actions-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin118_actions_job", res.getBody().data.job_id);

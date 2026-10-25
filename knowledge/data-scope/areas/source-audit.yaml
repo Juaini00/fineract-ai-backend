@@ -1,25 +1,29 @@
 id: source_audit
-status: gap
-source_doc: docs/data/dataset-inventory.md#10-cross-domain-decisions-d01-d15
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md:128-134
 inventory_refs:
   - D09
 description: >-
-  Fineract's own operational command/action audit
-  (`m_portfolio_command_source`) — agreed baseline scope per D09
-  (dataset-scope-decisions.md:128-134), no approved capability yet. Distinct
-  from `audit_users_operations.yaml` (user/role/permission administration,
-  excluded per D15) — this area only ever holds the source-audit table, never
-  the administration tables.
-included_tables: []
-conditional_tables:
+  Fineract's own operational command/action audit (`m_portfolio_command_source`) —
+  agreed baseline scope per D09 (dataset-scope-decisions.md:128-134).
+  Actor attribution is taken from the command row (`maker_id` -> username),
+  never from an officer assignment table. Distinct from user/role/permission administration
+  (excluded per D15) and Jarvis's own execution audit (database-design.md I8).
+  Raw payloads (command_as_json, result, client_ip, api_get_url, *_external_id) are excluded.
+included_tables:
   - m_portfolio_command_source
+conditional_tables: []
 excluded_tables: []
 allowed_domains:
-  - audit
+  - source_audit
 default_rules:
-  - m_portfolio_command_source (D09) is agreed baseline scope with no approved capability yet; it stays out of excluded_tables in both this file and audit_users_operations.yaml.
+  - "Fineract's own source audit reads m_portfolio_command_source; raw payloads are excluded."
+  - "Actor attribution is taken strictly from maker_id, never from officer assignments."
+  - "Office scope is enforced via office_id = ANY($1::bigint[]); commands without office_id are org-wide."
 checks:
-  - id: gap_not_runtime
-    rule: this area must not be referenced by approved_mvp capabilities or queries until a Mode-1 capability is authored.
-  - id: no_administration_tables_here
-    rule: m_appuser, m_role, and m_permission must never appear in this file — they belong to audit_users_operations.yaml.
+  - id: no_raw_payload
+    rule: command_as_json, result, client_ip, api_get_url, and external IDs are never selected.
+  - id: actor_from_command_row
+    rule: actor is resolved via maker_id on m_portfolio_command_source.
+  - id: office_scope_required
+    rule: queries bind authorized office scope via ANY($1::bigint[]).

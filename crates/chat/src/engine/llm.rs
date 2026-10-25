@@ -528,4 +528,24 @@ mod tests {
         let input_len = input_for(&compact).len();
         assert!(!exceeds_input_bound(input_len, 50, 16_000));
     }
+
+    /// FIN-118: the source_audit shortlist fits the default input bound.
+    #[test]
+    fn source_audit_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "command_source_actions",
+            "command_source_trace",
+            "savings_account_charges_recent",
+            "savings_transactions_by_type",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }

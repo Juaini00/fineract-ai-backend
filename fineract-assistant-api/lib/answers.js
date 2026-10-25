@@ -16,13 +16,19 @@ function expected() {
 }
 
 // Angka (termasuk NUMERIC Postgres yang dikirim sebagai string) → Number yang
-// dibulatkan 6 desimal di KEDUA sisi; sisanya dibandingkan sebagai string.
+// dibulatkan 6 desimal di KEDUA sisi; timestamp ISO dinormalisasi presisi detiknya;
+// sisanya dibandingkan sebagai string.
 function canon(value) {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") return Number(value.toFixed(6));
   if (typeof value === "boolean") return value;
   const text = String(value);
   if (/^-?\d+(\.\d+)?$/.test(text)) return Number(Number(text).toFixed(6));
+  const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?([+-]\d{2}:\d{2}|Z)$/);
+  if (isoMatch) {
+    const frac = (isoMatch[2] || "").padEnd(6, "0").slice(0, 6);
+    return `${isoMatch[1]}.${frac}${isoMatch[3] === "Z" ? "+00:00" : isoMatch[3]}`;
+  }
   return text;
 }
 

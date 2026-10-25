@@ -1,0 +1,49 @@
+id: source_audit.command_source_actions
+database: fineract
+sql_file: queries/source_audit/command_source_actions.sql
+data_areas: [source_audit]
+tables: [m_portfolio_command_source, m_appuser]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: entity_name, type: string, required: false }
+  - { name: action_name, type: string, required: false }
+  - { name: status, type: integer, required: false }
+  - { name: from_date, type: date, required: false }
+  - { name: to_date, type: date, required: false }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: id, type: bigint, sensitivity: public_business }
+  - { name: action_name, type: string, sensitivity: public_business }
+  - { name: entity_name, type: string, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+  - { name: maker_id, type: bigint, sensitivity: public_business }
+  - { name: maker_username, type: string, sensitivity: public_business }
+  - { name: made_on_date_utc, type: string, sensitivity: public_business }
+  - { name: checker_id, type: bigint, sensitivity: public_business }
+  - { name: checker_username, type: string, sensitivity: public_business }
+  - { name: checked_on_date_utc, type: string, sensitivity: public_business }
+  - { name: status, type: integer, sensitivity: public_business }
+  - { name: result_status_code, type: integer, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: savings_account_id, type: bigint, sensitivity: public_business }
+  - { name: group_id, type: bigint, sensitivity: public_business }
+  - { name: product_id, type: bigint, sensitivity: public_business }
+  - { name: resource_id, type: bigint, sensitivity: public_business }
+  - { name: subresource_id, type: bigint, sensitivity: public_business }
+  - { name: transaction_id, type: string, sensitivity: public_business }
+grain: [id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains office with cs.office_id = ANY($1::bigint[]).
+  - id: date_filter_is_bound
+    rule: SQL filters made_on_date_utc between $5 and $6.
+  - id: limit_is_bound
+    rule: SQL uses bound limit after total ORDER BY.
+  - id: no_raw_payload
+    rule: raw command JSON, result, client_ip, api_get_url, and external IDs are never selected.
+  - id: actor_from_command_row
+    rule: actor attribution comes strictly from maker_id and checker_id joined to m_appuser.
