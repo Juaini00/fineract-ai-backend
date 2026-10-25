@@ -1,0 +1,23 @@
+info:
+  name: FIN-120 summary-narrow session
+  type: http
+  seq: 20
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin120Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-120 summary narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin120_summary_narrow_session", res.getBody().data.id);

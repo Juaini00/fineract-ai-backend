@@ -526,7 +526,6 @@ mod tests {
             "Reproduce the published report for last month.",
             "Show the historical office as of a past date for this client.",
             "Show the consolidated total across currencies for this branch.",
-            "Show the completeness analysis by category for this portfolio.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
         }
@@ -657,6 +656,7 @@ mod tests {
             "Show savings account balance detail with available and on-hold funds.",
             "Show savings transactions breakdown by type.",
             "Show actual account transfer between accounts.",
+            "Show completeness analysis by category for savings.",
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
@@ -664,10 +664,6 @@ mod tests {
             ("Reproduce the published report for savings.", "domain_gap"),
             (
                 "Show consolidated total across currencies for savings.",
-                "domain_gap",
-            ),
-            (
-                "Show completeness analysis by category for savings.",
                 "domain_gap",
             ),
         ] {
@@ -707,10 +703,7 @@ mod tests {
                 "Show consolidated total across currencies for this branch.",
                 "domain_gap",
             ),
-            (
-                "Show completeness analysis by category for this portfolio.",
-                "domain_gap",
-            ),
+            ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
             assert_eq!(term.source, expected_source, "{gap}");
@@ -887,6 +880,48 @@ mod tests {
             "Alasan yang tercatat untuk tindakan ini.",
             "Show before and after value diffs for this account.",
             "Show audit access rights and retention policies.",
+        ] {
+            assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
+        }
+    }
+
+    /// FIN-120 (D11): loan completeness by classification and unclassified detail are approved capabilities
+    /// and not guarded by deferred/gap; custom datatables/surveys completeness, as-of past date, and silent omission remain guarded.
+    #[test]
+    fn completeness_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show the completeness analysis by category for this portfolio.",
+            "Show loan outstanding by classification.",
+            "Kelompokkan outstanding pinjaman per sektor usaha.",
+            "Analisis kelengkapan pinjaman per sektor usaha.",
+            "Show details of unclassified loans.",
+            "Tampilkan rincian pinjaman yang belum tercatat sektor usahanya.",
+            "List unclassified loan records for follow-up.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the recurring deposit installment schedule for this account.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+            ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+        for unsupported in [
+            "Show completeness analysis for custom datatables.",
+            "Show completeness analysis for survey and credit bureau.",
+            "Show completeness analysis as of past date.",
+            "Silent omission of unclassified records.",
         ] {
             assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
         }

@@ -2165,3 +2165,98 @@ All 10 assertion checks pass cleanly.
 Domain `source_audit` moved to `status: approved_mvp`.
 Data area `source-audit` updated to `status: included_mvp_domain` with `included_tables: [m_portfolio_command_source]`.
 Free-text reason justification, maker-checker rejection/cancellation tracking, historical staff assignment, and action rollbacks remain in `unsupported_intents` per D09 boundary.
+
+## 28. FIN-120: Data completeness analysis (D11)
+
+**Context & Scope.** `dataset-inventory.md` row D11 covers data completeness analysis across loan portfolio classifications (`m_client`, `m_loan`, `m_code_value`).
+Prior to FIN-120, domain `completeness` did not exist, and completeness intents were either deferred/gap in `savings.yaml` or unapproved. FIN-120 transitions D11 to `status: inherited (FIN-120)` and creates domain `completeness` (`completeness.yaml`) with `status: approved_mvp` by implementing two curated Mode-1 capabilities:
+1. `loan_outstanding_by_classification`: summary grouping by client classification with an explicit unclassified sentinel bucket (`'Sektor belum tercatat'`) and currency (grain: `[classification, currency_code]`), reporting `loan_count`, `client_count`, `total_principal_outstanding`, `total_total_outstanding`, and boolean `unclassified_flag`.
+2. `loan_outstanding_unclassified_detail`: follow-up detail listing for unclassified loans (`client_classification_cv_id IS NULL`), returning surrogate IDs only and PII-safe attributes (grain: `[loan_id]`), reporting `loan_id`, `client_id`, `office_id`, `currency_code`, `principal_outstanding_derived`, `total_outstanding_derived`, and `disbursedon_date`.
+
+**Live Counts & Executing Query:**
+Verified read-only on `fineract_default` database:
+- `SELECT count(*) FROM m_client;` -> 43 total clients
+- `SELECT count(*) FROM m_client WHERE client_classification_cv_id IS NOT NULL;` -> 9 classified clients (all classification code value `'Standard '`)
+- `SELECT count(*) FROM m_client WHERE client_classification_cv_id IS NULL;` -> 34 unclassified clients
+- `SELECT count(*) FROM m_loan WHERE loan_status_id = 300;` -> 116 active loans
+- Classification column pin:
+  `m_client.client_classification_cv_id` (bigint referencing `m_code_value.id`), code value label from `m_code_value.code_value`. (`client_classification_id` is documentation drift from earlier sketches).
+- Live loan breakdown query:
+  ```sql
+  SELECT
+    coalesce(cv.code_value, 'Sektor belum tercatat') AS classification,
+    count(l.id) AS loan_count,
+    count(DISTINCT l.client_id) AS client_count,
+    l.currency_code,
+    sum(l.principal_outstanding_derived) AS total_principal_outstanding,
+    sum(l.total_outstanding_derived) AS total_total_outstanding
+  FROM m_loan l
+  JOIN m_client c ON c.id = l.client_id
+  LEFT JOIN m_code_value cv ON cv.id = c.client_classification_cv_id
+  WHERE l.loan_status_id = 300
+  GROUP BY coalesce(cv.code_value, 'Sektor belum tercatat'), l.currency_code
+  ORDER BY l.currency_code, classification;
+  ```
+  Executing query results:
+  - AED: unclassified 51 loans (199,687.77 principal / 203,770.85 total), Standard 29 loans (58,083.08 principal / 58,083.08 total) -> Total AED = 80 loans (257,770.85 principal / 261,853.93 total)
+  - AUD: unclassified 1 loan (2,226.54 principal / 2,226.54 total) -> Total AUD = 1 loan (2,226.54 principal / 2,226.54 total)
+  - EUR: unclassified 6 loans (36,979.88 principal / 37,979.88 total), Standard 1 loan (2,836.78 principal / 2,836.78 total) -> Total EUR = 7 loans (39,816.66 principal / 40,816.66 total)
+  - USD: unclassified 18 loans (223,952.30 principal / 228,095.34 total), Standard 10 loans (14,051.02 principal / 14,051.02 total) -> Total USD = 28 loans (238,003.32 principal / 242,146.36 total)
+  Sum of all loan counts: 80 + 1 + 7 + 28 = 116 (100% of active loans accounted for; 76 unclassified, 40 Standard).
+- Narrowed office scope (`office_ids` [2, 3]):
+  - Total active loans = 40 (38 unclassified, 2 Standard).
+
+**Key Invariants & Rules:**
+- Explicit Unclassified Bucket: Loans without classification (`client_classification_cv_id IS NULL`) are grouped under `'Sektor belum tercatat'` with `unclassified_flag = true`, never dropped, silenced, or hidden.
+- PII-Safe Detail: Follow-up detail query selects surrogate IDs only (`loan_id`, `client_id`, `office_id`). Client names, account numbers, display names, and external IDs are strictly excluded.
+- Grain: Summary is at `[classification, currency_code]` grain; detail is at `[loan_id]` grain.
+- Office authorization: bound via `l.office_id = ANY($1::bigint[])`.
+- Active loans only: filtered via `l.loan_status_id = 300` per LOAN-8.
+
+### 28.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{loan_outstanding_by_classification,loan_outstanding_unclassified_detail}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/completeness`, port 3320): 21 requests / 28 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| loan_outstanding_by_classification | none (limit 200) | 7 (population 7) | 5 (population 5) | Answered / Answered |
+| loan_outstanding_unclassified_detail | limit 200 | 76 (population 76) | 38 (population 38) | Answered / Answered |
+
+`loan_outstanding_by_classification` returns 7 summary rows across all 4 currencies (1 unclassified bucket + 1 Standard bucket for AED, EUR, USD; 1 unclassified bucket for AUD) under all offices, and 5 rows when narrowed to offices 2 and 3 (`completeness: Complete`).
+`loan_outstanding_unclassified_detail` returns 76 unclassified loans under all offices, and 38 loans when narrowed to offices 2 and 3 (`completeness: Complete`).
+Zero PII columns leaked across all responses.
+
+### 28.2 VALUES-only semantics smoke (`tests/completeness_semantics_smoke.sh`)
+
+`tests/completeness_semantics_smoke.sh` shadows `m_loan`, `m_client`, and `m_code_value` using inline `VALUES` CTEs with unmodified production SQL text, asserting 15 semantic criteria:
+1. `loan_outstanding_by_classification`: loans with NULL `client_classification_cv_id` are grouped under `'Sektor belum tercatat'`.
+2. `loan_outstanding_by_classification`: `unclassified_flag` is true for unclassified bucket and false for classified buckets.
+3. `loan_outstanding_by_classification`: classifies loans correctly using `m_code_value.code_value`.
+4. `loan_outstanding_by_classification`: office authorization binds strictly via `l.office_id = ANY($1::bigint[])`.
+5. `loan_outstanding_by_classification`: inactive loans (`loan_status_id != 300`) are excluded.
+6. `loan_outstanding_by_classification`: groups by currency and sums principal and total outstanding accurately.
+7. `loan_outstanding_by_classification`: counts distinct clients accurately per bucket.
+8. `loan_outstanding_unclassified_detail`: returns only unclassified loans (`client_classification_cv_id IS NULL`).
+9. `loan_outstanding_unclassified_detail`: office authorization binds strictly via `l.office_id = ANY($1::bigint[])`.
+10. `loan_outstanding_unclassified_detail`: inactive loans (`loan_status_id != 300`) are excluded.
+11. `loan_outstanding_unclassified_detail`: returns surrogate IDs (`loan_id`, `client_id`, `office_id`).
+12. `loan_outstanding_unclassified_detail`: sorts by total outstanding descending and loan_id ascending.
+13. `loan_outstanding_unclassified_detail`: filters correctly by optional currency parameter.
+14. Safeguards: client PII columns (`display_name`, `firstname`, `lastname`, `account_no`, `external_id`) are never selected in detail SQL.
+15. Safeguards: forbidden PII columns are not exposed in capability or query manifests.
+All 15 assertion checks pass cleanly.
+
+### 28.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/completeness` (21 requests, 28 tests PASS).
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only surrogate IDs, office IDs, currency codes, amounts, dates, and category labels returned; client names, account numbers, and external IDs are never selected or returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, active loans `loan_status_id = 300`.
+
+### 28.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D11 moved from `gap` to `inherited (FIN-120)` (Mode-1 capabilities).
+Domain `completeness` created with `status: approved_mvp`.
+Client PII detail, automated data imputation/remediation, client classification modification, and completeness analysis for savings remain in `unsupported_intents` per D11 boundary.
+

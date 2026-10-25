@@ -1,0 +1,28 @@
+info:
+  name: FIN-120 detail-narrow job
+  type: http
+  seq: 41
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin120Token}}"
+    - name: Idempotency-Key
+      value: "{{fin120_detail_narrow_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin120_detail_narrow_session}}", "request_text": "Tampilkan rincian pinjaman yang belum tercatat sektor usahanya.", "office_ids": [2, 3] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin120_detail_narrow_key", "fin120-detail-narrow-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin120_detail_narrow_job", res.getBody().data.job_id);

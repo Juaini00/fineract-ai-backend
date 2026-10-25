@@ -1,0 +1,11 @@
+info:
+  name: completeness
+  seq: 19
+  description: |
+    FIN-120 (D11): Data completeness analysis (explicit unclassified bucket + follow-up detail).
+    Empty or unclassified grouping fields are explicitly grouped under "Sektor belum tercatat" (I4, I5).
+    Reconciliation invariant: sum of buckets equals total population over the same office scope.
+    Outstanding balances are read directly from m_loan's own derived columns (LOAN-8).
+    External identifiers (account_no, external_id) and client names are never returned (PII safe).
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).

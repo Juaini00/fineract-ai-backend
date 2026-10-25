@@ -1,0 +1,33 @@
+info:
+  name: FIN-120 summary answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin120_summary_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin120Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "loan_outstanding_by_classification", document);
+          test("FIN-120 summary: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-120 D11: nonempty summary yields Standard and Sektor belum tercatat buckets", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+            const classifications = got.rows.map((r) => r.classification);
+            expect(classifications).to.include("Sektor belum tercatat");
+            expect(classifications).to.include("Standard ");
+          });
+        }
