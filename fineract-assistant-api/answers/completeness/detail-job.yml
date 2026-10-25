@@ -1,0 +1,28 @@
+info:
+  name: FIN-120 detail job
+  type: http
+  seq: 31
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin120Token}}"
+    - name: Idempotency-Key
+      value: "{{fin120_detail_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin120_detail_session}}", "request_text": "Show details of unclassified loans." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin120_detail_key", "fin120-detail-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin120_detail_job", res.getBody().data.job_id);

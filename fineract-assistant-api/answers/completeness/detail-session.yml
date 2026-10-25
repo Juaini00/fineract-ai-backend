@@ -1,0 +1,23 @@
+info:
+  name: FIN-120 detail session
+  type: http
+  seq: 30
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin120Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-120 completeness detail" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin120_detail_session", res.getBody().data.id);

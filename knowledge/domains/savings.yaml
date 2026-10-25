@@ -51,7 +51,6 @@ supported_intents:
 gap_intents:
   - { phrase: "reproduce the published report", inventory_ref: D01 }
   - { phrase: "consolidated total across currencies", inventory_ref: D03 }
-  - { phrase: "completeness analysis by category", inventory_ref: D11 }
 unsupported_intents:
   - { phrase: "create savings account", exempt: "write_action" }
   - { phrase: "reverse transaction", exempt: "write_action" }

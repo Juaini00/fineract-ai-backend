@@ -1,0 +1,29 @@
+id: completeness.loan_outstanding_unclassified_detail
+database: fineract
+sql_file: queries/completeness/loan_outstanding_unclassified_detail.sql
+data_areas: [loans_charges_balances, client_foundation]
+tables: [m_loan, m_client, m_group]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: loan_id, type: bigint, sensitivity: public_business }
+  - { name: client_id, type: bigint, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: total_outstanding_derived, type: decimal, sensitivity: public_business }
+  - { name: office_id, type: bigint, sensitivity: public_business }
+grain: [loan_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: unclassified_only
+    rule: SQL filters strictly to loans whose client has null classification.
+  - id: derived_columns_only
+    rule: SQL reads m_loan.total_outstanding_derived directly, never recomputing balances (LOAN-8).
+  - id: limit_is_bound
+    rule: SQL must use a bound LIMIT parameter.
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

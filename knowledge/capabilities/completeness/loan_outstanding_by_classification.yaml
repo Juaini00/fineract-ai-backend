@@ -1,0 +1,33 @@
+id: loan_outstanding_by_classification
+status: approved_mvp
+domain: completeness
+display_name: Loan Outstanding by Classification
+description: >-
+  Loan outstanding summary grouped by client classification bucket and currency within
+  authorized offices. Clients without classification are explicitly grouped under
+  'Sektor belum tercatat' (never omitted or zeroed, D11, database-design.md I4, I5).
+  Outstanding balances are read directly from recorded derived balance columns (LOAN-8).
+  Window is current outstanding (not as-of).
+data_areas: [loans_charges_balances, client_foundation]
+required_api_capability: loan_outstanding_by_classification
+query_id: completeness.loan_outstanding_by_classification
+metrics: []
+output_mode: summary
+request_shape: { operation: summary, subject: loan, grouping: classification, output: table, pii: none }
+examples:
+  - Show the completeness analysis by category for this portfolio.
+  - Show loan outstanding by classification.
+  - Kelompokkan outstanding pinjaman per sektor usaha.
+  - Analisis kelengkapan pinjaman per sektor usaha.
+supported_intents:
+  - Show the completeness analysis by category for this portfolio.
+  - Show loan outstanding by classification.
+  - Kelompokkan outstanding pinjaman per sektor usaha.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }

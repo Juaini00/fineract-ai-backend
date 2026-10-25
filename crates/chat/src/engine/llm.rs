@@ -548,4 +548,24 @@ mod tests {
         let input_len = input_for(&compact).len();
         assert!(!exceeds_input_bound(input_len, 50, 16_000));
     }
+
+    /// FIN-120: the completeness shortlist fits the default input bound.
+    #[test]
+    fn completeness_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "loan_outstanding_by_classification",
+            "loan_outstanding_unclassified_detail",
+            "loan_balances",
+            "loan_status_summary",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }

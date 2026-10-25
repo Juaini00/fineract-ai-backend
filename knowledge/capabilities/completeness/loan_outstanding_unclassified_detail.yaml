@@ -1,0 +1,36 @@
+id: loan_outstanding_unclassified_detail
+status: approved_mvp
+domain: completeness
+display_name: Loan Outstanding Unclassified Detail
+description: >-
+  Follow-up detail of loan accounts where client classification is missing (unclassified),
+  within authorized offices (D11). External identifiers (account_no, external_id) and client
+  names are strictly excluded per PII rules. Outstanding balances are read directly from
+  recorded derived balance columns (LOAN-8). Window is current outstanding (not as-of).
+data_areas: [loans_charges_balances, client_foundation]
+required_api_capability: loan_outstanding_unclassified_detail
+query_id: completeness.loan_outstanding_unclassified_detail
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - Show details of unclassified loans.
+  - Tampilkan rincian pinjaman yang belum tercatat sektor usahanya.
+  - List unclassified loan records for follow-up.
+supported_intents:
+  - Show details of unclassified loans.
+  - Tampilkan rincian pinjaman yang belum tercatat sektor usahanya.
+  - List unclassified loan records for follow-up.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id, client_name] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

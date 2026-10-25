@@ -1,0 +1,26 @@
+id: completeness.loan_outstanding_by_classification
+database: fineract
+sql_file: queries/completeness/loan_outstanding_by_classification.sql
+data_areas: [loans_charges_balances, client_foundation]
+tables: [m_loan, m_client, m_group, m_code_value]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+output_fields:
+  - { name: classification, type: string, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: client_count, type: bigint, sensitivity: public_business }
+  - { name: loan_count, type: bigint, sensitivity: public_business }
+  - { name: outstanding_total, type: decimal, sensitivity: public_business }
+grain: [classification, currency_code]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL binds authorized office_ids to the owning loan's client office, else the group office.
+  - id: sentinel_bucket_present
+    rule: SQL groups null client classifications into sentinel label 'Sektor belum tercatat'.
+  - id: derived_columns_only
+    rule: SQL reads m_loan.total_outstanding_derived directly, never recomputing balances (LOAN-8).
+  - id: output_columns_match_contract
+    rule: Prepared SQL output columns must equal output_fields order.

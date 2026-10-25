@@ -1,0 +1,49 @@
+id: completeness
+status: approved_mvp
+display_name: Data completeness analysis
+description: >-
+  Data completeness analysis and follow-up unclassified record details (D11,
+  dataset-scope-decisions.md:146-154 and dataset-inventory.md D11).
+  Empty or unclassified grouping fields are grouped and counted explicitly as
+  sentinel bucket "Sektor belum tercatat", never dropped or coerced to zero
+  (invariants I4, I5). Outstanding balances are read directly from recorded
+  derived columns (LOAN-8). Delivered as two Mode-1 curated capabilities:
+  loan_outstanding_by_classification (bucket-grain summary reconciling to
+  total population) and loan_outstanding_unclassified_detail (surrogate loan
+  grain follow-up without PII).
+inventory_refs:
+  - D11
+data_areas:
+  - loans_charges_balances
+  - client_foundation
+concepts:
+  - id: completeness
+    meaning: Data completeness analysis where unclassified records form an explicit sentinel bucket rather than being silently omitted or zeroed.
+    synonyms: [completeness analysis, analisis kelengkapan, kelengkapan data, unclassified bucket, belum tercatat, sektor belum tercatat]
+supported_intents:
+  - { phrase: "Show the completeness analysis by category for this portfolio.", inventory_ref: D11 }
+  - { phrase: "completeness analysis by category", inventory_ref: D11 }
+  - { phrase: "loan completeness by classification", inventory_ref: D11 }
+  - { phrase: "unclassified loan detail", inventory_ref: D11 }
+  - { phrase: "kelompokkan outstanding pinjaman per sektor usaha", inventory_ref: D11 }
+  - { phrase: "rincian pinjaman belum tercatat", inventory_ref: D11 }
+gap_intents: []
+unsupported_intents:
+  - { phrase: "completeness analysis for custom datatables", exempt: "out_of_inventory_scope" }
+  - { phrase: "completeness analysis for survey and credit bureau", exempt: "out_of_inventory_scope" }
+  - { phrase: "completeness analysis as of past date", exempt: "out_of_inventory_scope" }
+  - { phrase: "silent omission of unclassified records", exempt: "excluded_subclause_no_row_id" }
+default_rules:
+  - "D11: empty or unclassified grouping fields must be grouped and counted explicitly as 'Sektor belum tercatat', never dropped or coerced to zero (invariants I4, I5)."
+  - "Reconciliation invariant: the sum of bucket client counts, loan counts, and outstanding balances must equal the total population over the same office scope."
+  - "LOAN-8: loan outstanding balances are read directly from m_loan.total_outstanding_derived, never recomputed from repayment schedule or transactions."
+  - "XR-CUR: totals and buckets are strictly per-currency without currency conversion."
+  - "Office scope is enforced via the owning loan's client office, else group office (ANY($1::bigint[]))."
+  - "Follow-up detail returns surrogate IDs (loan_id, client_id, office_id); external identifiers (account_no, external_id) and client names are never selected (PII safe)."
+checks:
+  - id: sentinel_bucket_never_dropped
+    rule: unclassified clients and loans must be explicitly grouped into 'Sektor belum tercatat' and never omitted or zero-filled.
+  - id: office_scope_required
+    rule: queries bind authorized office scope via ANY($1::bigint[]).
+  - id: lo8_no_recompute
+    rule: loan outstanding balances are read directly from m_loan.total_outstanding_derived, never recomputed.
