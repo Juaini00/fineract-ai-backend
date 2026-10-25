@@ -1,0 +1,10 @@
+info:
+  name: source_audit
+  seq: 18
+  description: |
+    FIN-118 (D09): recorded user actions and command source trace in authorized offices.
+    m_portfolio_command_source holds recorded user action commands (maker, checker, entity, action, status, and resource pointers).
+    Full command JSON payloads, execution results, client IPs, and external IDs are never returned.
+    Actor attribution is strictly from maker_id (m_appuser), never from officer assignment tables.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization).

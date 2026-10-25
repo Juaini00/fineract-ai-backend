@@ -1,0 +1,23 @@
+info:
+  name: FIN-118 actions-narrow session
+  type: http
+  seq: 20
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin118Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-118 actions narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin118_actions_narrow_session", res.getBody().data.id);

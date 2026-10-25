@@ -500,8 +500,6 @@ mod tests {
             // FIN-153 — group/center di luar savings (CLI-4/CLI-5, gap).
             "Show the group savings summary for this branch.",
             "Show the center savings summary for this branch.",
-            // FIN-153 — D09 source audit Fineract sendiri (gap, bukan raw payload).
-            "Who performed this action on the account?",
             // FIN-153 — cakupan tambahan yang koordinator minta dipetakan:
             // FD/RD, linking resources, teller/cashier, standing
             // instructions, provisioning, scheduler, group meeting (D08).
@@ -844,6 +842,51 @@ mod tests {
             "Show largest contributing loans to provisioning.",
             "Tampilkan pinjaman penyumbang terbesar provisi.",
             "Approve provisioning to general ledger.",
+        ] {
+            assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
+        }
+    }
+
+    /// FIN-118 (D09): command source actions and action trace are approved capabilities
+    /// and not guarded by deferred/gap; raw payload, recorded reason, value diffs, and retention remain guarded.
+    #[test]
+    fn source_audit_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Who performed this action on the account?",
+            "Show command source actions.",
+            "Show recorded user actions for this branch.",
+            "Show the action trace for this savings account.",
+            "Trace actions on savings account 37.",
+            "Siapa membebaskan biaya account ini?",
+            "Tampilkan riwayat tindakan pada rekening tabungan ini.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the recurring deposit installment schedule for this account.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+            ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+        for unsupported in [
+            "Show raw command payload for this action.",
+            "Show Jarvis execution audit log.",
+            "Show application user administration roles.",
+            "What is the recorded reason for this action?",
+            "Alasan yang tercatat untuk tindakan ini.",
+            "Show before and after value diffs for this account.",
+            "Show audit access rights and retention policies.",
         ] {
             assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
         }

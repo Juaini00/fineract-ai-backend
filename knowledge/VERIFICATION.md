@@ -2096,3 +2096,72 @@ All 8 assertion checks pass cleanly.
 Domain `provisioning` moved to `status: approved_mvp` with 0 gap rows.
 Data area `provisioning` created with `status: included_mvp_domain`.
 Simulation, recomputation from current criteria, loan-level contributor synthesis, and full-GL approval remain in `unsupported_intents` per D07 boundary.
+
+## 27. FIN-118: Fineract user actions / source audit (D09)
+
+**Context & Scope.** `dataset-inventory.md` row D09 covers recorded user actions in Fineract: `m_portfolio_command_source` (4,456 rows).
+Prior to FIN-118, domain `source_audit` (`audit.yaml`) was in `status: gap` with D09 listed as a gap domain. FIN-118 transitions `source_audit` to `status: approved_mvp` and data area `source-audit` to `status: included_mvp_domain` by implementing two curated Mode-1 capabilities:
+1. `command_source_actions`: recorded user action ledger within authorized office scope (grain: `[id]`) — action name (`action_name`), entity name (`entity_name`), office (`office_id`), maker audit (`maker_id`, `maker_username`, `made_on_date_utc`), checker audit (`checker_id`, `checker_username`, `checked_on_date_utc`), processing status (`status`, `result_status_code`), and resource pointers (`client_id`, `loan_id`, `savings_account_id`, `group_id`, `product_id`, `resource_id`, `subresource_id`, `transaction_id`).
+2. `command_source_trace`: action trace for ONE NAMED business resource (grain: `[id]`) — identical output fields, with a strict named-subject guard requiring at least one of `client_id`, `loan_id`, `savings_account_id`, `group_id`, or `resource_id`. If no subject is named, returns 0 rows (`Empty` outcome).
+
+**Live Counts & Executing Query:**
+Verified read-only on `fineract_default` database:
+- `SELECT count(*) FROM m_portfolio_command_source;` -> 4,456 total rows
+- `SELECT count(*) FROM m_portfolio_command_source WHERE made_on_date IS NOT NULL;` -> 0 rows (all 4,456 rows have `made_on_date` NULL; timestamps are in `made_on_date_utc`). Mention of `created_date` in inventory was documentation drift.
+- `SELECT count(*) FROM m_portfolio_command_source WHERE maker_id IS NOT NULL;` -> 4,456 rows (100% join to `m_appuser`).
+- `SELECT count(*) FROM m_portfolio_command_source WHERE checker_id IS NOT NULL;` -> 403 rows (100% join to `m_appuser`; 4,053 rows have `checker_id` NULL).
+- `SELECT count(*) FROM m_portfolio_command_source WHERE office_id IS NOT NULL;` -> 1,877 rows (2,579 rows have `office_id` NULL, which are tenant-wide actions excluded by convention under office scope `cs.office_id = ANY($1::bigint[])`).
+- `SELECT count(*) FROM m_portfolio_command_source WHERE savings_account_id = 37;` -> exactly 16 rows, all in office 4.
+- `SELECT status, count(*) FROM m_portfolio_command_source GROUP BY status;` -> status values correspond to Apache Fineract enum `CommandProcessingResultType` (`CommandProcessingResultType.java:32-37`: `PROCESSED = 1`, `COMMANDPROCESSINGRESULT_AWAITING_APPROVAL = 2`, `COMMANDPROCESSINGRESULT_REJECTED = 3`, `COMMANDPROCESSINGRESULT_ERROR = 4`).
+
+**Key Invariants & Rules:**
+- Actor attribution is strictly derived from the command row (`maker_id`, `checker_id` joined to `m_appuser`), never from staff assignment tables (`m_staff`).
+- Full JSON payloads (`command_as_json`), raw execution results (`result`), client IP addresses (`client_ip`), API URLs (`api_get_url`), and external identifiers (`*_external_id`) are never selected or returned.
+- Hard boundary against free-text reason justification (no recorded reason column in D09 schema).
+- Hard boundary against rollback and historical staff attribution.
+- Grain: both capabilities are at `[id]` grain.
+- Office authorization: bound via `cs.office_id = ANY($1::bigint[])`. NULL-office commands are excluded under office scope.
+- Date window: explicit date window bounded by `made_on_date_utc` (`[business_today - 12m, business_today]`).
+
+### 27.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{command_source_actions,command_source_trace}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/source_audit`, port 3318): 21 requests / 30 tests PASS (100%), coordinator re-run, 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| command_source_actions | from_date/to_date + limit | 200 (population 1877) | 200 (population 1877) | Answered / Answered |
+| command_source_trace | savings_account_id=37 + limit | 16 (population 16) | 0 (population 0 in scope [2,3]) | Answered / Empty |
+
+`command_source_actions` is capped at hard_cap 200 with `completeness: Partial` following population size 1877 (`expectRowCap`).
+`command_source_trace` for savings account 37 returns 16 rows under all authorized offices, and 0 rows (`Empty` outcome, `completeness: Complete`) when narrowed to offices 2 and 3 because account 37 is in office 4.
+Zero payload columns leaked across all responses.
+
+### 27.2 VALUES-only semantics smoke (`tests/source_audit_semantics_smoke.sh`)
+
+`tests/source_audit_semantics_smoke.sh` shadows `m_portfolio_command_source` and `m_appuser` using inline `VALUES` CTEs with unmodified production SQL text, asserting 10 semantic criteria:
+1. `command_source_actions`: office authorization binds strictly via `cs.office_id = ANY($1::bigint[])` (office 9 excluded under `{2, 3}` scope).
+2. `command_source_actions`: actor attribution joins maker and checker to `m_appuser` username (maker `admin_user`, checker `checker_user`).
+3. `command_source_actions`: filters actions by date window `made_on_date_utc` (actions outside window excluded).
+4. `command_source_actions`: filters by entity_name (`SAVINGSACCOUNT`), action_name (`PAYCHARGE`), status (`1`).
+5. `command_source_trace`: named-subject guard returns 0 rows when all subject parameters are NULL.
+6. `command_source_trace`: single-subject filter returns only rows matching specified `savings_account_id`.
+7. `command_source_trace`: single-subject filter returns only rows matching specified `client_id`.
+8. `command_source_trace`: single-subject filter returns only rows matching specified `loan_id`.
+9. `command_source_trace`: single-subject filter returns only rows matching specified `group_id`.
+10. Safeguards: forbidden payload columns (`command_as_json`, `result`, `client_ip`, `api_get_url`, `external_id`) are never selected or declared in manifests.
+All 10 assertion checks pass cleanly.
+
+### 27.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/source_audit` (21 requests, 30 tests PASS).
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, usernames, action/entity names, timestamps, and resource IDs returned; raw payloads and client IPs are strictly excluded.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, maker/checker attribution from `m_appuser`.
+
+### 27.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D09 moved from `gap` to `inherited (FIN-118)` (Mode-1 capabilities).
+Domain `source_audit` moved to `status: approved_mvp`.
+Data area `source-audit` updated to `status: included_mvp_domain` with `included_tables: [m_portfolio_command_source]`.
+Free-text reason justification, maker-checker rejection/cancellation tracking, historical staff assignment, and action rollbacks remain in `unsupported_intents` per D09 boundary.

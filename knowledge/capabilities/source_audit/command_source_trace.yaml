@@ -1,0 +1,62 @@
+id: command_source_trace
+status: approved_mvp
+domain: source_audit
+display_name: Fineract Command Source Trace
+description: >-
+  Action trace for one named business resource (savings account, loan, client, group, or charge/resource) in authorized offices.
+  The request must name the resource; a request without a named subject returns 0 rows.
+  Actor attribution is taken from the command row (maker_id).
+  Full JSON bodies, execution results, client IPs, and external IDs are strictly excluded.
+data_areas: [source_audit]
+required_api_capability: command_source_trace
+query_id: source_audit.command_source_trace
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: audit_action, grouping: none, output: list, pii: none }
+examples:
+  - Show command source trace for savings account 37.
+  - Trace actions on savings account 37.
+  - Show the action trace for this savings account.
+  - Tampilkan riwayat tindakan pada rekening tabungan ini.
+supported_intents:
+  - command source trace
+  - action trace for this resource
+  - trace actions on this resource
+  - penelusuran tindakan command source
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - command_as_json
+      - result
+      - client_ip
+      - api_get_url
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  client_id: { type: integer, required: false }
+  loan_id: { type: integer, required: false }
+  savings_account_id: { type: integer, required: false }
+  group_id: { type: integer, required: false }
+  resource_id: { type: integer, required: false }
+  entity_name: { type: string, required: false }
+  action_name: { type: string, required: false }
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: named_subject_required
+    rule: query requires a named business subject to return rows.
+  - id: actor_from_command_row
+    rule: actor attribution comes from maker_id and checker_id.
+  - id: no_raw_payload
+    rule: command_as_json, result, client_ip, api_get_url, and external IDs are never returned.

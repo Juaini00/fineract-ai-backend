@@ -1,40 +1,57 @@
-id: audit
-status: gap
+id: source_audit
+status: approved_mvp
 display_name: Fineract source audit
 description: >-
   Fineract's own operational command/action audit — actor, action, and
-  evidenced reason for a command against a business resource
+  resource pointer for a command against a business resource
   (`m_portfolio_command_source`), per D09
-  (dataset-scope-decisions.md:128-134) and dataset-inventory.md D09. Distinct
-  from Jarvis's own execution audit (`audit_events`, database-design.md I8,
-  never exposed as a business-analytics surface) and from raw command
-  JSON/payload, both of which stay out of scope. User/role/permission
-  administration (`m_appuser`, `m_role`, `m_permission`) also stays out of
-  scope (D15, non-analytic). Agreed baseline scope for the source-audit
-  surface; no approved Mode-1 capability exists yet.
+  (dataset-scope-decisions.md:128-134) and dataset-inventory.md D09.
+  Delivered as two Mode-1 curated capabilities: command_source_actions
+  (recorded action ledger within authorized office scope) and
+  command_source_trace (action trace for a named business resource).
+  Actor attribution is taken strictly from the command row (`maker_id` ->
+  `m_appuser.username`), never from an officer assignment table.
+  Raw command payload (command_as_json, result, client_ip, api_get_url,
+  *_external_id) is strictly excluded; recorded reasons in raw JSON,
+  value diffs, retention/audit rights, and Jarvis's own execution audit (I8)
+  remain unsupported.
 inventory_refs:
   - D09
 data_areas:
   - source_audit
 concepts:
   - id: source_audit
-    meaning: Fineract's own recorded command/action against a business resource, with its actor and evidenced reason.
-    synonyms: [source audit, audit trail, command source, jejak audit]
-supported_intents: []
-gap_intents:
+    meaning: Fineract's own recorded command/action against a business resource, with its actor and resource pointers.
+    synonyms: [source audit, audit trail, command source, jejak audit, user actions, tindakan pengguna]
+supported_intents:
   - { phrase: "who performed this action", inventory_ref: D09 }
-  - { phrase: "reason recorded for this action", inventory_ref: D09 }
   - { phrase: "siapa membebaskan biaya", inventory_ref: D09 }
-  - { phrase: "alasan yang tercatat", inventory_ref: D09 }
+  - { phrase: "command source actions", inventory_ref: D09 }
+  - { phrase: "action trace for this resource", inventory_ref: D09 }
+  - { phrase: "tampilkan riwayat tindakan pengguna", inventory_ref: D09 }
+  - { phrase: "penelusuran tindakan command source", inventory_ref: D09 }
+gap_intents: []
 unsupported_intents:
   - { phrase: "raw command payload", exempt: "out_of_inventory_scope" }
   - { phrase: "jarvis execution audit log", exempt: "out_of_inventory_scope" }
   - { phrase: "application user administration", exempt: "out_of_inventory_scope" }
+  - { phrase: "recorded reason", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "recorded reason extraction", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "reason recorded for this action", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "alasan yang tercatat", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "before and after value diffs", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "audit access rights and retention", exempt: "excluded_subclause_no_row_id" }
 default_rules:
-  - Fineract's own source audit (m_portfolio_command_source) is agreed baseline scope (D09, dataset-inventory.md D09 `gap`) with no approved capability yet; it answers unsupported with a gap reason.
-  - This is distinct from user/role/permission administration (still excluded, D15 non-analytic) and from Jarvis's own execution audit (database-design.md I8) or raw command payload, neither of which ever becomes gap or supported scope.
+  - "Fineract's own source audit reads m_portfolio_command_source; raw command payload is strictly excluded (D09 boundary)."
+  - "Actor attribution is strictly from maker_id on the command row (joined to m_appuser), never from an officer assignment table."
+  - "Office scope is enforced via office_id = ANY($1::bigint[]); commands without an office_id are org-wide and not office-attributable."
+  - "Action trace requires a named subject (client_id, loan_id, savings_account_id, group_id, or resource_id); requests without a subject return zero rows."
+  - "Recorded reasons stored in raw command JSON are excluded by the D09 boundary and stay unsupported."
+  - "Distinct from user/role/permission administration (D15 non-analytic) and Jarvis's own execution audit (database-design.md I8)."
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D09's row moves to `inherited`.
-  - id: source_audit_distinct_from_raw_payload
-    rule: gap_intents and supported_intents must never include raw command JSON or payload access.
+  - id: no_raw_payload
+    rule: raw command JSON, execution results, client IPs, and external IDs are never selected.
+  - id: actor_from_command_row
+    rule: actor attribution comes from maker_id and checker_id on the command row, never from an assignment table.
+  - id: named_subject_required
+    rule: trace capability returns 0 rows without a named business subject.

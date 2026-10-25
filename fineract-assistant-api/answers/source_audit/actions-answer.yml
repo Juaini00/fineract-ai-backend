@@ -1,0 +1,40 @@
+info:
+  name: FIN-118 actions answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin118_actions_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin118Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "command_source_actions", document);
+          test("FIN-118 actions: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          answers.expectRowCap(
+            test,
+            expect,
+            "command_source_actions",
+            document,
+            200,
+            answers.populationSize("command_source_actions")
+          );
+          test("FIN-118 D09: positive recorded actions and no payload columns leaked", function () {
+            expect(document.outcome).to.equal("Answered");
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.be.above(0);
+            for (const forbidden of ["command_as_json", "result", "client_ip", "api_get_url", "external_id"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

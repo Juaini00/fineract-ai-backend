@@ -1,0 +1,54 @@
+id: command_source_actions
+status: approved_mvp
+domain: source_audit
+display_name: Fineract Command Source Actions
+description: >-
+  List recorded Fineract user action commands (maker, checker, entity, action, status, and resource pointers) within authorized office scope.
+  Actor attribution is taken from the command row (maker_id), never from an officer assignment table.
+  Full JSON bodies, execution results, client IPs, and external IDs are strictly excluded.
+data_areas: [source_audit]
+required_api_capability: command_source_actions
+query_id: source_audit.command_source_actions
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: audit_action, grouping: none, output: list, pii: none }
+examples:
+  - Show recorded user actions in my authorized offices.
+  - Show command source actions.
+  - Tampilkan riwayat tindakan pengguna Fineract.
+supported_intents:
+  - who performed this action
+  - siapa membebaskan biaya
+  - command source actions
+  - tampilkan riwayat tindakan pengguna
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - command_as_json
+      - result
+      - client_ip
+      - api_get_url
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  entity_name: { type: string, required: false }
+  action_name: { type: string, required: false }
+  status: { type: integer, required: false }
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: actor_from_command_row
+    rule: actor attribution comes from maker_id and checker_id.
+  - id: no_raw_payload
+    rule: command_as_json, result, client_ip, api_get_url, and external IDs are never returned.

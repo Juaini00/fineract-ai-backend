@@ -1,0 +1,23 @@
+info:
+  name: FIN-118 trace-narrow session
+  type: http
+  seq: 40
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin118Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-118 trace narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin118_trace_narrow_session", res.getBody().data.id);

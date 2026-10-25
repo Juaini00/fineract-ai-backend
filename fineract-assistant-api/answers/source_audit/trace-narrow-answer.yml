@@ -1,0 +1,32 @@
+info:
+  name: FIN-118 trace-narrow answer versus independent SQL
+  type: http
+  seq: 42
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin118_trace_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin118Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "command_source_trace", document, {
+            truthKey: "command_source_trace__scope_2_3",
+            narrowedTo: 2,
+          });
+          test("FIN-118 trace-narrow: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-118 D09: narrowing to offices 2 and 3 excludes account 37 (in office 4), returning Empty", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }
