@@ -2274,7 +2274,7 @@ Client PII detail, automated data imputation/remediation, client classification 
   - 21 loans have zero transactions in `m_loan_transaction` and are excluded (no zero-filling).
   - Outstanding gap reconciliation (346,033.21 vs 537,817.37): The difference is due to interest/fee/penalty components in `m_loan.total_outstanding_derived` (principal 325,461.41, interest 202,237.75, fee 9,814.00, penalty 304.21 totaling 537,817.37) and partial running balance population in `m_loan_transaction` (691 of 2,947 rows have non-null `outstanding_loan_balance_derived`). This is documented as an open owner item, not patched with arithmetic.
   - Total savings accounts in `m_savings_account`: 207 accounts across statuses (100, 200, 300, 600). Live total balance: 502,871.31.
-  - Total savings transactions in `m_savings_account_transaction`: 11,889 rows.
+  - Total savings transactions in `m_savings_account_transaction`: 15,607 rows (8,819 non-reversed) — coordinator re-count.
   - At latest transaction date (2026-09-10), `savings_balance_asof` returns 166 qualifying accounts totaling 500,135.95.
   - 41 accounts have no transactions on or before cutoff date and are excluded (no zero-filling).
 - Boundary: Replay of as-published period-close reports ("Reproduce the published report for last month", "as published saat penutupan") remains permanently guarded under `unsupported_intents` and returns `Completed` + `BlockedByPolicy` / `surface_not_approved`.
