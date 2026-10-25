@@ -2126,7 +2126,7 @@ Verified read-only on `fineract_default` database:
 ### 27.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/{command_source_actions,command_source_trace}.sql` (+ `__scope_2_3` and `__population` variants).
-Locked runs (`answers/source_audit`, port 3318): 21 requests / 30 tests PASS (100%), coordinator re-run,, 0 commit-isolation violations (OVR-6.7).
+Locked runs (`answers/source_audit`, port 3318): 21 requests / 30 tests PASS (100%), coordinator re-run, 0 commit-isolation violations (OVR-6.7).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
