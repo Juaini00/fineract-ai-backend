@@ -1971,3 +1971,65 @@ boundary gap found during verification:
 - **Re-proof**: locked Bruno 51 requests / 48 tests PASS (0 commit-isolation violations); smoke 12/12; workspace
   tests, clippy `-D warnings`, docs-check, acceptance-check, catalog validate 0 errors — all run by the coordinator
   in the worktree on this commit.
+
+## 25. FIN-114 / D05 — Standing instructions: config, status, schedule, execution attempts, recorded failures
+
+**Context & Scope.** `dataset-inventory.md` row D05 covers standing instructions (`m_account_transfer_standing_instructions`, 61 rows) and execution attempt history (`m_account_transfer_standing_instructions_history`, 1,219 rows).
+Prior to FIN-114, domain `standing_instructions` was in `status: gap` with D05 listed as a gap domain. FIN-114 transitions `standing_instructions` to `status: approved_mvp` and data area `standing-instructions` to `status: included_mvp_domain` by implementing four curated Mode-1 capabilities:
+1. `standing_instruction_config`: standing instruction configurations, status, priority, amount, and resolved currency from the source account leg in authorized offices. Grain: `[standing_instruction_id]`.
+2. `standing_instruction_schedule`: recurrence configuration verbatim as recorded in authorized offices with no next-run computation and no date arithmetic. Grain: `[standing_instruction_id]`.
+3. `standing_instruction_executions`: execution attempt history within an explicit date window (`[business_today - 12m, business_today]`). Grain: `[history_id]`.
+4. `standing_instruction_failures`: failed execution attempts (`history.status = 'failed'`) and recorded error logs within an explicit date window (`[business_today - 12m, business_today]`). Grain: `[history_id]`.
+
+**Key Invariants & Rules:**
+- Bounded-scope guard: authorized office scope strictly required via NULL-safe disjunction `((atd.from_office_id IS NOT NULL AND atd.from_office_id = ANY($1::bigint[])) OR (atd.to_office_id IS NOT NULL AND atd.to_office_id = ANY($1::bigint[])))`.
+- DELETED status: instructions with `status = 3` (`DELETED`) are strictly excluded from configuration, recurrence schedule, and execution/failure histories.
+- Currency resolution: resolved from the underlying savings account (`m_savings_account.currency_code`) or loan account (`m_loan.currency_code`) without cross-currency conversion.
+- No PII: `account_no`, `external_id`, and `client_name` are never returned.
+- Failure claims: strictly trace to recorded rows with `status = 'failed'`. Absence of a transfer or execution is never treated as failure (genuine Empty outcome).
+- Schedule: recurrence parameters surfaced verbatim as recorded; no next-run calculation and no date arithmetic.
+- Large results handling: execution attempts and failures exceed inline threshold when error_log is present and are transparently supported via dataset-backed handles and pagination.
+
+### 25.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{standing_instruction_config,standing_instruction_schedule,standing_instruction_executions,standing_instruction_failures}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/standing_instructions`, port 3314): 47 requests / 61 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| standing_instruction_config | office_ids + limit | 61 | 22 | Completed / Answered |
+| standing_instruction_schedule | office_ids + limit | 61 | 22 | Completed / Answered |
+| standing_instruction_executions | office_ids + from_date/to_date + limit | 200 (capped from population 1,219) | 200 (capped from population 265) | Completed / Answered |
+| standing_instruction_failures | office_ids + from_date/to_date + limit | 200 (capped from population 808) | 86 | Completed / Answered |
+
+In addition, empty population tested:
+- `standing_instruction_config`: office 9 returns 0 rows with `outcome = "Empty"`.
+
+### 25.2 VALUES-only semantics smoke (`tests/standing_instructions_semantics_smoke.sh`)
+
+`tests/standing_instructions_semantics_smoke.sh` shadows `m_account_transfer_standing_instructions`, `m_account_transfer_details`, `m_account_transfer_standing_instructions_history`, `m_savings_account`, and `m_loan` using inline `VALUES` CTEs with unmodified production SQL text, asserting 10 semantic criteria:
+1. `standing_instruction_config`: DELETED status 3 instruction strictly excluded.
+2. `standing_instruction_schedule`: DELETED status 3 instruction strictly excluded.
+3. `standing_instruction_executions`: attempts for DELETED instructions strictly excluded.
+4. `standing_instruction_failures`: attempts for DELETED instructions strictly excluded from failures.
+5. `standing_instruction_config`: NULL `to_office_id` instruction visible via `from_office_id`.
+6. `standing_instruction_schedule`: `recurrence_frequency` NULL preserved as NULL (not coerced to 0).
+7. `standing_instruction_failures`: returned only failed attempt (101), strictly excluded success attempt (102).
+8. `standing_instruction_executions`: anti-fanout holds (attempt appears exactly once).
+9. Office authorization: office 9 instruction (5) and attempt (105) strictly excluded under `{2, 3}` scope.
+10. Currency resolution: resolved accurately from savings (USD) and loan (EUR) legs without conversion.
+All 10 assertion checks pass cleanly.
+
+### 25.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/standing_instructions`.
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business identifiers, dates, enums, amounts, currency codes, and error log text returned; `account_no`, `external_id`, and `client_name` are never returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, failure status strictly enforced.
+
+### 25.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D05 moved from `gap` to `inherited (FIN-114)` (Mode-1 capabilities).
+Domain `standing_instructions` moved to `status: approved_mvp` with 0 gap rows.
+Data area `standing-instructions` created with `status: included_mvp_domain`.
+Write actions, manual triggers, template discovery, and full transaction mapping remain in `unsupported_intents` per D05 boundary.

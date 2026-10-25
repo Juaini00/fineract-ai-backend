@@ -2431,6 +2431,16 @@ stays `gap`; the ticket is not closed here**):
   direction pinned from Fineract source (`revertJournalEntry` sets the ORIGINAL's `reversal_id` to the new reversal
   entry, `JournalEntryWritePlatformServiceJpaRepositoryImpl:428-431`).
 
+**Update after FIN-114 (Standing instructions: D05 config, status, schedule, execution attempts, failures):**
+
+- Delivered 4 curated Mode-1 capabilities for domain `standing_instructions` (`knowledge/domains/standing_instructions.yaml`): `standing_instruction_config`, `standing_instruction_schedule`, `standing_instruction_executions`, and `standing_instruction_failures`.
+- Domain and inventory alignment: transitioned domain `standing_instructions` from `status: gap` to `status: approved_mvp`; moved D05 (`m_account_transfer_standing_instructions`, `m_account_transfer_standing_instructions_history`) to `inherited (FIN-114)` in `docs/data/dataset-inventory.md` with 4 capabilities registered; data area `standing-instructions` created with `status: included_mvp_domain`.
+- Boundaries and constraints: Write operations (create/update/delete standing instructions), manual trigger/run execution, standing instruction template discovery, and full transaction mapping across all legs are permanently excluded per D05 boundary (retained under `unsupported_intents`). All queries bind `$1::bigint[]` authorized office scope across `((atd.from_office_id IS NOT NULL AND atd.from_office_id = ANY($1)) OR (atd.to_office_id IS NOT NULL AND atd.to_office_id = ANY($1)))`. Hard limit cap 200 enforced with population disclosure. Account numbers and external IDs excluded.
+- Semantics: DELETED instructions (`status = 3`) are strictly excluded from all 4 capabilities. Recurrence schedule surfaced verbatim with no next-run computation and no date arithmetic. Failure claims strictly trace to `history.status = 'failed'`; absence of execution or transfer is an actual Empty outcome, never presumed failure.
+- Synthetic proof: `tests/standing_instructions_semantics_smoke.sh` shadows all tables with inline `VALUES` CTEs asserting 10 semantic criteria (exclusion of DELETED status, NULL to_office_id visibility, recurrence_frequency NULL preservation, failure status filtering, anti-fanout, office authorization boundary, and currency resolution from savings/loan legs without cross-currency conversion).
+- HTTP proof (`answers/standing_instructions`): 47 requests / 61 tests, 100% PASS against independent SQL oracles for all authorized offices `{1,2,3,4,5,6,8,9}` and narrowed scope `[2, 3]`, plus empty population tests in office 9 (`outcome = "Empty"`) and zero commit-isolation violations (OVR-6.7).
+- Gates: catalog validated with 0 errors; workspace unit tests passed; clippy clean; `docs-check.sh` and `acceptance-check.sh` passed.
+
 
 ### 5.1 Scenario coverage
 

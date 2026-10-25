@@ -1,0 +1,37 @@
+id: standing_instructions
+status: included_mvp_domain
+source_doc: docs/product/2026-09-09-dataset-scope-decisions.md:91-97
+inventory_refs:
+  - D05
+description: >-
+  Recurring account-transfer standing instructions, recurrence schedule,
+  execution results, and recorded failure reasons — per D05
+  (dataset-scope-decisions.md:91-97) and dataset-inventory.md D05.
+  Absence of a transfer does not prove failure. Failure claims trace to
+  recorded history status ('failed'). Office authorization is resolved via
+  either linked account's office path.
+included_tables:
+  - m_account_transfer_standing_instructions
+  - m_account_transfer_standing_instructions_history
+  - m_account_transfer_details
+  - m_savings_account
+  - m_loan
+  - m_office
+conditional_tables: []
+excluded_tables: []
+allowed_domains: [standing_instructions]
+default_rules:
+  - "Absence of a transfer does not prove failure — instruction may be inactive or not yet due (D05 own rule, dataset-scope-decisions.md:91-97)."
+  - "Failure claims must trace to a history row with a failure status (history.status = 'failed'), never inferred from missing executions."
+  - "Office authorization is resolved via either linked account's office path (from_office_id or to_office_id in authorized scope)."
+  - "Currency is resolved from the from-account leg (m_savings_account or m_loan), never converted; standing instruction table itself carries no currency column."
+  - "Next-run schedule computation is excluded; recurrence configuration is surfaced verbatim as recorded."
+  - "Full instruction-to-actual-transfer-transaction mapping is open; account_transfer_details_id is exposed as linkage reference only."
+  - "Anti-fanout: instruction grain capabilities never join history; attempt grain capabilities report history attempts without multiplying instructions."
+checks:
+  - id: office_scope_required
+    rule: every standing instructions query must bind authorized office scope.
+  - id: failure_traceability
+    rule: failure claims must trace to history.status = 'failed'.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned (PII safe).

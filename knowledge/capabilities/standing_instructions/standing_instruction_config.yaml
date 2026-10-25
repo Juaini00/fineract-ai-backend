@@ -1,0 +1,47 @@
+id: standing_instruction_config
+status: approved_mvp
+domain: standing_instructions
+display_name: Standing Instruction Config
+description: >-
+  List standing instruction configurations, status, and resolved currency in authorized offices.
+  Instruction grain with raw status, priority, amount, currency from source leg, from/to office IDs,
+  validity dates, and transfer details linkage reference (LINK-4).
+  Governed by office authorization on either linked account path.
+data_areas: [standing_instructions]
+required_api_capability: standing_instruction_config
+query_id: standing_instructions.standing_instruction_config
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: standing_instruction, grouping: none, output: list, pii: none }
+examples:
+  - Show standing instruction configuration and status.
+  - List standing instructions in authorized offices.
+  - Tampilkan konfigurasi dan status instruksi transfer otomatis.
+supported_intents:
+  - standing instruction configuration and status
+  - standing instructions in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: office_scope_bounded
+    rule: D05 listing is office-bounded across from_office_id and to_office_id in authorized scope.
+  - id: linkage_only_not_mapping
+    rule: account_transfer_details_id surfaces linkage reference only, not full transaction mapping.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

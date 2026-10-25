@@ -1,0 +1,35 @@
+id: standing_instructions.standing_instruction_executions
+database: fineract
+sql_file: queries/standing_instructions/standing_instruction_executions.sql
+data_areas: [standing_instructions]
+tables: [m_account_transfer_standing_instructions_history, m_account_transfer_standing_instructions, m_account_transfer_details]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: from_date, type: date, required: true }
+  - { name: to_date, type: date, required: true }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: history_id, type: bigint, sensitivity: public_business }
+  - { name: standing_instruction_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: status, type: string, sensitivity: public_business }
+  - { name: execution_time, type: string, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: error_log, type: string, sensitivity: public_business }
+grain: [history_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains office on either side with ANY($1::bigint[]).
+  - id: date_filter_is_bound
+    rule: SQL filters execution_time between $2 and $3.
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
+  - id: no_account_numbers
+    rule: account_no, external_id, and client identifiers are never selected.
+  - id: raw_status_and_error
+    rule: status and error_log are surfaced verbatim as recorded.
+  - id: deleted_status_excluded
+    rule: SQL excludes DELETED status 3 instructions.

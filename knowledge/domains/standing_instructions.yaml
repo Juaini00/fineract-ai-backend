@@ -1,28 +1,45 @@
 id: standing_instructions
-status: gap
+status: approved_mvp
 display_name: Standing instructions
 description: >-
-  Recurring account-transfer instructions and their execution history — D05
-  (dataset-scope-decisions.md:96-102) and dataset-inventory.md D05. Absence of
-  a transfer never proves failure on its own — a failure claim must trace to a
-  history row with a failure status. Agreed baseline scope; no approved
-  Mode-1 capability exists yet.
+  Recurring account-transfer standing instructions, recurrence schedule,
+  execution results, and recorded failure reasons — per D05
+  (dataset-scope-decisions.md:91-97) and dataset-inventory.md D05.
+  Absence of a transfer never proves failure on its own — a failure claim
+  must trace to a history row with a failure status. Delivered as four Mode-1
+  curated capabilities (FIN-114).
 inventory_refs:
   - D05
-data_areas: []
+data_areas:
+  - standing_instructions
 concepts:
   - id: standing_instruction
     meaning: A recurring instruction to transfer funds between two accounts.
     synonyms: [standing instruction, instruksi transfer berkala]
-supported_intents: []
-gap_intents:
+supported_intents:
+  - { phrase: "standing instruction configuration and status", inventory_ref: D05 }
+  - { phrase: "standing instruction schedule and recurrence", inventory_ref: D05 }
   - { phrase: "standing instruction execution history", inventory_ref: D05 }
+  - { phrase: "standing instruction failure reasons", inventory_ref: D05 }
+  - { phrase: "failed standing instructions in authorized offices", inventory_ref: D05 }
+gap_intents: []
 unsupported_intents:
   - { phrase: "create standing instruction", exempt: "write_action" }
   - { phrase: "cancel standing instruction", exempt: "write_action" }
+  - { phrase: "next run schedule for standing instruction", exempt: "excluded_subclause_no_row_id" }
+  - { phrase: "full transaction mapping for standing instruction", exempt: "excluded_subclause_no_row_id" }
 default_rules:
-  - Standing instructions (D05) are agreed baseline scope with no approved capability yet; every request answers unsupported with a gap reason.
-  - A future capability must trace a failure claim to a history row with a failure status — "no transfer found" is never itself proof of failure (D05's own rule).
+  - "Standing instructions (D05) are approved Mode-1 scope (FIN-114): configuration, status, schedule, execution results, and recorded failure reasons."
+  - "Failure claims must trace to a history row with a failure status (history.status = 'failed') — absence of a transfer or missing execution is never itself proof of failure (D05 own rule, dataset-scope-decisions.md:91-97)."
+  - "Next-run schedule computation is excluded; recurrence configuration is surfaced verbatim as recorded."
+  - "Instruction to actual transfer transaction full mapping is open; account_transfer_details_id is exposed as linkage reference only."
+  - "Office authorization is resolved via either linked account's office path (from_office_id or to_office_id in authorized scope)."
 checks:
-  - id: gap_domain_no_approved_capability
-    rule: this domain must not have approved_mvp capabilities until a Mode-1 capability is authored and D05's row moves to inherited.
+  - id: failure_traceability
+    rule: failure claims must trace to a history row with status 'failed'.
+  - id: no_next_run_computation
+    rule: next-run computation is excluded; schedule surfaces recorded recurrence only.
+  - id: no_full_transaction_mapping
+    rule: instruction to actual transfer transaction full mapping is excluded from capabilities.
+  - id: office_scope_bound
+    rule: every standing instructions query must bind authorized office scope on from_office_id or to_office_id.

@@ -486,4 +486,26 @@ mod tests {
         assert!(exceeds_input_bound(20_000, REQUEST.len(), 16_000));
         assert!(!exceeds_input_bound(1, 1, 16_000));
     }
+
+    /// FIN-114: the standing instructions shortlist fits the default input bound.
+    #[test]
+    fn standing_instructions_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "standing_instruction_schedule",
+            "standing_instruction_executions",
+            "standing_instruction_config",
+            "fd_rd_term_preclosure",
+            "standing_instruction_failures",
+            "loan_schedule_by_client",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }
