@@ -1,0 +1,47 @@
+id: loan_position_asof
+status: approved_mvp
+domain: historical
+display_name: Loan Position As Of Date
+description: >-
+  Recomputed historical loan outstanding positions as of a specified date, reading
+  outstanding_loan_balance_derived from the latest non-reversed transaction at or
+  before as_of_date. Loans with no qualifying transaction at or before as_of_date
+  are excluded from rows (not zero-filled); consumers must not interpret absence of
+  an account as zero position (D11 spirit, D01, database-design.md I4, I5). Outstanding
+  balance is raw derived without backfilling or unapproved adjustments. Filter requires
+  authorized office scope (COALESCE(c.office_id, g.office_id) = ANY($1::bigint[]))
+  and bound as_of_date.
+data_areas: [loans_charges_balances, client_foundation]
+required_api_capability: loan_position_asof
+query_id: historical.loan_position_asof
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: loan, grouping: none, output: list, pii: none }
+examples:
+  - Show loan position as of date.
+  - Show loan position as of 2026-04-30.
+  - Posisi pinjaman per 2026-04-30.
+  - Posisi pinjaman per tanggal dihitung ulang.
+supported_intents:
+  - Show loan position as of date.
+  - Show loan position as of 2026-04-30.
+  - Posisi pinjaman per 2026-04-30.
+  - Posisi pinjaman per tanggal dihitung ulang.
+defaults:
+  authorized_scope_only: true
+guards:
+  require_office_scope: true
+  snapshot_only: true
+  pii: { returns_pii: false, never_return: [account_no, external_id, client_name] }
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  as_of_date:
+    type: date
+    required: false
+    default: business_today
+    fill_when_missing: true
+  limit:
+    type: integer
+    required: false
+    default: "100"
+    hard_cap: 500

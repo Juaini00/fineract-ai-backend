@@ -585,10 +585,19 @@ fn verify_slots(
                     param_parse::parse_period(&source.quote, today)
                 }
                 .or_else(|| param_parse::parse_month_phrase(&source.quote, today))
+                .or_else(|| {
+                    NaiveDate::parse_from_str(&source.quote, "%Y-%m-%d")
+                        .ok()
+                        .map(|d| param_parse::ParsedPeriod {
+                            from: d,
+                            to: d,
+                            detail: source.quote.clone(),
+                        })
+                })
                 .ok_or_else(invalid)?;
                 let date = match name.as_str() {
                     "from_date" => period.from,
-                    "to_date" => period.to,
+                    "to_date" | "as_of_date" => period.to,
                     _ => return Err(invalid()),
                 };
                 (date.to_string(), source, span)
@@ -638,7 +647,8 @@ fn verify_slots(
     // A recognized explicit period cannot disappear into catalog defaults.
     if param_parse::parse_period(request, today).is_some() {
         for p in &query.parameters {
-            if matches!(p.name.as_str(), "from_date" | "to_date") && !bindings.contains_key(&p.name)
+            if matches!(p.name.as_str(), "from_date" | "to_date" | "as_of_date")
+                && !bindings.contains_key(&p.name)
             {
                 return Err(Unplannable::InvalidSource("period_binding_missing"));
             }

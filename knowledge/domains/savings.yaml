@@ -49,9 +49,10 @@ supported_intents:
   - { phrase: "savings accounts with applied withholding tax", inventory_ref: SAV-9 }
   - { phrase: "savings linked accounts and portfolio associations", inventory_ref: SAV-10 }
 gap_intents:
-  - { phrase: "reproduce the published report", inventory_ref: D01 }
   - { phrase: "consolidated total across currencies", inventory_ref: D03 }
 unsupported_intents:
+  - { phrase: "reproduce the published report", exempt: "dataset-scope-decisions.md:16" }
+  - { phrase: "as published saat penutupan", exempt: "dataset-scope-decisions.md:16" }
   - { phrase: "create savings account", exempt: "write_action" }
   - { phrase: "reverse transaction", exempt: "write_action" }
 default_rules:

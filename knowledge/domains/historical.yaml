@@ -1,0 +1,40 @@
+id: historical
+status: approved_mvp
+display_name: Historical positions
+description: >-
+  Recomputed historical loan and savings positions as of a specified date (D01,
+  dataset-scope-decisions.md:16, 59-70 and dataset-inventory.md D01).
+  As-published replay is unsupported by owner decision; recomputation reads
+  running balances as of a filter date.
+inventory_refs:
+  - D01
+data_areas:
+  - loans_charges_balances
+  - savings_transactions
+  - client_foundation
+concepts:
+  - id: historical_position
+    meaning: Recomputed balance or outstanding position as of a specified past or present date.
+    synonyms: [historical position, posisi historis, as of date, per tanggal, posisi pinjaman per tanggal, saldo tabungan per tanggal]
+supported_intents:
+  - { phrase: "loan position as of date", inventory_ref: D01 }
+  - { phrase: "savings balance as of date", inventory_ref: D01 }
+  - { phrase: "posisi pinjaman per tanggal", inventory_ref: D01 }
+  - { phrase: "saldo tabungan per tanggal", inventory_ref: D01 }
+  - { phrase: "posisi pinjaman per tanggal dihitung ulang", inventory_ref: D01 }
+  - { phrase: "saldo tabungan per tanggal dihitung ulang", inventory_ref: D01 }
+gap_intents: []
+unsupported_intents:
+  - { phrase: "reproduce the published report", exempt: "dataset-scope-decisions.md:16" }
+  - { phrase: "as published saat penutupan", exempt: "dataset-scope-decisions.md:16" }
+default_rules:
+  - "D01: only current recomputation from live transaction running balances is in scope (dataset-scope-decisions.md:16); reproducing a published report as published is out of scope and unsupported."
+  - "Exclude reversed transactions (is_reversed = false) from running balance position lookups."
+  - "Positions pick the latest non-reversed transaction with non-null running balance at or before as_of_date."
+  - "Accounts or loans with no qualifying transaction at or before as_of_date are excluded from rows and disclosed in excluded counts, never zero-filled."
+  - "Office authorization is enforced via ANY($1::bigint[])."
+  - "XR-CUR: amounts are per currency code without cross-currency consolidation."
+  - "PII protection: only surrogate IDs (loan_id, savings_account_id, client_id, office_id) are returned; external IDs, account numbers, and names are excluded."
+checks:
+  - id: no_as_published_snapshot
+    rule: historical positions must read from transaction running balances, never claim snapshot reproducibility.

@@ -2260,3 +2260,66 @@ All 15 assertion checks pass cleanly.
 Domain `completeness` created with `status: approved_mvp`.
 Client PII detail, automated data imputation/remediation, client classification modification, and completeness analysis for savings remain in `unsupported_intents` per D11 boundary.
 
+## 29. FIN-121: Posisi historis recomputed as-of date (D01)
+
+- Dataset inventory ref: `D01` (moved from `gap` to `inherited (FIN-121)` for Mode-1 recomputed positions).
+- Domain: `historical` (`knowledge/domains/historical.yaml`, `status: approved_mvp`).
+- Mode-1 Capabilities:
+  - `loan_position_asof` (grain: `[loan_id]`)
+  - `savings_balance_asof` (grain: `[savings_account_id]`)
+- Live database facts:
+  - Total loans in `m_loan`: 116 (all active / disbursed status 300). Current `total_outstanding_derived` across all 116 loans: 537,817.37.
+  - Total loan transactions in `m_loan_transaction`: 2,947 rows.
+  - At latest transaction date (2026-05-22), `loan_position_asof` returns 95 qualifying loans with total principal 325,461.41 and total outstanding 346,033.21.
+  - 21 loans have zero transactions in `m_loan_transaction` and are excluded (no zero-filling).
+  - Outstanding gap reconciliation (346,033.21 vs 537,817.37): The difference is due to interest/fee/penalty components in `m_loan.total_outstanding_derived` (principal 325,461.41, interest 202,237.75, fee 9,814.00, penalty 304.21 totaling 537,817.37) and partial running balance population in `m_loan_transaction` (691 of 2,947 rows have non-null `outstanding_loan_balance_derived`). This is documented as an open owner item, not patched with arithmetic.
+  - Total savings accounts in `m_savings_account`: 207 accounts across statuses (100, 200, 300, 600). Live total balance: 502,871.31.
+  - Total savings transactions in `m_savings_account_transaction`: 11,889 rows.
+  - At latest transaction date (2026-09-10), `savings_balance_asof` returns 166 qualifying accounts totaling 500,135.95.
+  - 41 accounts have no transactions on or before cutoff date and are excluded (no zero-filling).
+- Boundary: Replay of as-published period-close reports ("Reproduce the published report for last month", "as published saat penutupan") remains permanently guarded under `unsupported_intents` and returns `Completed` + `BlockedByPolicy` / `surface_not_approved`.
+
+### 29.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/{loan_position_asof,savings_balance_asof}.sql` (+ `__scope_2_3` and `__population` variants).
+Locked runs (`answers/historical`, port 3321): 31 requests / 31 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| loan_position_asof | as_of_date: 2026-04-30 (limit 100) | 95 (population 95) | 36 (population 36) | Answered / Answered |
+| savings_balance_asof | as_of_date: 2026-04-30 (limit 100) | 100 (population 166, cap 100) | 59 (population 59) | Answered / Answered |
+
+`loan_position_asof` returns 95 qualifying loans under all offices, and 36 loans when narrowed to offices 2 and 3 (`completeness: Complete`).
+`savings_balance_asof` returns 100 loans (capped at 100, `completeness: Partial`, `row_cap_reached`) under all offices (total population 166), and 59 loans when narrowed to offices 2 and 3 (`completeness: Complete`).
+Zero PII columns leaked across all responses.
+
+### 29.2 VALUES-only semantics smoke (`tests/historical_position_semantics_smoke.sh`)
+
+`tests/historical_position_semantics_smoke.sh` shadows `m_loan`, `m_loan_transaction`, `m_savings_account`, `m_savings_account_transaction`, `m_client`, and `m_group` using inline `VALUES` CTEs asserting 12 semantic criteria:
+1. `loan_position_asof`: correctly recomputes loan position as of the cutoff date.
+2. `loan_position_asof`: excludes future transactions occurring after the cutoff date.
+3. `loan_position_asof`: excludes reversed transactions (`is_reversed = true`).
+4. `loan_position_asof`: skips transactions with null `outstanding_loan_balance_derived`.
+5. `loan_position_asof`: excludes loans without qualifying transactions (no zero-filling).
+6. `loan_position_asof`: respects office scoping for client-owned and group-owned loans.
+7. `savings_balance_asof`: correctly recomputes savings balance as of the cutoff date.
+8. `savings_balance_asof`: excludes future transactions occurring after the cutoff date.
+9. `savings_balance_asof`: excludes reversed transactions (`is_reversed = true`).
+10. `savings_balance_asof`: skips transactions with null `running_balance_derived`.
+11. `savings_balance_asof`: excludes accounts without qualifying transactions (no zero-filling).
+12. `savings_balance_asof`: respects office scoping for client-owned and group-owned accounts.
+All 12 assertion checks pass cleanly.
+
+### 29.3 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/historical` (31 requests, 31 tests PASS).
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only surrogate IDs, office IDs, currency codes, amounts, dates, and transaction IDs returned; client names, account numbers, and external IDs are never selected or returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 100 with population metadata, recomputed from latest non-reversed transaction on or before `as_of_date`.
+
+### 29.4 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D01 moved from `gap` to `inherited (FIN-121)` (Mode-1 recomputed positions only).
+Domain `historical` created with `status: approved_mvp`.
+As-published period close report replay remains in `unsupported_intents` per D01 boundary (`exempt: "dataset-scope-decisions.md:16"`).
+

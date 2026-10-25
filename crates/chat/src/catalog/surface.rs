@@ -523,7 +523,6 @@ mod tests {
             "Show the custom datatable EmploymentDetails for this client.",
             "Show the credit bureau report for this client.",
             "Show the family member detail for this client.",
-            "Reproduce the published report for last month.",
             "Show the historical office as of a past date for this client.",
             "Show the consolidated total across currencies for this branch.",
         ] {
@@ -647,6 +646,7 @@ mod tests {
     #[test]
     fn savings_questions_split_between_approved_and_gap() {
         let deferred = deferred_domains();
+        let surfaces = surfaces();
         for approved in [
             "Show savings accounts with dormant or block status.",
             "Show savings interest earned versus posted position.",
@@ -660,16 +660,21 @@ mod tests {
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
-        for (gap, expected_source) in [
-            ("Reproduce the published report for savings.", "domain_gap"),
-            (
-                "Show consolidated total across currencies for savings.",
-                "domain_gap",
-            ),
-        ] {
-            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
-            assert_eq!(term.source, expected_source, "{gap}");
-        }
+        let (gap, expected_gap_source) = (
+            "Show consolidated total across currencies for savings.",
+            "domain_gap",
+        );
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, expected_gap_source, "{gap}");
+
+        let (unsupported, expected_unsupported_source) = (
+            "Reproduce the published report for savings.",
+            "unsupported_intents",
+        );
+        let term = surfaces
+            .find(unsupported)
+            .unwrap_or_else(|| panic!("{unsupported}"));
+        assert_eq!(term.source, expected_unsupported_source, "{unsupported}");
     }
 
     /// FIN-130 (LINK-3..8): account association links, actual transfer transactions,
@@ -693,10 +698,6 @@ mod tests {
         for (gap, expected_source) in [
             (
                 "Show the recurring deposit installment schedule for this account.",
-                "domain_gap",
-            ),
-            (
-                "Reproduce the published report for last month.",
                 "domain_gap",
             ),
             (
@@ -924,6 +925,57 @@ mod tests {
             "Silent omission of unclassified records.",
         ] {
             assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
+        }
+    }
+
+    /// FIN-121 (D01): historical loan and savings positions as-of a date are approved capabilities
+    /// and not guarded by deferred/gap or surface guards; as-published period-close replay
+    /// remains guarded by policy as an unsupported intent.
+    #[test]
+    fn historical_position_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show loan position as of date.",
+            "Show loan position as of 2026-04-30.",
+            "Posisi pinjaman per 2026-04-30.",
+            "Posisi pinjaman per tanggal dihitung ulang.",
+            "Show savings balance as of date.",
+            "Show savings balance as of 2026-04-30.",
+            "Saldo tabungan per 2026-04-30.",
+            "Saldo tabungan per tanggal dihitung ulang.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the historical office as of a past date for this client.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+        for (unsupported, expected_source) in [
+            (
+                "Reproduce the published report for last month.",
+                "unsupported_intents",
+            ),
+            (
+                "Reproduce the published report for savings.",
+                "unsupported_intents",
+            ),
+            ("as published saat penutupan", "unsupported_intents"),
+        ] {
+            let term = surfaces
+                .find(unsupported)
+                .unwrap_or_else(|| panic!("{unsupported}"));
+            assert_eq!(term.source, expected_source, "{unsupported}");
         }
     }
 

@@ -1,0 +1,31 @@
+info:
+  name: FIN-121 reconciliation answer
+  type: http
+  seq: 52
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin121_recon_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin121Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          test("FIN-121 reconciliation: validated and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+          });
+          test("FIN-121 D01: latest recomputed position matches population oracle size (95 qualifying loans)", function () {
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+            const got = answers.answerRows(document);
+            const nExpected = answers.populationSize("loan_position_asof");
+            expect(got.rows.length).to.equal(nExpected);
+            expect(nExpected).to.equal(95);
+          });
+        }
