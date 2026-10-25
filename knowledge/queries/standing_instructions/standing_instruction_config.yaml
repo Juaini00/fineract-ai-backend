@@ -1,0 +1,38 @@
+id: standing_instructions.standing_instruction_config
+database: fineract
+sql_file: queries/standing_instructions/standing_instruction_config.sql
+data_areas: [standing_instructions]
+tables: [m_account_transfer_standing_instructions, m_account_transfer_details, m_savings_account, m_loan]
+metrics: []
+parameters:
+  - { name: office_ids, type: array_bigint, required: true, source: authorized_scope }
+  - { name: limit, type: integer, required: false }
+output_fields:
+  - { name: standing_instruction_id, type: bigint, sensitivity: public_business }
+  - { name: name, type: string, sensitivity: public_business }
+  - { name: status, type: integer, sensitivity: public_business }
+  - { name: instruction_type, type: integer, sensitivity: public_business }
+  - { name: priority, type: integer, sensitivity: public_business }
+  - { name: amount, type: decimal, sensitivity: public_business }
+  - { name: currency_code, type: string, sensitivity: public_business }
+  - { name: from_office_id, type: bigint, sensitivity: public_business }
+  - { name: to_office_id, type: bigint, sensitivity: public_business }
+  - { name: transfer_type, type: integer, sensitivity: public_business }
+  - { name: valid_from, type: date, sensitivity: public_business }
+  - { name: valid_till, type: date, sensitivity: public_business }
+  - { name: last_run_date, type: date, sensitivity: public_business }
+  - { name: account_transfer_details_id, type: bigint, sensitivity: public_business }
+grain: [standing_instruction_id]
+guards: { select_only: true, single_statement: true, require_office_filter: true, parameterized_only: true }
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains office on either side with ANY($1::bigint[]).
+  - id: limit_is_bound
+    rule: SQL uses a bound LIMIT parameter after a total ORDER BY.
+  - id: no_account_numbers
+    rule: account_no, external_id, and client identifiers are never selected.
+  - id: linkage_only_not_mapping
+    rule: account_transfer_details_id surfaces linkage reference only, not full transaction mapping.
+  - id: deleted_status_excluded
+    rule: SQL excludes DELETED status 3 instructions.

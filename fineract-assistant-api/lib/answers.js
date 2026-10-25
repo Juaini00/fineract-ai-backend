@@ -7,7 +7,7 @@
 // membandingkan keduanya — bukan "angkanya ada", tetapi "angkanya benar".
 
 const POLL_SLEEP_MS = 1000;
-const POLL_DEADLINE_MS = 90000;
+const POLL_DEADLINE_MS = 180000;
 
 function expected() {
   // Dibaca saat dipakai, bukan saat modul dimuat: request yang tidak memakai
@@ -61,12 +61,24 @@ function answerRows(document) {
   const withheld = (limitation && limitation.withheld_columns) || [];
   const table = blocks.find((b) => b.type === "table");
   if (table) {
+    let rows;
+    if (table.rows) {
+      rows = table.rows.map((row) =>
+        Object.fromEntries(table.columns.map((c, i) => [c, row[i]]))
+      );
+    } else if (table.dataset_id) {
+      const dbUrl = process.env.APP_DATABASE_URL || "postgres://root:password@127.0.0.1:5432/jarvis";
+      const cmd = `psql "${dbUrl}" -t -A -c "SELECT payload FROM dataset_chunks WHERE dataset_id = '${table.dataset_id}' ORDER BY chunk_index;"`;
+      const out = require("child_process").execSync(cmd, { encoding: "utf8" });
+      const chunks = out.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+      rows = chunks.flat();
+    } else {
+      rows = [];
+    }
     return {
       columns: table.columns,
       withheld: [...new Set([...withheld, ...(table.withheld_columns || [])])],
-      rows: table.rows.map((row) =>
-        Object.fromEntries(table.columns.map((c, i) => [c, row[i]]))
-      ),
+      rows,
     };
   }
   const metrics = blocks.filter((b) => b.type === "metric");

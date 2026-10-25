@@ -1,0 +1,52 @@
+id: standing_instruction_failures
+status: approved_mvp
+domain: standing_instructions
+display_name: Standing Instruction Failures
+description: >-
+  List failed standing instruction execution attempts and recorded error logs within an explicit date window.
+  Error log text is surfaced verbatim. Failure claims trace strictly to history rows with failed status;
+  absence of an execution is never treated as failure.
+  Governed by office authorization on either linked account path.
+data_areas: [standing_instructions]
+required_api_capability: standing_instruction_failures
+query_id: standing_instructions.standing_instruction_failures
+metrics: []
+output_mode: list
+request_shape: { operation: list, subject: standing_instruction_failure, grouping: none, output: list, pii: none }
+examples:
+  - Show failed standing instructions in Branch 001.
+  - Which automated payment instructions failed this month?
+  - Instruksi pembayaran otomatis mana yang gagal di Cabang A?
+  - Show standing instruction failure reasons.
+supported_intents:
+  - standing instruction failure reasons
+  - failed standing instructions in authorized offices
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+parameters:
+  office_ids: { type: integer_array, required: false, default: authorized_scope, user_may_override: false }
+  from_date: { type: date, required: false, default: business_today - 12m }
+  to_date: { type: date, required: false, default: business_today }
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: office_scope_bounded
+    rule: D05 listing is office-bounded across from_office_id and to_office_id in authorized scope.
+  - id: failure_status_traceability
+    rule: failure claims only trace to history.status = 'failed'; missing execution is never failure.
+  - id: failure_reason_verbatim
+    rule: error_log text is surfaced verbatim as recorded, never interpreted.
+  - id: no_account_numbers
+    rule: account_no and external_id are never returned.

@@ -1,0 +1,28 @@
+info:
+  name: FIN-114 standing_instruction_config empty answer
+  type: http
+  seq: 10
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin114_config_empty_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin114Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          test("FIN-114 standing_instruction_config empty: validated, complete and not a clarification", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-114 D05: office 9 has zero standing instructions returning genuine Empty outcome", function () {
+            expect(document.outcome).to.equal("Empty");
+            expect(answers.answerRows(document).rows.length).to.equal(0);
+          });
+        }

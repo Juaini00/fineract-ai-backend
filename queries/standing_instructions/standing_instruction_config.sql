@@ -1,0 +1,29 @@
+-- D05: standing instruction configuration, status, and resolved currency.
+-- Office authorization path: via either linked account's office path (from_office_id or to_office_id).
+-- Resolved currency originates from the FROM-account leg (savings or loan), never converted.
+-- Status 3 (DELETED) rows are strictly excluded.
+-- Account numbers and external IDs are never selected (pii safe).
+SELECT
+    si.id AS standing_instruction_id,
+    si.name,
+    si.status::smallint AS status,
+    si.instruction_type::smallint AS instruction_type,
+    si.priority::smallint AS priority,
+    si.amount,
+    COALESCE(sa.currency_code, la.currency_code) AS currency_code,
+    atd.from_office_id,
+    atd.to_office_id,
+    atd.transfer_type::smallint AS transfer_type,
+    si.valid_from,
+    si.valid_till,
+    si.last_run_date,
+    si.account_transfer_details_id
+FROM m_account_transfer_standing_instructions si
+JOIN m_account_transfer_details atd ON atd.id = si.account_transfer_details_id
+LEFT JOIN m_savings_account sa ON sa.id = atd.from_savings_account_id
+LEFT JOIN m_loan la ON la.id = atd.from_loan_account_id
+WHERE ((atd.from_office_id IS NOT NULL AND atd.from_office_id = ANY($1::bigint[]))
+    OR (atd.to_office_id IS NOT NULL AND atd.to_office_id = ANY($1::bigint[])))
+  AND si.status != 3
+ORDER BY atd.from_office_id, si.id
+LIMIT $2

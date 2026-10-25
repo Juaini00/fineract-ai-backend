@@ -1,0 +1,9 @@
+info:
+  name: standing_instructions
+  seq: 16
+  description: |
+    FIN-114 (LC.7 / D05): standing instructions configuration, recurrence schedule, execution attempts, and recorded failure reasons.
+    standing_instruction_config, standing_instruction_schedule, standing_instruction_executions, standing_instruction_failures.
+    Each answer is compared with an independent SQL oracle in tests/answers.
+    The -narrow jobs carry office_ids [2, 3] (partial authorization);
+    the -empty job carries office_ids [9] (genuine empty branch).

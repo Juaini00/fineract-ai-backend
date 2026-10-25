@@ -509,10 +509,10 @@ mod tests {
             // FD/RD identity/terms/funding/contributions/shortfall approved under FIN-110 (FDRD-9 schedule stays gap).
             // Linking resources approved under FIN-130 (LINK-3..8).
             // Accounting approved under FIN-112 (D12).
+            // Standing instructions approved under FIN-114 (D05).
             "Show the recurring deposit installment schedule for this account.",
             "Show the cash reconciliation for this teller.",
             "Show the physical cash count for this teller.",
-            "Show the standing instruction execution history for this account.",
             "Show the provisioning result history for this loan.",
             // Scheduler job runs approved under FIN-124; D14 interest posting freshness stays gap.
             "Show the savings interest posting freshness for this account.",
@@ -698,7 +698,7 @@ mod tests {
         }
         for (gap, expected_source) in [
             (
-                "Show the standing instruction execution history for this account.",
+                "Show the provisioning result history for this loan.",
                 "domain_gap",
             ),
             (
@@ -740,7 +740,7 @@ mod tests {
         }
         for (gap, expected_source) in [
             (
-                "Show the standing instruction execution history for this account.",
+                "Show the provisioning result history for this loan.",
                 "domain_gap",
             ),
             (
@@ -756,6 +756,49 @@ mod tests {
             "Show trial balance for this branch.",
             "Generate balance sheet.",
             "Show profit and loss report.",
+        ] {
+            assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
+        }
+    }
+
+    /// FIN-114 (D05): standing instruction config, status, schedule, execution results,
+    /// and failure reasons are approved capabilities and not guarded by deferred/gap;
+    /// write actions (create/cancel), next-run computation, and full transaction mapping remain guarded.
+    #[test]
+    fn standing_instructions_questions_split_between_approved_and_gap() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show standing instruction configuration and status.",
+            "Show standing instruction schedule and recurrence.",
+            "Show standing instruction execution history.",
+            "Show failed standing instructions in Branch 001.",
+            "Show standing instruction failure reasons.",
+            "Tampilkan instruksi pembayaran otomatis dan statusnya.",
+            "Tampilkan riwayat eksekusi instruksi pembayaran otomatis.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (gap, expected_source) in [
+            (
+                "Show the provisioning result history for this loan.",
+                "domain_gap",
+            ),
+            (
+                "Show consolidated total across currencies for this branch.",
+                "domain_gap",
+            ),
+            ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
+        ] {
+            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+            assert_eq!(term.source, expected_source, "{gap}");
+        }
+        for unsupported in [
+            "Create standing instruction.",
+            "Cancel standing instruction.",
+            "Calculate next run schedule for standing instruction.",
+            "Show full transaction mapping for standing instruction.",
         ] {
             assert!(surfaces.find(unsupported).is_some(), "{unsupported}");
         }

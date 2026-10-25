@@ -1,0 +1,23 @@
+info:
+  name: FIN-114 standing_instruction_config narrow session
+  type: http
+  seq: 5
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin114Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-114 standing_instruction_config narrow" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin114_config_narrow_session", res.getBody().data.id);
