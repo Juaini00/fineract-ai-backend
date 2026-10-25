@@ -2170,8 +2170,8 @@ Free-text reason justification, maker-checker rejection/cancellation tracking, h
 
 **Context & Scope.** `dataset-inventory.md` row D11 covers data completeness analysis across loan portfolio classifications (`m_client`, `m_loan`, `m_code_value`).
 Prior to FIN-120, domain `completeness` did not exist, and completeness intents were either deferred/gap in `savings.yaml` or unapproved. FIN-120 transitions D11 to `status: inherited (FIN-120)` and creates domain `completeness` (`completeness.yaml`) with `status: approved_mvp` by implementing two curated Mode-1 capabilities:
-1. `loan_outstanding_by_classification`: summary grouping by client classification with an explicit unclassified sentinel bucket (`'Sektor belum tercatat'`) and currency (grain: `[classification, currency_code]`), reporting `loan_count`, `client_count`, `total_principal_outstanding`, `total_total_outstanding`, and boolean `unclassified_flag`.
-2. `loan_outstanding_unclassified_detail`: follow-up detail listing for unclassified loans (`client_classification_cv_id IS NULL`), returning surrogate IDs only and PII-safe attributes (grain: `[loan_id]`), reporting `loan_id`, `client_id`, `office_id`, `currency_code`, `principal_outstanding_derived`, `total_outstanding_derived`, and `disbursedon_date`.
+1. `loan_outstanding_by_classification`: summary grouping by client classification with an explicit unclassified sentinel bucket (`'Sektor belum tercatat'`) and currency (grain: `[classification, currency_code]`), reporting `classification`, `currency_code`, `client_count`, `loan_count`, and `outstanding_total` (the sentinel label carries the unclassified semantics).
+2. `loan_outstanding_unclassified_detail`: follow-up detail listing for unclassified loans (`client_classification_cv_id IS NULL`), returning surrogate IDs only and PII-safe attributes (grain: `[loan_id]`), reporting `loan_id`, `client_id`, `currency_code`, `total_outstanding_derived`, and `office_id` (`COALESCE(c.office_id, g.office_id)`).
 
 **Live Counts & Executing Query:**
 Verified read-only on `fineract_default` database:
