@@ -67,7 +67,7 @@ function answerRows(document) {
         Object.fromEntries(table.columns.map((c, i) => [c, row[i]]))
       );
     } else if (table.dataset_id) {
-      const dbUrl = process.env.APP_DATABASE_URL || "postgres://root:password@127.0.0.1:5432/jarvis_wt_fin_114_lc7_standing_instructions_d05_co";
+      const dbUrl = process.env.APP_DATABASE_URL || "postgres://root:password@127.0.0.1:5432/jarvis";
       const cmd = `psql "${dbUrl}" -t -A -c "SELECT payload FROM dataset_chunks WHERE dataset_id = '${table.dataset_id}' ORDER BY chunk_index;"`;
       const out = require("child_process").execSync(cmd, { encoding: "utf8" });
       const chunks = out.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
