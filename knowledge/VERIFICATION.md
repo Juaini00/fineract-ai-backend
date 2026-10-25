@@ -2216,7 +2216,7 @@ Verified read-only on `fineract_default` database:
 ### 28.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/{loan_outstanding_by_classification,loan_outstanding_unclassified_detail}.sql` (+ `__scope_2_3` and `__population` variants).
-Locked runs (`answers/completeness`, port 3320): 21 requests / 28 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+Locked runs (`answers/completeness`, port 3320): 31 requests / 28 tests PASS (100%), coordinator re-run,, 0 commit-isolation violations (OVR-6.7).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
@@ -2249,7 +2249,7 @@ All 15 assertion checks pass cleanly.
 
 ### 28.3 CARRY-OVER rules
 
-1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/completeness` (21 requests, 28 tests PASS).
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/completeness` (31 requests, 28 tests PASS).
 2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
 3. **Output sensitivity**: Only surrogate IDs, office IDs, currency codes, amounts, dates, and category labels returned; client names, account numbers, and external IDs are never selected or returned.
 4. **Semantics**: Office authorization bound via `$1::bigint[]`, row cap 200 with population metadata, active loans `loan_status_id = 300`.
