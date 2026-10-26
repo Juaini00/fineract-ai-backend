@@ -2449,7 +2449,7 @@ Historical branch-at-position-date, office history timeline, and client transfer
 ### 31.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
 
 Independent oracles are `tests/answers/balances_per_currency.sql` (+ `__scope_2_3` and `__population` variants).
-Locked run (`answers/currency`, port 3323): 15 requests / 15 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+Locked run (`answers/currency`, port 3323): 14 requests / 15 tests PASS (100%), coordinator re-run,, 0 commit-isolation violations (OVR-6.7).
 
 | Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
 | --- | --- | --- | --- | --- |
@@ -2484,7 +2484,7 @@ All 11 assertion checks pass cleanly.
 
 ### 31.4 CARRY-OVER rules
 
-1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/currency` (15 requests, 15 tests PASS).
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/currency` (14 requests, 15 tests PASS).
 2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
 3. **Output sensitivity**: Only public business fields `domain_family`, `currency_code`, `account_count`, `balance_total` returned; no converted/reporting amounts or client PII selected or returned.
 4. **Semantics**: Office authorization bound via `$1::bigint[]` on family paths (`COALESCE(c.office_id, g.office_id)` for loan, `c.office_id` for savings), anti-fanout §33 enforced via UNION ALL, population reconciliation oracle verified.
