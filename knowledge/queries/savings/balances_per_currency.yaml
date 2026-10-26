@@ -1,0 +1,46 @@
+id: savings.balances_per_currency
+database: fineract
+sql_file: queries/savings/balances_per_currency.sql
+data_areas:
+  - loans_charges_balances
+  - savings_core
+  - client_foundation
+  - organization_foundation
+tables:
+  - m_loan
+  - m_savings_account
+  - m_client
+  - m_group
+metrics: []
+parameters:
+  - name: office_ids
+    type: array_bigint
+    required: true
+    source: authorized_scope
+output_fields:
+  - name: domain_family
+    type: string
+    sensitivity: public_business
+  - name: currency_code
+    type: string
+    sensitivity: public_business
+  - name: account_count
+    type: bigint
+    sensitivity: public_business
+  - name: balance_total
+    type: decimal
+    sensitivity: public_business
+grain: [domain_family, currency_code]
+guards:
+  select_only: true
+  single_statement: true
+  require_office_filter: true
+  parameterized_only: true
+timeout_ms: 3000
+checks:
+  - id: office_filter_is_bound
+    rule: SQL constrains both loan and savings branches with ANY($1::bigint[]).
+  - id: xr_cur_no_cross_currency_sum
+    rule: amounts are grouped strictly by currency_code without cross-currency aggregation.
+  - id: no_cross_family_sum
+    rule: loan outstanding and savings balance are separate rows distinguished by domain_family.

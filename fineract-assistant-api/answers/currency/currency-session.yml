@@ -1,0 +1,23 @@
+info:
+  name: FIN-123 currency session
+  type: http
+  seq: 10
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-123 balances per currency" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin123_currency_session", res.getBody().data.id);

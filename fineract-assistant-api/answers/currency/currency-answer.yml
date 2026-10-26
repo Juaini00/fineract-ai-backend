@@ -1,0 +1,56 @@
+info:
+  name: FIN-123 balances per currency answer versus independent SQL
+  type: http
+  seq: 12
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin123_currency_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "balances_per_currency", document);
+          test("FIN-123 balances per currency: validated and complete", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-123 D03: 7 per-currency rows (4 loan + 3 savings), reconciling to domain totals", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(7);
+
+            let loanCount = 0;
+            let loanTotal = 0;
+            let savingsCount = 0;
+            let savingsTotal = 0;
+
+            for (const row of got.rows) {
+              expect(["loan", "savings"]).to.include(row.domain_family);
+              expect(["AED", "AUD", "EUR", "USD"]).to.include(row.currency_code);
+              if (row.domain_family === "loan") {
+                loanCount += Number(row.account_count);
+                loanTotal += Number(row.balance_total);
+              } else if (row.domain_family === "savings") {
+                savingsCount += Number(row.account_count);
+                savingsTotal += Number(row.balance_total);
+              }
+            }
+
+            expect(loanCount).to.equal(116);
+            expect(Math.round(loanTotal * 100) / 100).to.equal(537817.37);
+            expect(savingsCount).to.equal(205);
+            expect(Math.round(savingsTotal * 100) / 100).to.equal(502236.14);
+
+            for (const forbidden of ["account_no", "external_id", "display_name", "firstname", "lastname", "converted_amount", "reporting_currency"]) {
+              expect(got.columns).to.not.include(forbidden);
+            }
+          });
+        }

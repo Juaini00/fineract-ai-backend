@@ -48,9 +48,17 @@ supported_intents:
   - { phrase: "savings account holds and lien transactions", inventory_ref: SAV-8 }
   - { phrase: "savings accounts with applied withholding tax", inventory_ref: SAV-9 }
   - { phrase: "savings linked accounts and portfolio associations", inventory_ref: SAV-10 }
-gap_intents:
-  - { phrase: "consolidated total across currencies", inventory_ref: D03 }
+  - { phrase: "balances per currency", inventory_ref: D03 }
+  - { phrase: "total balances per currency", inventory_ref: D03 }
+  - { phrase: "total per currency", inventory_ref: D03 }
+  - { phrase: "total saldo per mata uang", inventory_ref: D03 }
+gap_intents: []
 unsupported_intents:
+  - { phrase: "consolidated total across currencies", exempt: "dataset-scope-decisions.md:80" }
+  - { phrase: "gabungkan simpanan IDR dan USD menjadi satu total IDR", exempt: "dataset-scope-decisions.md:80" }
+  - { phrase: "currency conversion", exempt: "dataset-scope-decisions.md:80" }
+  - { phrase: "gunakan kurs hari ini", exempt: "dataset-scope-decisions.md:80" }
+  - { phrase: "consolidate across currencies", exempt: "dataset-scope-decisions.md:80" }
   - { phrase: "reproduce the published report", exempt: "dataset-scope-decisions.md:16" }
   - { phrase: "as published saat penutupan", exempt: "dataset-scope-decisions.md:16" }
   - { phrase: "create savings account", exempt: "write_action" }
@@ -58,7 +66,7 @@ unsupported_intents:
 default_rules:
   - Exclude reversed transactions unless explicitly requested by an approved capability.
   - "D01: reproducing a previously published report exactly as it was is out of scope by owner decision (dataset-scope-decisions.md:16) — only current, recomputed-as-of-today balances are approved. A request explicitly asking to reproduce a published report must answer unsupported with a gap reason, never silently recomputed and presented as the published figure."
-  - "D03: no exchange-rate table exists (verified negative, dataset-inventory.md D03) — a request for a currency-consolidated total must answer unsupported with a gap reason, never silently summed across currencies."
+  - "D03: base totals are strictly separate per currency and domain family (loan vs savings). No cross-currency consolidation, conversion, or cross-family sum is permitted because exchange_rates registry is empty (0 rows) and no exchange rate provider, rate type, or rounding policy has been decided. Consolidated totals and conversion remain guarded under unsupported_intents."
   - "D11: a completeness/unclassified-record breakdown is a distinct request from a plain aggregate; until a capability declares that grouping explicitly, it answers unsupported with a gap reason rather than an aggregate that silently drops the unclassified rows."
 checks:
   - id: data_areas_exist
@@ -67,3 +75,9 @@ checks:
     rule: supported MVP savings intents must map to approved capabilities.
   - id: unsupported_intents_not_executable
     rule: write/reversal intents must not map to approved_mvp capabilities.
+  - id: xr_cur_no_cross_currency_sum
+    rule: totals are strictly separated per currency_code; cross-currency summation is forbidden.
+  - id: no_cross_family_sum
+    rule: loan outstanding and savings balance families must never be summed together.
+  - id: office_scope_required
+    rule: per-currency balance queries must enforce office authorization via office_ids.

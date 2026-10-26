@@ -1,0 +1,28 @@
+info:
+  name: FIN-123 currency consolidation refusal answer
+  type: http
+  seq: 32
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin123_refusal_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          test("OVR-6.6 refusal: consolidation across currencies is refused via policy surface guard", function () {
+            expect(document.outcome).to.equal("BlockedByPolicy");
+            expect(document.completeness).to.equal("Unknown");
+            expect(document.kind).to.equal("limitation");
+            expect(document.blocks_json).to.have.lengthOf(1);
+            expect(document.blocks_json[0].block_id).to.equal("surface_not_approved");
+            expect(document.blocks_json[0].type).to.equal("limitation");
+          });
+        }

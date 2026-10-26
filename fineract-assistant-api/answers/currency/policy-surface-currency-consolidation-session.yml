@@ -1,0 +1,23 @@
+info:
+  name: FIN-123 currency consolidation refusal session
+  type: http
+  seq: 30
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-123 currency consolidation refusal" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin123_refusal_session", res.getBody().data.id);

@@ -1,0 +1,34 @@
+info:
+  name: FIN-123 balances per currency narrow answer versus independent SQL
+  type: http
+  seq: 22
+http:
+  method: get
+  url: "{{baseUrl}}/chat/jobs/{{fin123_narrow_job}}/response"
+  headers:
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        const answers = require("./lib/answers.js");
+        if (await answers.awaitResponse(bru, req, res)) {
+          expect(res.getStatus()).to.equal(200);
+          expect(res.getBody().success).to.equal(true);
+          const document = res.getBody().data;
+          answers.check(test, expect, "balances_per_currency", document, { truthKey: "balances_per_currency__scope_2_3", narrowedTo: 2 });
+          test("FIN-123 balances per currency narrow: validated and complete", function () {
+            expect(document.validation_status).to.equal("passed");
+            expect(document.outcome).to.equal("Answered");
+            expect(document.completeness).to.equal("Complete");
+          });
+          test("FIN-123 D03: narrowed scope {2, 3} returns 7 rows matching office 2 and 3 totals", function () {
+            const got = answers.answerRows(document);
+            expect(got.rows.length).to.equal(7);
+            for (const row of got.rows) {
+              expect(["loan", "savings"]).to.include(row.domain_family);
+              expect(["AED", "AUD", "EUR", "USD"]).to.include(row.currency_code);
+            }
+          });
+        }

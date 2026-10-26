@@ -2396,3 +2396,103 @@ All 10 assertion checks pass cleanly.
 Domain `client` updated with `client_office_attribution` under `supported_intents`.
 Historical branch-at-position-date, office history timeline, and client transfer write intents remain guarded under `unsupported_intents` per D02 boundary (`exempt: "dataset-inventory.md:D02"`).
 
+## 31. FIN-123: Currency & consolidation (D03) — per-currency totals; consolidation stays Unsupported
+
+- Dataset inventory ref: `D03` (moved from `gap` to `inherited (FIN-123)` for per-currency base totals; cross-currency consolidation remains unsupported).
+- Domain: `savings` (`knowledge/domains/savings.yaml`).
+- Mode-1 Capability: `balances_per_currency` (grain: `[domain_family, currency_code]`).
+- Evidence pinned and technical verification:
+  1. **Jarvis rate registry**:
+     Migration `migrations/20260913000003_knowledge_and_exchange_rates.sql:71` defines the append-only table `exchange_rates` with full provenance columns (`from_currency_code`, `to_currency_code`, `rate`, `rate_type`, `effective_date`, `source`, `captured_at`, `captured_by`, `notes`).
+     Live query against Jarvis application database:
+     `SELECT count(*) FROM exchange_rates;` -> `0` rows.
+     Infrastructure is ready, but no rate data is loaded and no rate provider / source has been approved by repository owners (D03 open items).
+  2. **Fineract side negative proof**:
+     Query against Fineract PostgreSQL schema:
+     `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE '%exchange%' ORDER BY table_name;`
+     Result: 0 rows (only `m_organisation_currency` exists, which is currency configuration, not an exchange rate dataset).
+  3. **Live counts and reconciliation identities**:
+     - Loan per-currency (offices `{1,2,3,4,5,6,8,9}`):
+       Query:
+       ```sql
+       SELECT l.currency_code, COUNT(DISTINCT l.id) AS account_count, ROUND(SUM(l.total_outstanding_derived), 2) AS balance_total
+       FROM m_loan l
+       LEFT JOIN m_client c ON c.id = l.client_id
+       LEFT JOIN m_group g ON g.id = l.group_id
+       WHERE COALESCE(c.office_id, g.office_id) = ANY(ARRAY[1,2,3,4,5,6,8,9]::bigint[])
+       GROUP BY l.currency_code ORDER BY l.currency_code;
+       ```
+       Result:
+       AED: 80 loans, balance 257,770.85
+       AUD: 1 loan, balance 2,226.54
+       EUR: 7 loans, balance 39,816.66
+       USD: 28 loans, balance 238,003.32
+       Total: 116 loans / 537,817.37 total (exact match to FIN-120 anchor).
+     - Savings per-currency (offices `{1,2,3,4,5,6,8,9}`):
+       Query:
+       ```sql
+       SELECT sa.currency_code, COUNT(DISTINCT sa.id) AS account_count, ROUND(SUM(sa.account_balance_derived), 2) AS balance_total
+       FROM m_savings_account sa
+       JOIN m_client c ON c.id = sa.client_id
+       WHERE c.office_id = ANY(ARRAY[1,2,3,4,5,6,8,9]::bigint[])
+       GROUP BY sa.currency_code ORDER BY sa.currency_code;
+       ```
+       Result:
+       AED: 126 accounts, balance 280,299.77
+       EUR: 34 accounts, balance 73,104.79
+       USD: 45 accounts, balance 148,831.58
+       Total: 205 accounts / 502,236.14 total.
+     - Anti-fanout §33: loan outstanding and savings balances are segregated into distinct `domain_family` rows via `UNION ALL` and never summed across families or currencies.
+     - No grand total row, no converted column, and no reporting currency column exist in query output.
+- Boundary: Currency consolidation ("Show the consolidated total across currencies for this branch.", "Gabungkan simpanan IDR dan USD menjadi satu total IDR per 31 Agustus.") and currency conversion remain permanently guarded under `unsupported_intents` and return `Completed` + `BlockedByPolicy` / `surface_not_approved` (empty `exchange_rates` registry reason).
+
+### 31.1 Production vs independent SQL (HTTP, all authorized offices `{1,2,3,4,5,6,8,9}`)
+
+Independent oracles are `tests/answers/balances_per_currency.sql` (+ `__scope_2_3` and `__population` variants).
+Locked run (`answers/currency`, port 3323): 15 requests / 15 tests PASS (100%), 0 commit-isolation violations (OVR-6.7).
+
+| Capability | Params | Rows (all offices) | Rows (`office_ids` [2,3]) | Job outcome (all / narrowed) |
+| --- | --- | --- | --- | --- |
+| balances_per_currency | office_ids: [1,2,3,4,5,6,8,9] / [2,3] | 7 (population 7) | 7 (population 7) | Answered / Answered |
+
+`balances_per_currency` returns 7 rows under all authorized offices (4 loan currencies, 3 savings currencies; `completeness: Complete`), and 7 rows when narrowed to offices 2 and 3 (`completeness: Complete`).
+Zero PII columns leaked; zero converted/reporting currency columns exposed.
+
+### 31.2 Accuracy table
+
+| Test question | Capability | Bound parameters | Oracle match | Verdict |
+| --- | --- | --- | --- | --- |
+| "Show balances per currency in my authorized offices." | balances_per_currency | office_ids: [1,2,3,4,5,6,8,9] | Exactly matches `tests/answers/balances_per_currency.sql` (7 rows: 4 loan + 3 savings reconciling to domain totals 116 / 537,817.37 and 205 / 502,236.14) | PASS |
+| "Show balances per currency in my authorized offices." (`office_ids`: [2, 3]) | balances_per_currency | office_ids: [2, 3] | Exactly matches `tests/answers/balances_per_currency__scope_2_3.sql` (7 rows: 4 loan + 3 savings for offices 2 and 3) | PASS |
+| "Show the consolidated total across currencies for this branch." | None (guarded) | None (no plan generated) | BlockedByPolicy / surface_not_approved limitation response (OVR-6.6 refusal) | PASS |
+
+### 31.3 VALUES-only semantics smoke (`tests/currency_separation_semantics_smoke.sh`)
+
+`tests/currency_separation_semantics_smoke.sh` shadows `m_loan`, `m_savings_account`, `m_client`, and `m_group` using inline `VALUES` CTEs asserting 11 semantic criteria:
+1. `balances_per_currency`: returns expected row count (4 rows in scope, unauthorized office 9 EUR accounts excluded).
+2. `balances_per_currency`: loan IDR amounts kept strictly separate from USD (count 2, total 3,000,000.00; never summed across currencies).
+3. `balances_per_currency`: loan USD amounts kept strictly separate (count 2, total 300.00).
+4. `balances_per_currency`: savings IDR amounts kept separate (count 2, total 1,250,000.00).
+5. `balances_per_currency`: savings USD amounts kept separate (count 1, total 50.00).
+6. No grand total row exists across currencies or families.
+7. Narrowed office scope `{2}` returns exactly 3 rows (office 3 accounts excluded).
+8. Empty office scope `{8}` returns 0 rows.
+9. SQL contains zero exchange rate or currency conversion references (`\bexchange\b|\bkurs\b|\bexchange_rates?\b`).
+10. Negative schema verification: 0 exchange rate tables exist in `fineract_default`.
+11. Jarvis `exchange_rates` registry exists and contains 0 rows (empty registry confirmed).
+All 11 assertion checks pass cleanly.
+
+### 31.4 CARRY-OVER rules
+
+1. **Examples run end to end through real job execution**: Verified via locked Bruno suite `answers/currency` (15 requests, 15 tests PASS).
+2. **Prose matches SQL**: Reviewed and verified in query and capability manifests `checks` sections.
+3. **Output sensitivity**: Only public business fields `domain_family`, `currency_code`, `account_count`, `balance_total` returned; no converted/reporting amounts or client PII selected or returned.
+4. **Semantics**: Office authorization bound via `$1::bigint[]` on family paths (`COALESCE(c.office_id, g.office_id)` for loan, `c.office_id` for savings), anti-fanout §33 enforced via UNION ALL, population reconciliation oracle verified.
+
+### 31.5 Inventory & Domain Gap Alignment
+
+`docs/data/dataset-inventory.md` row D03 moved from `gap` to `inherited (FIN-123)` (per-currency base totals; consolidation stays unsupported).
+Domain `savings` (`knowledge/domains/savings.yaml`) updated with `balances per currency` under `supported_intents`.
+Currency consolidation and conversion intents remain permanently guarded under `unsupported_intents` per D03 boundary (`exempt: "dataset-scope-decisions.md:80"`).
+
+
