@@ -1,0 +1,59 @@
+id: balances_per_currency
+status: approved_mvp
+domain: savings
+display_name: Balances Per Currency
+description: >-
+  Per-currency totals for loan outstanding and savings balances separated by
+  domain family and currency code (D03). Anti-fanout §33: loan and savings
+  quantities are never summed together. No conversion or consolidated totals.
+  Office-scoped via authorized_scope.
+data_areas:
+  - loans_charges_balances
+  - savings_core
+  - client_foundation
+  - organization_foundation
+required_api_capability: balances_per_currency
+query_id: savings.balances_per_currency
+metrics: []
+output_mode: list
+request_shape:
+  operation: list
+  subject: balances_per_currency
+  grouping: currency
+  output: list
+  pii: none
+examples:
+  - Show balances per currency in my authorized offices.
+  - Total balances per currency for loan and savings.
+  - Tampilkan saldo per mata uang untuk pinjaman dan simpanan.
+  - Total per currency.
+supported_intents:
+  - balances per currency
+  - total balances per currency
+  - total per currency
+  - total saldo per mata uang
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+      - display_name
+      - firstname
+      - lastname
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: xr_cur_no_cross_currency_sum
+    rule: totals are kept strictly per currency_code with no converted or reporting currency column.
+  - id: no_cross_family_sum
+    rule: loan outstanding and savings balances are reported as distinct domain_family rows, never combined.

@@ -1,0 +1,6 @@
+info:
+  name: currency
+  type: folder
+  seq: 22
+  description: |
+    FIN-123 (LC.16 / D03): per-currency base totals for loans and savings; cross-currency consolidation refused via policy surface guard.

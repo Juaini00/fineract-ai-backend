@@ -608,4 +608,24 @@ mod tests {
         let input_len = input_for(&compact).len();
         assert!(!exceeds_input_bound(input_len, 50, 16_000));
     }
+
+    /// FIN-123: the balances per currency shortlist fits the default input bound.
+    #[test]
+    fn balances_per_currency_shortlist_fits_bound() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let catalog = crate::catalog::loader::load(&root.join("knowledge"), &root.join("queries"))
+            .expect("catalog loads");
+        let ids = [
+            "balances_per_currency",
+            "savings_account_balance_detail",
+            "savings_deposit_total",
+            "savings_withdrawal_total",
+        ];
+        let compact: Vec<_> = ids
+            .iter()
+            .map(|id| candidate(&catalog, id).expect("approved"))
+            .collect();
+        let input_len = input_for(&compact).len();
+        assert!(!exceeds_input_bound(input_len, 50, 16_000));
+    }
 }

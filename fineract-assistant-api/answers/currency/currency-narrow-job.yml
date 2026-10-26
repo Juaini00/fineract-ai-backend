@@ -1,0 +1,28 @@
+info:
+  name: FIN-123 currency narrow job
+  type: http
+  seq: 21
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin123Token}}"
+    - name: Idempotency-Key
+      value: "{{fin123_narrow_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin123_narrow_session}}", "request_text": "Show balances per currency in my authorized offices.", "office_ids": [2, 3] }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin123_narrow_key", "fin123-narrow-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin123_narrow_job", res.getBody().data.job_id);

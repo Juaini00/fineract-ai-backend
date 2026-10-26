@@ -523,7 +523,6 @@ mod tests {
             "Show the custom datatable EmploymentDetails for this client.",
             "Show the credit bureau report for this client.",
             "Show the family member detail for this client.",
-            "Show the consolidated total across currencies for this branch.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
         }
@@ -650,24 +649,29 @@ mod tests {
             "Show savings transactions breakdown by type.",
             "Show actual account transfer between accounts.",
             "Show completeness analysis by category for savings.",
+            "Show balances per currency in my authorized offices.",
+            "Total balances per currency for loan and savings.",
+            "Total per currency.",
+            "Total saldo per mata uang.",
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
         }
-        let (gap, expected_gap_source) = (
-            "Show consolidated total across currencies for savings.",
-            "domain_gap",
-        );
-        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
-        assert_eq!(term.source, expected_gap_source, "{gap}");
-
-        let (unsupported, expected_unsupported_source) = (
-            "Reproduce the published report for savings.",
-            "unsupported_intents",
-        );
-        let term = surfaces
-            .find(unsupported)
-            .unwrap_or_else(|| panic!("{unsupported}"));
-        assert_eq!(term.source, expected_unsupported_source, "{unsupported}");
+        for (unsupported, expected_unsupported_source) in [
+            (
+                "Show consolidated total across currencies for savings.",
+                "unsupported_intents",
+            ),
+            (
+                "Reproduce the published report for savings.",
+                "unsupported_intents",
+            ),
+        ] {
+            let term = surfaces
+                .find(unsupported)
+                .unwrap_or_else(|| panic!("{unsupported}"));
+            assert_eq!(term.source, expected_unsupported_source, "{unsupported}");
+        }
     }
 
     /// FIN-130 (LINK-3..8): account association links, actual transfer transactions,
@@ -691,10 +695,6 @@ mod tests {
         for (gap, expected_source) in [
             (
                 "Show the recurring deposit installment schedule for this account.",
-                "domain_gap",
-            ),
-            (
-                "Show consolidated total across currencies for this branch.",
                 "domain_gap",
             ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
@@ -726,10 +726,6 @@ mod tests {
         for (gap, expected_source) in [
             (
                 "Show the recurring deposit installment schedule for this account.",
-                "domain_gap",
-            ),
-            (
-                "Show consolidated total across currencies for this branch.",
                 "domain_gap",
             ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
@@ -770,10 +766,6 @@ mod tests {
                 "Show the recurring deposit installment schedule for this account.",
                 "domain_gap",
             ),
-            (
-                "Show consolidated total across currencies for this branch.",
-                "domain_gap",
-            ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
@@ -810,10 +802,6 @@ mod tests {
         for (gap, expected_source) in [
             (
                 "Show the recurring deposit installment schedule for this account.",
-                "domain_gap",
-            ),
-            (
-                "Show consolidated total across currencies for this branch.",
                 "domain_gap",
             ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
@@ -857,10 +845,6 @@ mod tests {
                 "Show the recurring deposit installment schedule for this account.",
                 "domain_gap",
             ),
-            (
-                "Show consolidated total across currencies for this branch.",
-                "domain_gap",
-            ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
@@ -902,10 +886,6 @@ mod tests {
                 "Show the recurring deposit installment schedule for this account.",
                 "domain_gap",
             ),
-            (
-                "Show consolidated total across currencies for this branch.",
-                "domain_gap",
-            ),
             ("Berapa pajak yang terkumpul bulan ini?", "domain_gap"),
         ] {
             let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
@@ -942,7 +922,7 @@ mod tests {
             assert!(surfaces.find(approved).is_none(), "{approved}");
         }
         let (gap, expected_source) = (
-            "Show consolidated total across currencies for this branch.",
+            "Show the recurring deposit installment schedule for this account.",
             "domain_gap",
         );
         let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
@@ -962,6 +942,51 @@ mod tests {
             ),
             ("as published saat penutupan", "unsupported_intents"),
         ] {
+            let term = surfaces
+                .find(unsupported)
+                .unwrap_or_else(|| panic!("{unsupported}"));
+            assert_eq!(term.source, expected_source, "{unsupported}");
+        }
+    }
+
+    /// FIN-123 (D03): per-currency balance totals are approved capabilities;
+    /// currency consolidation and conversion queries are guarded under unsupported_intents.
+    #[test]
+    fn currency_consolidation_questions_split_between_approved_and_unsupported() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show balances per currency in my authorized offices.",
+            "Total balances per currency for loan and savings.",
+            "Total per currency.",
+            "Tampilkan saldo per mata uang untuk pinjaman dan simpanan.",
+            "Total saldo per mata uang.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (unsupported, expected_source) in [
+            (
+                "Show the consolidated total across currencies for this branch.",
+                "unsupported_intents",
+            ),
+            (
+                "Show consolidated total across currencies for savings.",
+                "unsupported_intents",
+            ),
+            (
+                "Gabungkan simpanan IDR dan USD menjadi satu total IDR per 31 Agustus.",
+                "unsupported_intents",
+            ),
+            (
+                "gabungkan simpanan IDR dan USD menjadi satu total IDR",
+                "unsupported_intents",
+            ),
+            ("currency conversion", "unsupported_intents"),
+            ("gunakan kurs hari ini", "unsupported_intents"),
+            ("consolidate across currencies", "unsupported_intents"),
+        ] {
+            assert!(deferred.find(unsupported).is_none(), "{unsupported}");
             let term = surfaces
                 .find(unsupported)
                 .unwrap_or_else(|| panic!("{unsupported}"));
