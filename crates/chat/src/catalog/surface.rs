@@ -523,7 +523,6 @@ mod tests {
             "Show the custom datatable EmploymentDetails for this client.",
             "Show the credit bureau report for this client.",
             "Show the family member detail for this client.",
-            "Show the historical office as of a past date for this client.",
             "Show the consolidated total across currencies for this branch.",
         ] {
             assert!(deferred.find(text).is_some(), "{text}");
@@ -567,18 +566,14 @@ mod tests {
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
-        for gap in [
-            "Show the family member detail for this client.",
-            "Show the historical office as of a past date for this client.",
-        ] {
-            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
-            assert_eq!(term.source, "domain_gap", "{gap}");
-        }
+        let gap = "Show the family member detail for this client.";
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, "domain_gap", "{gap}");
     }
 
-    /// FIN-128 (CLI-4..6): client group membership, full account roster, and
-    /// client address are approved capabilities, so their window questions are
-    /// not guarded; family member detail and historical office remain gap intents.
+    /// FIN-128 (CLI-4..6) / FIN-122 (D02): client group membership, full account roster,
+    /// client address, and current-office attribution are approved capabilities, so their questions
+    /// are not guarded; family member detail remains a gap intent.
     #[test]
     fn client_questions_split_between_approved_and_gap() {
         let deferred = deferred_domains();
@@ -586,16 +581,14 @@ mod tests {
             "Show client group and center membership.",
             "Show the full account roster across loan savings and share account types for this client.",
             "Show the client address for this client.",
+            "Show client office attribution in my authorized offices.",
+            "List client office attribution and current office assignment.",
         ] {
             assert!(deferred.find(approved).is_none(), "{approved}");
         }
-        for gap in [
-            "Show the family member detail for this client.",
-            "Show the historical office as of a past date for this client.",
-        ] {
-            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
-            assert_eq!(term.source, "domain_gap", "{gap}");
-        }
+        let gap = "Show the family member detail for this client.";
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, "domain_gap", "{gap}");
     }
 
     /// FIN-110 (FDRD-1..10): fixed and recurring deposit identity, terms, funding,
@@ -948,20 +941,17 @@ mod tests {
             assert!(deferred.find(approved).is_none(), "{approved}");
             assert!(surfaces.find(approved).is_none(), "{approved}");
         }
-        for (gap, expected_source) in [
+        let (gap, expected_source) = (
+            "Show consolidated total across currencies for this branch.",
+            "domain_gap",
+        );
+        let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
+        assert_eq!(term.source, expected_source, "{gap}");
+        for (unsupported, expected_source) in [
             (
                 "Show the historical office as of a past date for this client.",
-                "domain_gap",
+                "unsupported_intents",
             ),
-            (
-                "Show consolidated total across currencies for this branch.",
-                "domain_gap",
-            ),
-        ] {
-            let term = deferred.find(gap).unwrap_or_else(|| panic!("{gap}"));
-            assert_eq!(term.source, expected_source, "{gap}");
-        }
-        for (unsupported, expected_source) in [
             (
                 "Reproduce the published report for last month.",
                 "unsupported_intents",
@@ -971,6 +961,39 @@ mod tests {
                 "unsupported_intents",
             ),
             ("as published saat penutupan", "unsupported_intents"),
+        ] {
+            let term = surfaces
+                .find(unsupported)
+                .unwrap_or_else(|| panic!("{unsupported}"));
+            assert_eq!(term.source, expected_source, "{unsupported}");
+        }
+    }
+
+    /// FIN-122 (D02): client current-office attribution is an approved capability with explicit label;
+    /// branch-at-position-date and office history queries are guarded by policy under unsupported_intents.
+    #[test]
+    fn client_office_attribution_questions_split_between_approved_and_unsupported() {
+        let deferred = deferred_domains();
+        let surfaces = surfaces();
+        for approved in [
+            "Show client office attribution in my authorized offices.",
+            "List client office attribution and current office assignment.",
+            "Tampilkan atribusi kantor nasabah di kantor yang diizinkan.",
+            "Daftar kantor cabang nasabah saat ini.",
+        ] {
+            assert!(deferred.find(approved).is_none(), "{approved}");
+            assert!(surfaces.find(approved).is_none(), "{approved}");
+        }
+        for (unsupported, expected_source) in [
+            (
+                "Show the historical office as of a past date for this client.",
+                "unsupported_intents",
+            ),
+            ("branch at position date", "unsupported_intents"),
+            ("cabang client pada tanggal posisi", "unsupported_intents"),
+            ("office history timeline", "unsupported_intents"),
+            ("move client between branches", "unsupported_intents"),
+            ("client transfer", "unsupported_intents"),
         ] {
             let term = surfaces
                 .find(unsupported)

@@ -1,0 +1,28 @@
+info:
+  name: FIN-122 attribution job
+  type: http
+  seq: 11
+http:
+  method: post
+  url: "{{baseUrl}}/chat/jobs"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+    - name: Idempotency-Key
+      value: "{{fin122_attribution_key}}"
+  body:
+    type: json
+    data: |
+      { "session_id": "{{fin122_attribution_session}}", "request_text": "Show client office attribution in my authorized offices." }
+runtime:
+  scripts:
+    - type: before-request
+      code: |
+        bru.setVar("fin122_attribution_key", "fin122-attr-" + Date.now() + Math.random().toString(36).slice(2, 10));
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(202);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin122_attribution_job", res.getBody().data.job_id);

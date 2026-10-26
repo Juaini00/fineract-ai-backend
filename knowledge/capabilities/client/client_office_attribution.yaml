@@ -1,0 +1,65 @@
+id: client_office_attribution
+status: approved_mvp
+domain: client
+display_name: Client Office Attribution
+description: >-
+  Current office attribution per client with explicit attribution mode label:
+  client ID, current office ID, attribution mode ('current_office' literal on every row),
+  and office as of position date (NULL on every row, reflecting verified negative history
+  table availability per D02). Governed by client's current office. Bounded listing with
+  hard cap 200, disclosed. No client names or account numbers.
+data_areas:
+  - client_foundation
+  - organization_foundation
+required_api_capability: client_office_attribution
+query_id: client.client_office_attribution
+metrics: []
+output_mode: list
+request_shape:
+  operation: list
+  subject: client_office_attribution
+  grouping: none
+  output: list
+  pii: none
+examples:
+  - Show client office attribution in my authorized offices.
+  - List client office attribution and current office assignment.
+  - Tampilkan atribusi kantor nasabah di kantor yang diizinkan.
+  - Daftar kantor cabang nasabah saat ini.
+supported_intents:
+  - list client office attribution in authorized offices
+  - client current office attribution
+  - atribusi kantor nasabah di kantor yang diizinkan
+  - daftar kantor cabang nasabah saat ini
+guards:
+  require_office_scope: true
+  pii:
+    returns_pii: false
+    never_return:
+      - account_no
+      - external_id
+      - display_name
+      - firstname
+      - lastname
+parameters:
+  office_ids:
+    type: integer_array
+    required: false
+    default: authorized_scope
+    user_may_override: false
+  limit:
+    type: integer
+    required: false
+    default: unbounded
+    hard_cap: 200
+checks:
+  - id: query_exists
+    rule: query_id must exist in knowledge/queries.
+  - id: office_scope_required
+    rule: query must declare office_ids from authorized_scope and require_office_filter=true.
+  - id: attribution_mode_labeled
+    rule: attribution_mode is literal 'current_office' on every row.
+  - id: no_history_source_asserted
+    rule: office_as_of_position is NULL on every row as verified by D02 negative table proof.
+  - id: no_identifiers
+    rule: account_no, external_id, and client names are never selected or returned.

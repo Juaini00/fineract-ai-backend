@@ -1,0 +1,23 @@
+info:
+  name: FIN-122 attribution session
+  type: http
+  seq: 10
+http:
+  method: post
+  url: "{{baseUrl}}/chat/sessions"
+  headers:
+    - name: content-type
+      value: application/json
+    - name: authorization
+      value: "Bearer {{fin122Token}}"
+  body:
+    type: json
+    data: |
+      { "title": "FIN-122 client office attribution" }
+runtime:
+  scripts:
+    - type: tests
+      code: |
+        expect(res.getStatus()).to.equal(201);
+        expect(res.getBody().success).to.equal(true);
+        bru.setVar("fin122_attribution_session", res.getBody().data.id);
